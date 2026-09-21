@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>The Origins of SwiftMiner</title>
+    <meta name="description" content="SwiftMiner was built to collect Twitch Drops for one person and a few friends. It began as several copies of TwitchDropsMiner in a Windows VM, and ended up as one native Mac app.">
+    <link rel="canonical" href="https://swiftminer.app/about/">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <meta id="theme-color" name="theme-color" content="#0a0616">
+
+    <link rel="icon" type="image/png" sizes="192x192" href="../icon-192.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="../favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="../favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="../apple-touch-icon.png">
+    <link rel="manifest" href="../site.webmanifest">
+
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="SwiftMiner">
+    <meta property="og:locale" content="en_US">
+    <meta property="og:url" content="https://swiftminer.app/about/">
+    <meta property="og:title" content="The Origins of SwiftMiner">
+    <meta property="og:description" content="Built to collect drops for me and a few friends: from three miners in a Windows VM to one native Mac app.">
+    <meta property="og:image" content="https://swiftminer.app/assets/about/twitchminer-prototype.webp">
+    <meta property="og:image:width" content="2400">
+    <meta property="og:image:height" content="1342">
+    <meta property="og:image:alt" content="The original TwitchMiner prototype running on macOS in March 2026.">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="The Origins of SwiftMiner">
+    <meta name="twitter:description" content="Built to collect drops for me and a few friends: from three miners in a Windows VM to one native Mac app.">
+    <meta name="twitter:image" content="https://swiftminer.app/assets/about/twitchminer-prototype.webp">
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "BlogPosting",
+          "@id": "https://swiftminer.app/about/#post",
+          "url": "https://swiftminer.app/about/",
+          "headline": "The origins of SwiftMiner",
+          "description": "SwiftMiner was built to collect Twitch Drops for one person and a few friends. It began as several copies of TwitchDropsMiner in a Windows VM, and ended up as one native Mac app.",
+          "image": "https://swiftminer.app/assets/about/twitchminer-prototype.webp",
+          "datePublished": "2026-09-21",
+          "dateModified": "2026-09-21",
+          "author": { "@type": "Person", "name": "John" },
+          "mainEntityOfPage": { "@id": "https://swiftminer.app/about/#post" },
+          "isPartOf": { "@id": "https://swiftminer.app/#website" },
+          "about": { "@id": "https://swiftminer.app/#app" }
+        },
+        {
+          "@type": "BreadcrumbList",
+          "itemListElement": [
+            { "@type": "ListItem", "position": 1, "name": "SwiftMiner", "item": "https://swiftminer.app/" },
+            { "@type": "ListItem", "position": 2, "name": "About", "item": "https://swiftminer.app/about/" }
+          ]
+        }
+      ]
+    }
+    </script>
+
+    <link rel="stylesheet" href="../assets/css/tailwind.css">
+    <link rel="stylesheet" href="../assets/css/site.css">
+    <link rel="stylesheet" href="../assets/css/about.css">
+    <script>
+        (function () {
+            const light = window.matchMedia('(prefers-color-scheme: light)').matches;
+            document.documentElement.classList.toggle('light', light);
+            document.documentElement.classList.toggle('dark', !light);
+            document.querySelector('#theme-color').content = light ? '#f7f5fa' : '#0a0616';
+        })();
+    </script>
+</head>
+<body>
+    <nav class="site-nav" aria-label="Main navigation">
+        <div class="shell nav-inner">
+            <a class="brand" href="../">
+                <img src="../assets/landing/web-logo-dark.png" alt="" class="brand-logo-dark">
+                <img src="../assets/landing/web-logo-light.png" alt="" class="brand-logo-light">
+                <span>SwiftMiner</span>
+            </a>
+            <div class="nav-links">
+                <a href="../">Overview</a>
+                <a href="../help/">Help</a>
+                <a href="./" aria-current="page">About</a>
+                <a href="../download/">Download</a>
+            </div>
+        </div>
+    </nav>
+
+    <main>
+        <section class="story">
+            <div class="shell story-grid">
+                <article class="article">
+                    <header class="post-header">
+                        <p class="kicker">Background</p>
+                        <h1>The origins of SwiftMiner</h1>
+                        <p class="standfirst">It started as a favour to a few friends — three copies of TwitchDropsMiner running in a Windows VM on my Mac. Here's how that ended up as a native app.</p>
+                        <div class="article-meta" aria-label="Article details">
+                            <span>By John</span>
+                            <span aria-hidden="true">·</span>
+                            <time datetime="2026-09-21">21 September 2026</time>
+                            <span aria-hidden="true">·</span>
+                            <span>4 min read</span>
+                        </div>
+                    </header>
+
+                    <p>My friends and I wanted Twitch Drops collected on our accounts, and I was the one with a machine that could sit there doing it. So I ran a copy of <a href="https://github.com/DevilXD/TwitchDropsMiner">TwitchDropsMiner</a> per account inside a stripped-down Windows 11 virtual machine on my Mac.</p>
+
+                    <p>It worked, in the sense that it usually ran. It also spent a lot of memory and CPU doing it, and when one instance fell over it tended to stay fallen over until I next looked — which meant someone was quietly missing drops while everyone else kept collecting.</p>
+
+                    <figure class="figure-wide">
+                        <img src="../assets/about/tdm-windows-vm.webp" width="2000" height="1263" alt="Three Twitch Drops Miner windows open side by side inside a Windows 11 virtual machine running on macOS" loading="lazy" decoding="async">
+                        <figcaption>Three TDM instances in a Tiny11 VM on the Mac, 28 October 2025 — one window per account. A whole guest operating system, running so that three Python windows could sit idle waiting for campaigns.</figcaption>
+                    </figure>
+
+                    <p>So I wasn't trying to build a new Twitch Drops miner. I wanted one Mac app that could look after all of our accounts at once, with no virtual machine in the middle. The first idea was the obvious one: keep TDM, run a copy per account, and drive them all from a single native app.</p>
+
+                    <h2 id="prototype">The first prototype</h2>
+                    <p>That project was called <strong>TwitchMiner-Server</strong>. I started it late on 15 March 2026. It was a Mac dashboard that launched and managed a separate background miner for each Twitch account.</p>
+                    <p>Each of those background miners was an unmodified copy of TDM — <a href="https://github.com/DevilXD/TwitchDropsMiner">TwitchDropsMiner</a>, by <a href="https://github.com/DevilXD">DevilXD</a> — the same program I had been running in the VM. TwitchMiner wasn't TDM, and it wasn't a Mac port of TDM's interface. It was a control panel sitting on top of several copies of it.</p>
+                    <p>The dashboard could start and stop each miner, check whether it was still alive, and collect enough information to show progress. A small translator layer passed updates between the two sides.</p>
+
+                    <figure class="figure-wide">
+                        <img src="../assets/about/twitchminer-prototype.webp" width="2400" height="1342" alt="The original TwitchMiner dashboard showing two Twitch accounts in a native Mac window" loading="lazy" decoding="async">
+                        <figcaption>The TwitchMiner prototype on 16 March 2026 — one window showing the status and campaign progress of several separate miners.</figcaption>
+                    </figure>
+
+                    <p>It already had the rough shape of SwiftMiner: a sidebar, a Drops view, separate accounts, shared settings, an activity log, start and stop controls, progress per miner. It worked. It also made it obvious how much work it would take to keep the dashboard and all of those separate processes in step.</p>
+
+                    <h2 id="limits">Why I scrapped it</h2>
+                    <p>The design was deliberately cheap: duplicate the miner, give every copy its own folder, gather the results in the dashboard. The Mac app had to launch each copy, keep the accounts apart, read progress updates, and notice when one stopped responding.</p>
+                    <p>That's a reasonable way to test an idea and a poor way to ship one. Every extra friend meant another background process and another set of files. Installing, updating and debugging it would only get worse as the group grew.</p>
+
+                    <dl class="shift" aria-label="Architecture before and after the rewrite">
+                        <dt>The prototype</dt>
+                        <dd>One dashboard, several separate miners. Each account ran its own copy of TDM in the background, and the Mac app collected their updates.</dd>
+                        <dt>The rewrite</dt>
+                        <dd>One app. SwiftMiner talks to Twitch itself, using frameworks already in macOS, and keeps account details in the Keychain.</dd>
+                    </dl>
+
+                    <h2 id="rewrite">Starting again</h2>
+                    <p>On 17 March, less than two days in, I <a href="https://github.com/johnwatso/SwiftMiner/commit/dab8a149140779812c2d68173e48eb6036a9d25b">started a fresh project</a> called <strong>SwiftTwitchMiner</strong>. The background miners went. Signing in, finding campaigns, picking streams, tracking progress and claiming rewards were all rewritten as part of the Mac app.</p>
+                    <p>TDM was still the best reference I had for how Twitch Drops actually behave, and I used what I'd learned from it while writing SwiftMiner in Swift. But SwiftMiner was written from scratch, not converted: it contains none of TDM's Python code and doesn't run TDM in the background.</p>
+                    <p>I didn't switch because TDM had failed — it hadn't. I switched because I wanted a different thing: one Mac app, several accounts, an installer you double-click, and a single interface.</p>
+
+                    <h2 id="name">The name</h2>
+                    <p>It kept the working name SwiftTwitchMiner until 20 March, when I <a href="https://github.com/johnwatso/SwiftMiner/commit/bb9111482cdcac5dfdfc0441faa434d59d6ba0ff">renamed it</a> to <strong>SwiftMiner</strong>. The first 1.0 release went out that evening.</p>
+                    <p>Both halves of the name are literal. <strong>Swift</strong> is the language it's written in, and <strong>miner</strong> is the word TDM and everything around it already used for a Twitch Drops miner. Neither half is a claim about speed.</p>
+                    <p>By then it wasn't a control panel for other miners any more. The ideas from the screenshot survived — accounts, campaigns, progress, logs — but everything behind the interface was new.</p>
+
+                    <h2 id="stayed">What carried over</h2>
+                    <p>The code went. A few decisions didn't:</p>
+
+                    <ol class="lessons">
+                        <li><strong>Accounts stay independent.</strong> One person's account breaking shouldn't stop everyone else's, and I should still be able to see the whole group at a glance.</li>
+                        <li><strong>The app says what it's doing.</strong> Status, activity, progress and recovery belong in the interface, not in a log file somewhere.</li>
+                        <li><strong>It should behave like a Mac app.</strong> One signed bundle, Keychain storage, automatic updates, nothing extra to install.</li>
+                    </ol>
+
+                    <figure class="figure-wide">
+                        <picture>
+                            <source srcset="../assets/landing/miners-dark.webp" media="(prefers-color-scheme: dark)">
+                            <img src="../assets/landing/miners-light.webp" width="2048" height="964" alt="The SwiftMiner Miners view: a sidebar listing five Twitch accounts, with the selected miner's status, current campaign and campaign queue shown alongside" loading="lazy" decoding="async">
+                        </picture>
+                        <figcaption>The same list today: one row per account, with progress and a campaign queue per miner. Five accounts instead of three, and no virtual machine underneath.</figcaption>
+                    </figure>
+
+                    <p>Plenty has been added since that week — better scheduling and recovery, a web dashboard, Discord integration through SwiftBot, automatic updates, and a lot of reliability work. The job hasn't changed, though. It still sits on one Mac collecting drops for me and the same friends — five accounts now rather than the three in that screenshot, running 24/7, on a machine that no longer needs a Windows VM to do it.</p>
+
+                    <h2 id="credit">Credit</h2>
+                    <p>SwiftMiner exists because TDM showed what a reliable Twitch Drops miner looks like. DevilXD's project ran the miners behind the first prototype, helped me work out Twitch's behaviour during the rewrite, and is still the first thing I check when that behaviour changes.</p>
+                    <p>SwiftMiner is a separate app now, but that doesn't change where it started. <a href="https://github.com/DevilXD/TwitchDropsMiner">TwitchDropsMiner deserves the credit for that.</a></p>
+                </article>
+            </div>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <div class="shell footer-inner">
+            <span>SwiftMiner is open source and not affiliated with Twitch.</span>
+            <div class="footer-links">
+                <a href="../help/under-the-hood/">Under the Hood</a>
+                <a href="https://github.com/johnwatso/SwiftMiner">Source Code</a>
+                <a href="../release-notes/">Release Notes</a>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

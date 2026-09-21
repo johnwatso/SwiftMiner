@@ -1219,7 +1219,9 @@ html.light .native-point {
 
 .native-footnote {
     display: flex;
+    flex-wrap: wrap;
     justify-content: center;
+    column-gap: 2.25rem;
 }
 
 @media (min-width: 768px) and (max-width: 1279.98px) {
