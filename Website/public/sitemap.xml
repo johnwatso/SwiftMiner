@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://swiftminer.app/</loc><lastmod>2026-06-25</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://swiftminer.app/</loc><lastmod>2026-09-21</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://swiftminer.app/about/</loc><lastmod>2026-09-21</lastmod><changefreq>yearly</changefreq><priority>0.6</priority></url>
   <url><loc>https://swiftminer.app/download/</loc><lastmod>2026-06-25</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://swiftminer.app/help/</loc><lastmod>2026-06-24</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://swiftminer.app/help/invited-to-swiftminer/</loc><lastmod>2026-09-11</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
@@ -25,9 +26,8 @@
   <url><loc>https://swiftminer.app/help/web-dashboard/</loc><lastmod>2026-06-22</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>
   <url><loc>https://swiftminer.app/help/reverse-proxy/</loc><lastmod>2026-06-22</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>
   <url><loc>https://swiftminer.app/help/discord/</loc><lastmod>2026-06-22</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
-  <url><loc>https://swiftminer.app/help/under-the-hood/</loc><lastmod>2026-06-22</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://swiftminer.app/help/under-the-hood/</loc><lastmod>2026-09-21</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>
   <url><loc>https://swiftminer.app/release-notes/</loc><lastmod>2026-06-22</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>
-  <url><loc>https://swiftminer.app/beta/</loc><lastmod>2026-06-22</lastmod><changefreq>weekly</changefreq><priority>0.5</priority></url>
   <url><loc>https://swiftminer.app/release-notes/1.42.1.html</loc><lastmod>2026-09-20</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
   <url><loc>https://swiftminer.app/release-notes/1.42.html</loc><lastmod>2026-09-19</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
   <url><loc>https://swiftminer.app/release-notes/1.41.1.html</loc><lastmod>2026-09-10</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
