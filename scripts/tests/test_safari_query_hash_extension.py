@@ -87,8 +87,10 @@ class SafariQueryHashExtensionTests(unittest.TestCase):
         source = ADVANCED_SETTINGS.read_text()
         recovery = RECOVERY.read_text()
 
-        self.assertIn('Button("Update via Safari")', source)
-        self.assertIn("TwitchCompatibilityRecovery.startUpdate(", source)
+        self.assertIn('Button("Update via Safari\\u{2026}")', source)
+        self.assertIn("startSafariUpdate()", source)
+        self.assertIn("updates.startUpdate(", source)
+        self.assertIn("TwitchCompatibilityRecovery.startUpdate(", recovery)
 
         # The queue covers each page that issues an operation SwiftMiner can refresh.
         self.assertIn('"/drops/campaigns"', recovery)
@@ -159,28 +161,28 @@ class SafariQueryHashExtensionTests(unittest.TestCase):
         self.assertIn("recordSessionResult(", bridge)
         self.assertIn("latestSessionResult", ADVANCED_SETTINGS.read_text())
 
-    def test_automatic_recovery_only_chases_a_broken_query(self) -> None:
-        """Discovery must fire on breakage, never on mere difference.
+    def test_broken_query_report_does_not_start_safari_update(self) -> None:
+        """A broken query may be reported, but only the user starts discovery.
 
         Twitch's own pages use sibling documents for some operations — a different query
         wearing the same operation name. Adopting one of those over a *working* hash is
         what replaced a healthy Drops inventory query with one that reported every claimed
-        drop as unclaimed. `queriesNeedingRecovery` is only ever populated when SwiftMiner's
-        own bundled hash has stopped working.
+        drop as unclaimed. Reporting a broken query must never open Safari or replace a hash.
         """
         recovery = RECOVERY.read_text()
+        report = recovery.split("func reportBrokenQueries(", 1)[1].split("\n    }\n", 1)[0]
 
-        self.assertIn("store.queriesNeedingRecovery()", recovery)
-        self.assertIn("store.automaticDiscoveryEnabled", recovery)
-        self.assertIn("lastRecoveryAttempt", recovery)
-        self.assertIn("startUpdate(", recovery)
+        self.assertIn("store.queriesNeedingRecovery()", report)
+        self.assertIn("navigation.logEvent(", report)
+        self.assertIn("choose Update via Safari", report)
+        self.assertNotIn("startUpdate(", report)
 
     def test_advanced_settings_expose_no_manual_hash_entry(self) -> None:
         """The compatibility screen reports a comparison; it is not a hash editor.
 
         A field that accepts a pasted hash is the one way a user can put an unverified
-        value into the store by hand, and the screen's whole premise is that adoption is
-        automatic and validated. These are the strings that came back if it returned.
+        value into the store by hand; Safari observations must still be validated by
+        SwiftMiner's normal request path. These are the strings that came back if it returned.
         """
         source = ADVANCED_SETTINGS.read_text()
 
