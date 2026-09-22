@@ -345,7 +345,9 @@ final class MinerActivitySnapshotTests: XCTestCase {
         isAccountConnected: Bool,
         drops: [Drop] = [Drop(id: "drop-1", name: "Drop 1", requiredMinutes: 60)],
         endDate: Date? = nil,
-        boxArtURL: URL? = nil
+        boxArtURL: URL? = nil,
+        channels: [Channel] = [],
+        allowIsEnabled: Bool? = nil
     ) -> Campaign {
         let now = Date()
         return Campaign(
@@ -355,7 +357,9 @@ final class MinerActivitySnapshotTests: XCTestCase {
             startDate: now.addingTimeInterval(-3600),
             endDate: endDate ?? now.addingTimeInterval(3600),
             drops: drops,
-            isAccountConnected: isAccountConnected
+            channels: channels,
+            isAccountConnected: isAccountConnected,
+            allowIsEnabled: allowIsEnabled
         )
     }
 
@@ -849,6 +853,71 @@ final class MinerActivitySnapshotTests: XCTestCase {
             "Waiting for an eligible live stream."
         )
         XCTAssertEqual(snapshot.now.campaignId, campaign.id)
+        XCTAssertFalse(snapshot.showsLimitedChannelsBadge)
+    }
+
+    func testLimitedBadgeOnlyAppearsForTheRestrictedCampaignBeingWaitedOn() {
+        let restricted = makeCampaign(
+            id: "restricted",
+            gameId: "restricted-game",
+            gameName: "Restricted Game",
+            isAccountConnected: true,
+            channels: [Channel(id: "approved", login: "approved", displayName: "Approved")]
+        )
+        let ordinary = makeCampaign(
+            id: "ordinary",
+            gameId: "ordinary-game",
+            gameName: "Ordinary Game",
+            isAccountConnected: true
+        )
+        let restrictedAvailability = GameChannelAvailability(
+            gameKey: "restricted game",
+            hasEligibleChannel: false,
+            campaignId: restricted.id,
+            checkedAt: Date()
+        )
+        let waiting = makeMiner(
+            status: .waitingForStream,
+            campaigns: [ordinary, restricted],
+            priorityGames: ["Restricted Game", "Ordinary Game"],
+            gameChannelAvailability: ["restricted game": restrictedAvailability]
+        )
+
+        XCTAssertEqual(resolveSnapshot(for: waiting).now.campaignId, restricted.id)
+        XCTAssertTrue(resolveSnapshot(for: waiting).showsLimitedChannelsBadge)
+
+        var ordinaryWait = waiting
+        ordinaryWait.priorityGames = ["Ordinary Game", "Restricted Game"]
+        ordinaryWait.gameChannelAvailability = ["ordinary game": GameChannelAvailability(
+            gameKey: "ordinary game",
+            hasEligibleChannel: false,
+            campaignId: ordinary.id,
+            checkedAt: Date()
+        )]
+        XCTAssertEqual(resolveSnapshot(for: ordinaryWait).now.campaignId, ordinary.id)
+        XCTAssertFalse(resolveSnapshot(for: ordinaryWait).showsLimitedChannelsBadge)
+
+        let watching = makeMiner(
+            status: .watching,
+            campaigns: [restricted],
+            currentCampaignId: restricted.id
+        )
+        XCTAssertFalse(resolveSnapshot(for: watching).showsLimitedChannelsBadge)
+    }
+
+    func testLimitedBadgeUsesTwitchRestrictionEvenWithoutAChannelList() {
+        let restricted = makeCampaign(
+            id: "unknown-approved-list",
+            isAccountConnected: true,
+            allowIsEnabled: true
+        )
+        let waiting = makeMiner(
+            status: .waitingForStream,
+            campaigns: [restricted],
+            currentCampaignId: restricted.id
+        )
+
+        XCTAssertTrue(resolveSnapshot(for: waiting).showsLimitedChannelsBadge)
     }
 
     func testSubscriptionRequiredCampaignDoesNotSuppressSameGameUpNext() {
