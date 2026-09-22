@@ -3,8 +3,14 @@ name: SwiftMiner
 options:
   bundleIdPrefix: com.swiftminer
   createIntermediateGroups: true
-  xcodeVersion: "2660"
+  xcodeVersion: "2700"
   schemeVersion: "1.3"
+
+settings:
+  base:
+    DEAD_CODE_STRIPPING: YES
+    ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
+    STRING_CATALOG_GENERATE_SYMBOLS: YES
 
 packages:
   Sparkle:
@@ -52,15 +58,18 @@ targets:
         PRODUCT_NAME: SwiftMinerSafariExtension
         PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.app.SafariQueryHash
         MARKETING_VERSION: "1.42.1"
-        CURRENT_PROJECT_VERSION: "2026092108"
+        CURRENT_PROJECT_VERSION: "2026092215"
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
         CODE_SIGN_STYLE: Automatic
         ENABLE_APP_SANDBOX: YES
         ENABLE_HARDENED_RUNTIME: YES
+        REGISTER_APP_GROUPS: YES
         APPLICATION_EXTENSION_API_ONLY: YES
         SKIP_INSTALL: YES
-        OTHER_LDFLAGS: -framework SafariServices
+        OTHER_LDFLAGS:
+          - -framework
+          - SafariServices
       configs:
         Debug:
           CODE_SIGN_ENTITLEMENTS: Sources/SwiftMinerSafariExtension/SwiftMinerSafariExtensionDebug.entitlements
@@ -127,12 +136,13 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.swiftminer.app
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         MARKETING_VERSION: "1.42.1"
-        CURRENT_PROJECT_VERSION: "2026092108"
+        CURRENT_PROJECT_VERSION: "2026092215"
         INFOPLIST_KEY_CFBundleDisplayName: SwiftMiner
         INFOPLIST_KEY_CFBundleName: SwiftMiner
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_ENTITLEMENTS: Sources/SwiftMiner/SwiftMiner.entitlements
         ENABLE_HARDENED_RUNTIME: YES
+        REGISTER_APP_GROUPS: YES
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: SwiftMiner
         LD_RUNPATH_SEARCH_PATHS:

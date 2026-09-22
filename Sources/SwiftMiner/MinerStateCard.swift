@@ -550,13 +550,27 @@ struct MinerActivityCard: View {
                         // One line, reserved. Two lines held the card's shape just
                         // as well but spent height on a campaign name most cards
                         // fit anyway; the full text is on hover.
-                        Text(snap.now.subtitle ?? "")
-                            .contentTransition(.opacity)
-                            .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: snap.now.subtitle)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1, reservesSpace: true)
-                            .help(snap.now.subtitle ?? "")
+                        HStack(spacing: 6) {
+                            Text(snap.now.subtitle ?? "")
+                                .contentTransition(.opacity)
+                                .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: snap.now.subtitle)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1, reservesSpace: true)
+                                .help(snap.now.subtitle ?? "")
+
+                            if snap.showsLimitedChannelsBadge {
+                                Text("Limited")
+                                    .font(.caption2.weight(.medium))
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(.quaternary, in: Capsule())
+                                    .fixedSize()
+                                    .help("Only approved channels count for this campaign.")
+                                    .accessibilityLabel("Limited to approved channels")
+                            }
+                        }
                     }
                 }
 
@@ -819,6 +833,7 @@ private struct MinerActivityCardLayout: Equatable {
     let title: String
     let subtitle: String?
     let detail: String?
+    let showsLimitedChannelsBadge: Bool
     let hasProgress: Bool
     let hasArtwork: Bool
     let upNextID: String?
@@ -830,6 +845,7 @@ private struct MinerActivityCardLayout: Equatable {
         title = snapshot.now.title
         subtitle = snapshot.now.subtitle
         detail = snapshot.now.detail
+        showsLimitedChannelsBadge = snapshot.showsLimitedChannelsBadge
         hasProgress = snapshot.now.progressFraction != nil
         hasArtwork = snapshot.now.artworkURL != nil
         upNextID = snapshot.upNext?.id
@@ -955,6 +971,9 @@ struct MinerActivitySnapshot {
     let statusText: String
     let statusColor: Color
     let statusSymbol: String
+    /// The selected waiting campaign is restricted to approved channels. This is
+    /// informational, not an error or a claim that an esports event is involved.
+    let showsLimitedChannelsBadge: Bool
 
     /// True only when the snapshot represents an actual watch session. A
     /// campaign ID can also be attached to waiting or blocked status items, so
@@ -1050,7 +1069,11 @@ struct MinerActivitySnapshot {
             blockedPriority: blocked,
             statusText: statusText(for: miner, now: now),
             statusColor: statusColor(for: miner, now: now),
-            statusSymbol: statusSymbol(for: miner, now: now)
+            statusSymbol: statusSymbol(for: miner, now: now),
+            showsLimitedChannelsBadge: miner.status == .waitingForStream
+                && (now.id.hasPrefix("stream-") || now.id.hasPrefix("blocked-stream-"))
+                && currentCampaign?.id == now.campaignId
+                && currentCampaign?.hasChannelRestrictions == true
         )
     }
 
