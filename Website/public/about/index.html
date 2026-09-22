@@ -102,11 +102,15 @@
                             <span aria-hidden="true">·</span>
                             <time datetime="2026-09-21">21 September 2026</time>
                             <span aria-hidden="true">·</span>
-                            <span>5 min read</span>
+                            <span>7 min read</span>
                         </div>
                     </header>
 
                     <p>My friends and I wanted Twitch Drops collected on our accounts, and I was the one with a machine that could sit there doing it. So I ran a copy of <a href="https://github.com/DevilXD/TwitchDropsMiner">TwitchDropsMiner</a> per account inside a stripped-down Windows 11 virtual machine on my Mac.</p>
+
+                    <p>Starting them was not a matter of double-clicking three icons. A PowerShell script, <code>launch-all.ps1</code>, held the setup together, and by February it had accreted a fair amount. It asked GitHub whether a newer dev build existed and compared the release asset's timestamp against a local <code>version.txt</code>, downloading and unpacking the build only when it had changed, then rebuilt each account's miner as a hard link to one master executable so that three miners didn't mean three copies on disk. They shared a single <code>settings.json</code>. It launched my account first and waited for confirmation that it had actually started before bringing up anyone else's, minimised the windows, and wrote a log.</p>
+
+                    <p>Update checks, one folder per account, startup ordering, a health check before continuing, logging: the shape of what SwiftMiner does now existed before the app did. It was just held together by a script and a virtual machine.</p>
 
                     <p>It worked, in the sense that it usually ran. It also spent a lot of memory and CPU doing it, and when one instance fell over it tended to stay fallen over until I next looked — which meant someone was quietly missing drops while everyone else kept collecting.</p>
 
@@ -116,6 +120,7 @@
                     </figure>
 
                     <p>So I wasn't trying to build a new Twitch Drops miner. I wanted one Mac app that could look after all of our accounts at once, with no virtual machine in the middle. The first idea was the obvious one: keep TDM, run a copy per account, and drive them all from a single native app.</p>
+                    <p>It also explains why SwiftMiner is far more app than mining drops requires. Almost everything in it that looks like over-engineering is a gap this setup left behind — something the script did badly, something that only worked if I was watching, or something nobody but me could see.</p>
 
                     <h2 id="prototype">The first prototype</h2>
                     <p>That project was called <strong>TwitchMiner-Server</strong>. I started it late on 15 March 2026. It was a Mac dashboard that launched and managed a separate background miner for each Twitch account.</p>
@@ -132,6 +137,7 @@
                     <h2 id="limits">Why I scrapped it</h2>
                     <p>The design was deliberately cheap: duplicate the miner, give every copy its own folder, gather the results in the dashboard. The Mac app had to launch each copy, keep the accounts apart, read progress updates, and notice when one stopped responding.</p>
                     <p>That's a reasonable way to test an idea and a poor way to ship one. Every extra friend meant another background process and another set of files. Installing, updating and debugging it would only get worse as the group grew.</p>
+                    <p>It had also inherited the VM's real problem. The dashboard could tell that a miner had stopped, and it could stop and start one again, but that was the entire repertoire. Whatever had actually gone wrong was happening inside a program I hadn't written and couldn't reach into, so restarting it and hoping remained the only repair I had. That was the same position the VM had put me in, with a nicer window around it.</p>
 
                     <dl class="shift" aria-label="Architecture before and after the rewrite">
                         <dt>The prototype</dt>
@@ -141,8 +147,9 @@
                     </dl>
 
                     <h2 id="rewrite">Starting again</h2>
-                    <p>On 17 March, less than two days in, I <a href="https://github.com/johnwatso/SwiftMiner/commit/dab8a149140779812c2d68173e48eb6036a9d25b">started a fresh project</a> called <strong>SwiftTwitchMiner</strong>. The background miners went. Signing in, finding campaigns, picking streams, tracking progress and claiming rewards were all rewritten as part of the Mac app.</p>
-                    <p>TDM was still the best reference I had for how Twitch Drops actually behave, and I used what I'd learned from it while writing SwiftMiner in Swift. But SwiftMiner was written from scratch, not converted: it contains none of TDM's Python code and doesn't run TDM in the background.</p>
+                    <p>My first instinct wasn't to start again at all. I began a fork of TDM to give it proper Mac support, and got far enough in to discover that somebody had already done that work. It wasn't wasted time. Going through TDM's internals with the intention of porting them made it clear how much of what I actually wanted wasn't a port: not the same miner with a Mac coat of paint, but something built the way I would have built it in the first place, and that I could fix when it broke.</p>
+                    <p>So on 17 March, less than two days in, I <a href="https://github.com/johnwatso/SwiftMiner/commit/dab8a149140779812c2d68173e48eb6036a9d25b">started a fresh project</a> called <strong>SwiftTwitchMiner</strong>. The background miners went. Signing in, finding campaigns, picking streams, tracking progress and claiming rewards were all rewritten in Swift, directly against the frameworks already in macOS. That was the whole point of the rewrite: owning that code is the difference between diagnosing a failure and restarting a process I can't see into.</p>
+                    <p>TDM was still the best reference I had for how Twitch Drops actually behave, and I used what I'd learned from it while writing SwiftMiner. But SwiftMiner was written from scratch, not converted: it contains none of TDM's Python code and doesn't run TDM in the background.</p>
                     <p>I didn't switch because TDM had failed — it hadn't. I switched because I wanted a different thing: one Mac app, several accounts, an installer you double-click, and a single interface.</p>
 
                     <h2 id="name">The name</h2>
@@ -170,9 +177,7 @@
                     <p>Plenty has been added since that week — better scheduling and recovery, a web dashboard, Discord integration through SwiftBot, automatic updates, and a lot of reliability work. The job hasn't changed, though. It still sits on one Mac collecting drops for me and the same friends — five accounts now rather than the three in that screenshot, running 24/7, on a machine that no longer needs a Windows VM to do it.</p>
 
                     <h2 id="sharing">Why there's so much of it</h2>
-                    <p>It is a lot of app for five people's Twitch Drops. There's a web dashboard, a Discord bot, desktop notifications and an updater that installs its own releases — none of which a drops miner actually needs in order to mine drops.</p>
-                    <p>All of it exists because I was the bottleneck. Back in the VM days I was the only person who could see whether a miner was running, and the only person who could restart one. Every question about someone else's account came to me, and every answer meant getting up and looking at my own screen.</p>
-                    <p>So the app grew ways to answer those questions without me in the middle. SwiftBot sends each person a Discord DM when their drop is claimed or their campaign finishes, so nobody has to ask how it's going. The web dashboard lets them sign in with Discord — SwiftBot checks they're in the server first, so I'm not handing out logins — and watch their own miner from a phone or a browser instead of asking me to check. New versions install themselves rather than becoming five separate conversations about downloading a file.</p>
+                    <p>In the VM, I was the only person who could see whether a miner was running and the only person who could restart one, so every question about someone else's account came to me. The app grew ways to answer those questions without me in the middle: SwiftBot DMs each person when their drop is claimed or their campaign finishes, the web dashboard lets them sign in with Discord and watch their own miner from a phone, and new versions install themselves rather than becoming five separate conversations about downloading a file.</p>
                     <p>For one person, none of that is worth building. You already have access to the machine it runs on, so you can just go and look.</p>
 
                     <h2 id="credit">Credit</h2>
