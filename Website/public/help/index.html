@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>SwiftMiner Help & Guides</title>
-    <meta name="description" content="SwiftMiner help and guides for installation, account configuration, mining behaviors, Web Dashboard, Discord/SwiftBot integration, notifications, and troubleshooting.">
+    <meta name="description" content="Short guides for installing SwiftMiner, choosing which games to mine, the Web Dashboard, SwiftBot, invitations, and troubleshooting.">
     <link rel="canonical" href="https://swiftminer.app/help/">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="SwiftMiner">
@@ -29,154 +29,66 @@
     <link rel="stylesheet" href="../assets/css/tailwind.css">
     <link rel="stylesheet" href="assets/css/kbase.css">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
-    <script src="assets/js/search-index.js" defer></script>
-    <script src="assets/js/search.js" defer></script>
     <style>
         .portal-hero {
-            padding: clamp(4rem, 9vw, 6.5rem) 0 clamp(2.5rem, 6vw, 4.5rem);
+            padding: clamp(4rem, 9vw, 6rem) 0 clamp(2rem, 5vw, 3rem);
             text-align: center;
         }
         .portal-hero h1 {
-            font-size: clamp(2.6rem, 7vw, 4.5rem);
+            font-size: clamp(2.4rem, 6vw, 3.8rem);
             line-height: 1.05;
             font-weight: 800;
-            margin-bottom: 1.5rem;
+            margin-bottom: 1rem;
         }
         .portal-hero .intro {
-            font-size: clamp(1.1rem, 2.2vw, 1.35rem);
+            font-size: clamp(1.05rem, 2vw, 1.25rem);
             color: var(--muted);
-            max-width: 680px;
-            margin: 0 auto 2.5rem;
+            max-width: 600px;
+            margin: 0 auto;
         }
-        .portal-grid {
+        .article-list {
+            list-style: none;
+            padding: 0;
+            margin: 0 auto 5rem;
+            max-width: 760px;
+            border-top: 1px solid var(--line);
+        }
+        .article-list a {
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 1.25rem;
-            margin-bottom: 4rem;
-        }
-        .portal-card {
-            border: 1px solid var(--line);
-            border-radius: 20px;
-            background: var(--surface);
-            padding: 1.5rem;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            min-height: 190px;
-            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.03);
+            grid-template-columns: 2.5rem 1fr;
+            gap: 0.25rem 0.75rem;
+            align-items: start;
+            padding: 1.25rem 0.5rem;
+            border-bottom: 1px solid var(--line);
             text-decoration: none;
             color: inherit;
-            transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
         }
-        .portal-card:hover {
-            transform: translateY(-4px);
-            background: var(--surface-solid);
-            border-color: rgba(0, 113, 227, 0.3);
-            box-shadow: 0 20px 48px rgba(0, 0, 0, 0.06);
-        }
-        .portal-card i,
-        .portal-card img.card-icon {
-            width: 44px;
-            height: 44px;
-            border-radius: 12px;
-            margin-bottom: 1.2rem;
-            transition: transform 0.22s ease;
-        }
-        .portal-card i {
+        .article-list i {
+            grid-row: span 2;
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 10px;
             background: var(--blue-soft);
             color: var(--blue);
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.4rem;
+            font-size: 1.2rem;
         }
-        .portal-card:hover i,
-        .portal-card:hover img.card-icon {
-            transform: scale(1.05);
-        }
-        .portal-card h2 {
-            font-size: 1.25rem;
-            font-weight: 700;
-            margin-bottom: 0.4rem;
-        }
-        .portal-card p {
-            font-size: 0.92rem;
-            color: var(--muted);
-            margin: 0;
-            line-height: 1.4;
-        }
-        .portal-card .card-content {
-            margin-top: auto;
-        }
-        .directory-section {
-            margin-bottom: 5rem;
-        }
-        .directory-title {
-            font-size: 2rem;
-            font-weight: 800;
-            margin-bottom: 2rem;
-            border-bottom: 1px solid var(--line);
-            padding-bottom: 0.5rem;
-        }
-        .directory-grid {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 3.5rem;
-        }
-        .dir-column h3 {
-            font-size: 1.15rem;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            color: var(--muted);
-            font-weight: 700;
-            margin-bottom: 1.2rem;
-            border-bottom: 2px solid var(--blue);
-            display: inline-block;
-            padding-bottom: 0.15rem;
-        }
-        .dir-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-        .dir-list li {
-            margin-bottom: 1.5rem;
-        }
-        .dir-list a {
-            display: block;
-            text-decoration: none;
-            color: inherit;
-        }
-        .dir-list a strong {
-            display: block;
+        .article-list strong {
             font-size: 1.05rem;
             font-weight: 600;
             color: var(--ink);
-            margin-bottom: 0.15rem;
             transition: color 0.18s ease;
         }
-        .dir-list a:hover strong {
+        .article-list a:hover strong {
             color: var(--blue);
         }
-        .dir-list a p {
-            font-size: 0.88rem;
+        .article-list p {
+            font-size: 0.92rem;
             color: var(--muted);
             margin: 0;
-            line-height: 1.4;
-        }
-        @media (max-width: 960px) {
-            .portal-grid {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-            .directory-grid {
-                grid-template-columns: 1fr;
-                gap: 2.5rem;
-            }
-        }
-        @media (max-width: 520px) {
-            .portal-grid {
-                grid-template-columns: 1fr;
-            }
+            line-height: 1.45;
         }
     </style>
 </head>
@@ -189,7 +101,6 @@
             </a>
             <div class="nav-actions">
                 <a class="nav-link optional" href="../">Overview</a>
-                <a class="nav-link" href="discord/">Discord Help</a>
                 <a class="nav-link" href="https://github.com/johnwatso/SwiftMiner/issues">Raise an Issue</a>
             </div>
         </div>
@@ -198,210 +109,69 @@
     <header class="portal-hero">
         <div class="shell">
             <h1>Need a hand?</h1>
-            <p class="intro">Find installation guides, configuration references, remote access settings, and troubleshooting notes for SwiftMiner on macOS.</p>
-            <div class="search-wrap">
-                <i class="ph-bold ph-magnifying-glass" style="position: absolute; top: 50%; left: 1.25rem; transform: translateY(-50%); color: var(--muted); font-size: 1.15rem;"></i>
-                <input id="help-search" class="search" type="search" placeholder="Search help topics" aria-label="Search help topics" style="width: 100%; height: 58px; padding: 0 1.2rem 0 3.2rem; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-solid); color: var(--ink); font: inherit; font-size: 1.05rem; outline: none; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.05); transition: all 0.22s ease;">
-            </div>
+            <p class="intro">A few short guides to setting up SwiftMiner and fixing common problems.</p>
         </div>
     </header>
 
     <main class="shell">
-        <section class="portal-grid" aria-label="Quick links">
-            <a class="portal-card" href="twitch-drops-miner-for-mac/">
-                <i class="ph-bold ph-desktop"></i>
-                <div class="card-content">
-                    <h2>Twitch Drops Miner for Mac</h2>
-                    <p>See how SwiftMiner watches eligible streams, tracks campaigns, and claims Drops natively on macOS.</p>
-                </div>
-            </a>
-            <a class="portal-card" href="getting-started/">
-                <i class="ph-bold ph-rocket-launch"></i>
-                <div class="card-content">
-                    <h2>Get Started</h2>
-                    <p>Download SwiftMiner, configure macOS permissions, and link your first Twitch account.</p>
-                </div>
-            </a>
-            <a class="portal-card" href="web-dashboard/">
-                <i class="ph-bold ph-globe"></i>
-                <div class="card-content">
-                    <h2>Web Dashboard</h2>
-                    <p>Enable the browser-based dashboard for local control or remote self-serve sign-in.</p>
-                </div>
-            </a>
-            <a class="portal-card" href="discord/">
-                <picture>
-                    <source srcset="../assets/landing/swiftbot-icon-dark.png" media="(prefers-color-scheme: dark)">
-                    <img src="../assets/landing/swiftbot-icon-light.png" alt="SwiftBot Icon" class="card-icon">
-                </picture>
-                <div class="card-content">
-                    <h2>Discord Setup</h2>
-                    <p>Link SwiftBot to send DMs for claimed drops and allow remote /miner commands.</p>
-                </div>
-            </a>
-            <a class="portal-card" href="troubleshooting/">
-                <i class="ph-bold ph-wrench"></i>
-                <div class="card-content">
-                    <h2>Troubleshooting</h2>
-                    <p>Resolve "Needs Auth" warnings, stuck miners, and export diagnostic logs.</p>
-                </div>
-            </a>
-        </section>
-
-        <section class="directory-section">
-            <h2 class="directory-title">Browse Help</h2>
-            <div class="directory-grid">
-                <div class="dir-column">
-                    <h3>Using SwiftMiner</h3>
-                    <ul class="dir-list">
-                        <li>
-                            <a href="getting-started/">
-                                <strong>Getting Started</strong>
-                                <p>Installation steps, macOS Gatekeeper details, and initial Twitch setup.</p>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="main-window/">
-                                <strong>Main Window Guide</strong>
-                                <p>Navigating the Overview dashboard, Miners status, Drops lists, and Activity Log.</p>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="menu-bar/">
-                                <strong>Menu Bar Mode</strong>
-                                <p>Running quietly as a status bar icon and closing the main app window.</p>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="twitch-drops-miner-for-mac/">
-                                <strong>Twitch Drops Miner for Mac</strong>
-                                <p>How SwiftMiner mines Twitch Drops natively on macOS without browser tabs.</p>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="working-twitch-drops-miner/">
-                                <strong>Working Twitch Drops Miner</strong>
-                                <p>What to check when choosing a maintained Drops miner that still works.</p>
-                            </a>
-                        </li>
-                    </ul>
-                </div>
-
-                <div class="dir-column">
-                    <h3>Settings & Setup</h3>
-                    <ul class="dir-list">
-                        <li>
-                            <a href="settings/">
-                                <strong>Settings Reference Guide</strong>
-                                <p>Complete detail on General, Accounts, Mining, Updates, and Advanced preferences.</p>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="automatic-updates/">
-                                <strong>Automatic &amp; Unattended Updates</strong>
-                                <p>Understand the update prompt, background downloads, install timing, and macOS App Management permission.</p>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="game-rules/">
-                                <strong>Game Rules & Fallback Streamers</strong>
-                                <p>Understand priorities, exclusions, account-specific ordering, and stall-only backup streamers.</p>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="subscription-required-drops/">
-                                <strong>Subscription Required Drops</strong>
-                                <p>Why some campaigns cannot be earned by watch time, and what your options are when one is gated.</p>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="operator-priorities/">
-                                <strong>Priorities for Operators</strong>
-                                <p>Global and personal priority lists, priority modes, and an FAQ for hosting miners for other people.</p>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="web-dashboard/">
-                                <strong>Web Dashboard Setup</strong>
-                                <p>Embedded browser client configuration, ports, secure tunnels, and Twitch OAuth setup.</p>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="notifications/">
-                                <strong>Manage Notifications</strong>
-                                <p>Configure macOS system alerts and solve Do Not Disturb / Focus issues.</p>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="auto-claim-twitch-drops-on-macos/">
-                                <strong>Auto Claim Twitch Drops</strong>
-                                <p>How automatic claiming works and what to check when rewards pause.</p>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="reverse-proxy/">
-                                <strong>Reverse Proxy Setup</strong>
-                                <p>Host the Web Dashboard over HTTPS using Nginx, Caddy, and custom domains.</p>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="twitch-drops-miner-without-docker/">
-                                <strong>No Docker Required</strong>
-                                <p>Run Twitch Drops mining as a signed Mac app with no container setup.</p>
-                            </a>
-                        </li>
-                    </ul>
-                </div>
-
-                <div class="dir-column">
-                    <h3>Security & FAQs</h3>
-                    <ul class="dir-list">
-                        <li>
-                            <a href="troubleshooting/">
-                                <strong>Troubleshooting Guide</strong>
-                                <p>Fixing stuck miners, duplicate stream session warnings, and expired auth.</p>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="twitch-drops-not-progressing/">
-                                <strong>Twitch Drops Not Progressing</strong>
-                                <p>Focused recovery checklist for stuck Twitch Drops progress.</p>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="best-practices/">
-                                <strong>Best Practices & Notes</strong>
-                                <p>Guidelines for optimizing network bandwidth, update checks, and publisher links.</p>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="invited-to-swiftminer/">
-                                <strong>You've Been Invited to SwiftMiner</strong>
-                                <p>For invited people: what you are approving, what the inviter can see, and how to disconnect.</p>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="security-privacy/">
-                                <strong>Security & Privacy</strong>
-                                <p>Twitch token encryption in the macOS Keychain and local network paths details.</p>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="multi-account-twitch-drops/">
-                                <strong>Multi-Account Twitch Drops</strong>
-                                <p>Run separate Twitch miners, claims, and priorities from one Mac.</p>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="under-the-hood/">
-                                <strong>Under the Hood</strong>
-                                <p>Deep dive into Swift Concurrency, SQLite database engine, and Network socket servers.</p>
-                            </a>
-                        </li>
-                    </ul>
-                </div>
-            </div>
-        </section>
+        <ul class="article-list">
+            <li>
+                <a href="getting-started/">
+                    <i class="ph-bold ph-rocket-launch"></i>
+                    <strong>Get Started</strong>
+                    <p>Install SwiftMiner and link your first Twitch account.</p>
+                </a>
+            </li>
+            <li>
+                <a href="game-rules/">
+                    <i class="ph-bold ph-sliders"></i>
+                    <strong>Game Rules</strong>
+                    <p>Choose which games are mined first, which are skipped, and fallback streamers.</p>
+                </a>
+            </li>
+            <li>
+                <a href="troubleshooting/">
+                    <i class="ph-bold ph-wrench"></i>
+                    <strong>Troubleshooting</strong>
+                    <p>Fix “Needs Auth”, stuck miners and Drops that aren’t progressing, and export logs.</p>
+                </a>
+            </li>
+            <li>
+                <a href="subscription-required-drops/">
+                    <i class="ph-bold ph-crown-simple"></i>
+                    <strong>Subscription-Required Drops</strong>
+                    <p>Why some campaigns can’t be earned by watching, and what your options are.</p>
+                </a>
+            </li>
+            <li>
+                <a href="invited-to-swiftminer/">
+                    <i class="ph-bold ph-envelope-simple"></i>
+                    <strong>You’ve Been Invited to SwiftMiner</strong>
+                    <p>What you’d be approving, what the inviter can see, reasons to decline, and how to disconnect.</p>
+                </a>
+            </li>
+            <li>
+                <a href="web-dashboard/">
+                    <i class="ph-bold ph-globe"></i>
+                    <strong>Web Dashboard</strong>
+                    <p>Control SwiftMiner from a browser, locally or over the internet.</p>
+                </a>
+            </li>
+            <li>
+                <a href="discord/">
+                    <i class="ph-bold ph-hash"></i>
+                    <strong>Discord &amp; SwiftBot</strong>
+                    <p>Drop notifications and miner commands in Discord.</p>
+                </a>
+            </li>
+            <li>
+                <a href="security-privacy/">
+                    <i class="ph-bold ph-shield-check"></i>
+                    <strong>Security &amp; Privacy</strong>
+                    <p>Where your Twitch tokens are stored and what leaves your Mac.</p>
+                </a>
+            </li>
+        </ul>
     </main>
 
     <footer class="footer">

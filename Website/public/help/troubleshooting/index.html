@@ -29,8 +29,6 @@
     <link rel="stylesheet" href="../../assets/css/tailwind.css">
     <link rel="stylesheet" href="../assets/css/kbase.css">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
-    <script src="../assets/js/search-index.js" defer></script>
-    <script src="../assets/js/search.js" defer></script>
     <script src="../assets/js/kbase.js" defer></script>
 </head>
 <body>
@@ -58,10 +56,6 @@
         <header class="article-header">
             <h1>Troubleshooting & FAQs</h1>
             <p class="article-intro">Resolve issues quickly. Follow step-by-step guides to fix authorization issues, stuck miners, claiming errors, and learn how to export diagnostic logs for support.</p>
-            <div class="search-wrap" style="margin-top: 1.5rem; max-width: 100%;">
-                <i class="ph-bold ph-magnifying-glass" style="position: absolute; top: 50%; left: 1.1rem; transform: translateY(-50%); color: var(--muted);"></i>
-                <input id="help-search" class="search" type="search" placeholder="Search help topics" aria-label="Search help topics" style="width: 100%; height: 48px; padding: 0 1.2rem 0 3rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-solid); color: var(--ink); font: inherit; outline: none; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);">
-            </div>
         </header>
 
         <div class="kb-grid">
@@ -118,6 +112,9 @@
                     <br><strong>Solution:</strong> Go to the campaign page in your Twitch Drops Inventory, look for a <strong>Link Account</strong> or <strong>Connect</strong> button next to the game description, and complete the connection flow. Once linked, resume mining in SwiftMiner.
                 </p>
 
+                <h3>3. The stream is not eligible</h3>
+                <p>Not every stream in a game category carries the active Drops campaign. SwiftMiner picks eligible streams automatically, but Twitch's campaign data can lag or change while streams are live. The <strong>Drops</strong> tab shows eligibility and claim state per campaign.</p>
+
                 <h2 id="export-logs">Export Diagnostic Logs</h2>
                 <p>If you encounter an issue that you cannot resolve, you can export a log report to attach to a GitHub issue. SwiftMiner logs contain API logs, switches, and system errors.</p>
                 <div class="screenshot-wrap">
@@ -156,8 +153,6 @@
                     <h2 class="sidebar-title">Related Articles</h2>
                     <ul class="related-links">
                         <li><a href="../getting-started/"><i class="ph-bold ph-rocket-launch"></i> Getting Started</a></li>
-                        <li><a href="../main-window/"><i class="ph-bold ph-book-open"></i> Main Window Guide</a></li>
-                        <li><a href="../best-practices/"><i class="ph-bold ph-check-square"></i> Best Practices</a></li>
                         <li><a href="../security-privacy/"><i class="ph-bold ph-shield-check"></i> Security & Privacy</a></li>
                     </ul>
                 </div>

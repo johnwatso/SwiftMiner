@@ -29,8 +29,6 @@
     <link rel="stylesheet" href="../../assets/css/tailwind.css">
     <link rel="stylesheet" href="../assets/css/kbase.css">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
-    <script src="../assets/js/search-index.js" defer></script>
-    <script src="../assets/js/search.js" defer></script>
     <script src="../assets/js/kbase.js" defer></script>
 </head>
 <body>
@@ -58,10 +56,6 @@
         <header class="article-header">
             <h1>Web Dashboard Setup</h1>
             <p class="article-intro">Monitor and control SwiftMiner from any browser. Configure local network access, or set up secure internet tunnels with Twitch OAuth so your friends can log in and manage their own miners.</p>
-            <div class="search-wrap" style="margin-top: 1.5rem; max-width: 100%;">
-                <i class="ph-bold ph-magnifying-glass" style="position: absolute; top: 50%; left: 1.1rem; transform: translateY(-50%); color: var(--muted);"></i>
-                <input id="help-search" class="search" type="search" placeholder="Search help topics" aria-label="Search help topics" style="width: 100%; height: 48px; padding: 0 1.2rem 0 3rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-solid); color: var(--ink); font: inherit; outline: none; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);">
-            </div>
         </header>
 
         <div class="kb-grid">
@@ -113,7 +107,7 @@
                     <li>Set the following values:
                         <ul>
                             <li><strong>Name:</strong> <code>SwiftMiner [Your Server Name]</code></li>
-                            <li><strong>OAuth Redirect URLs:</strong> Add the redirect URL shown in SwiftMiner's Web settings page. It will look like <code>https://[your-tunnel-subdomain].swiftbot.dev/auth/callback</code> or similar.</li>
+                            <li><strong>OAuth Redirect URLs:</strong> Add the redirect URL shown in SwiftMiner's Web settings page. It will look like <code>https://[your-tunnel-subdomain].swiftbot.dev/oauth/callback</code>.</li>
                             <li><strong>Category:</strong> <code>Application Integration</code></li>
                         </ul>
                     </li>
@@ -146,6 +140,14 @@
                     <li><strong>No WebSockets needed:</strong> The dashboard utilizes standard HTTP request polling and API routes, so you do not need to configure connection hijacking or WebSocket upgrades in your proxy configurations.</li>
                 </ul>
 
+                <p>Caddy is the simplest option because it obtains and renews HTTPS certificates itself. A complete <code>Caddyfile</code> for a dashboard on the default port:</p>
+
+<pre><code class="language-caddy">dashboard.example.com {
+    reverse_proxy 127.0.0.1:8080
+}</code></pre>
+
+                <p>If Twitch sign-in fails, check that the exact callback URL (e.g. <code>https://dashboard.example.com/oauth/callback</code>) is registered in your Twitch Developer Console application, and keep your Mac's firewall closed to direct outside connections on the dashboard port so the proxy is the only way in.</p>
+
             </main>
 
             <aside class="kb-sidebar" aria-label="Sidebar">
@@ -164,7 +166,6 @@
                     <h2 class="sidebar-title">Related Articles</h2>
                     <ul class="related-links">
                         <li><a href="../getting-started/"><i class="ph-bold ph-rocket-launch"></i> Getting Started</a></li>
-                        <li><a href="../settings/"><i class="ph-bold ph-gear"></i> Settings Guide</a></li>
                         <li><a href="../discord/"><i class="ph-bold ph-hash"></i> Discord Integration</a></li>
                         <li><a href="../security-privacy/"><i class="ph-bold ph-shield-check"></i> Security & Privacy</a></li>
                     </ul>
