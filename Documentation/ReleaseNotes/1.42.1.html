@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SwiftMiner 1.42.1 - Release Notes</title>
-  <meta name="description" content="Release notes for SwiftMiner 1.42.1: more efficient idle mining, steadier reward claiming, and seven-day diagnostic logs.">
+  <meta name="description" content="Release notes for SwiftMiner 1.42.1: steadier mining, safer relaunches, reliable exports, and clearer dashboard and support tools.">
   <link rel="canonical" href="https://swiftminer.app/release-notes/1.42.1.html">
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
@@ -26,8 +26,8 @@
 <body>
   <main>
     <h1>SwiftMiner 1.42.1</h1>
-    <p class="meta">Version 1.42.1 &middot; Build 2026092215</p>
-    <p class="intro">SwiftMiner 1.42.1 makes waiting miners quieter and more reliable, keeps reward claiming on a predictable cadence, and expands diagnostic exports to a full week of daily logs.</p>
+    <p class="meta">Version 1.42.1 &middot; Build 2026092416</p>
+    <p class="intro">SwiftMiner 1.42.1 makes miners steadier while working and waiting, prevents reopening the app from disturbing active sessions, makes backups and diagnostics more reliable, and sharpens the dashboard and support experience.</p>
 
     <section>
       <h2>&#128029; Mining reliability</h2>
@@ -35,6 +35,8 @@
         <li>A live approved channel only wakes a waiting miner when the campaign it needs is active there. This avoids repeated campaign and inventory scans when a broadcaster stays live with unrelated Drops.</li>
         <li>Waiting miners keep stable Twitch channel monitoring across ordinary rescans instead of repeatedly disconnecting and reconnecting the same subscriptions.</li>
         <li>Automatic reward checks now follow their two-minute cadence even when channel events wake the miner more frequently. A manual claim still refreshes immediately.</li>
+        <li>Reopening SwiftMiner while it is already running no longer tries to start active miners again or incorrectly marks them as blocked. Duplicate start requests from SwiftBot and the web dashboard are safely ignored too.</li>
+        <li>A campaign paused after repeated no-progress stalls now stays out of same-game fallback choices for its 30-minute cooldown, so miners do not immediately return to the same unproductive campaign.</li>
       </ul>
     </section>
 
@@ -43,7 +45,9 @@
       <ul>
         <li>Diagnostics are written to a separate dated log file each day. SwiftMiner retains seven daily files and includes the complete seven-day timeline when you export diagnostic logs.</li>
         <li>Export Diagnostic Logs now opens on the Desktop by default, making the finished report easier to find.</li>
+        <li>Settings backups and diagnostic reports now use reliable native file dialogs. A progress card remains visible while a large diagnostic report is collected and redacted, then the saved file is revealed in Finder.</li>
         <li>Long-running, multi-miner sessions prune Activity Log history in batches, reducing CPU spent repeatedly sorting the same entries.</li>
+        <li>Internal Twitch test Drops are reported only once when skipped, keeping repeated automatic claim checks from filling the Activity Log with the same message.</li>
       </ul>
     </section>
 
@@ -52,6 +56,16 @@
       <ul>
         <li>Claimed rewards keep the Drops shelf compact. Miner ownership remains available from each reward card&rsquo;s info button and hover details instead of appearing as a label beneath every reward.</li>
         <li>When a miner waits for a campaign restricted to approved channels, its Overview card shows a small Limited badge so the narrower stream choice is easier to understand.</li>
+        <li>The web dashboard can show completed Drops for priority games or all games. The choice is remembered separately in each browser.</li>
+        <li>The dashboard now reopens as a single window and reliably comes forward whether it was closed, minimised, or behind another window.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128218; Help and project story</h2>
+      <ul>
+        <li>The Help Center now focuses on a shorter set of maintained guides. Older article links redirect to their current destinations, so existing bookmarks still lead to useful instructions.</li>
+        <li>A new About article tells SwiftMiner&rsquo;s story from its first automation and Windows VM setup through the original Mac prototype and native rewrite, with clearer credit for the projects that helped shape it.</li>
       </ul>
     </section>
 
