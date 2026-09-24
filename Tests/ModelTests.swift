@@ -607,6 +607,51 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(candidates.map(\.id), ["creators", "launch"])
     }
 
+    /// A campaign benched after repeated no-progress stalls must not come straight back
+    /// as a same-game fallback, or the miner rewatches it every couple of minutes.
+    func testSameGameVerificationExcludesCampaignOnStallCooldown() {
+        let game = Game(id: "pubg", name: "PUBG: BATTLEGROUNDS")
+        let now = Date()
+        func campaign(_ id: String) -> Campaign {
+            Campaign(
+                id: id,
+                name: id,
+                game: game,
+                status: .active,
+                startDate: now.addingTimeInterval(-3600),
+                endDate: now.addingTimeInterval(3600),
+                drops: [Drop(id: "\(id)-drop", name: "Drop", requiredMinutes: 60)],
+                isAccountConnected: true
+            )
+        }
+        let selected = campaign("day4")
+        let benched = campaign("day3")
+
+        let benchedNow = MinerEngine.sameGameVerificationCandidates(
+            primaryCandidates: [selected],
+            allCampaigns: [selected, benched],
+            priorityGames: ["PUBG: BATTLEGROUNDS"],
+            excludedGames: [],
+            strategy: .prioritiseSelected,
+            includesBadgeAndEmoteCampaigns: false,
+            stallCooldowns: ["day3": 2_000],
+            now: 1_000
+        )
+        XCTAssertEqual(benchedNow.map(\.id), ["day4"])
+
+        let cooldownOver = MinerEngine.sameGameVerificationCandidates(
+            primaryCandidates: [selected],
+            allCampaigns: [selected, benched],
+            priorityGames: ["PUBG: BATTLEGROUNDS"],
+            excludedGames: [],
+            strategy: .prioritiseSelected,
+            includesBadgeAndEmoteCampaigns: false,
+            stallCooldowns: ["day3": 2_000],
+            now: 3_000
+        )
+        XCTAssertEqual(cooldownOver.map(\.id), ["day4", "day3"])
+    }
+
     func testSameGameVerificationExcludesSubscriptionOnlyFallbackCampaign() {
         let game = Game(id: "g007", name: "007 First Light")
         let now = Date()

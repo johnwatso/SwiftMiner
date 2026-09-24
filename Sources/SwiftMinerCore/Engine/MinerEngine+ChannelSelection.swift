@@ -350,7 +350,9 @@ extension MinerEngine {
         priorityGames: [String],
         excludedGames: [String],
         strategy: MiningStrategy,
-        includesBadgeAndEmoteCampaigns: Bool
+        includesBadgeAndEmoteCampaigns: Bool,
+        stallCooldowns: [String: UInt64] = [:],
+        now: UInt64 = 0
     ) -> [Campaign] {
         guard let primary = primaryCandidates.first else { return [] }
 
@@ -372,6 +374,9 @@ extension MinerEngine {
             guard campaign.isTimeActive && campaign.status != .disabled else { continue }
             guard !campaign.isLikelyInternalTestCampaign else { continue }
             guard campaign.canAttemptMining else { continue }
+            // A campaign benched for repeated no-progress stalls stays benched here too;
+            // re-adding it as a fallback restarted the same dead watch every couple of minutes.
+            guard !isOnStallCooldown(campaign.id, cooldowns: stallCooldowns, now: now) else { continue }
             guard campaign.miningStatus == .available || campaign.miningStatus == .inProgress || campaign.miningStatus == .claimable else { continue }
 
             if excludedSet.contains(candidateGameKey) || excludedSet.contains(candidateGameId) { continue }
@@ -529,6 +534,7 @@ extension MinerEngine {
         var aclProbeCount = 0
         var attemptedChannelIdentities: Set<String> = []
         var noCandidateMatchEvidence: [String] = []
+        var approvedNoMatchEvidence: [String] = []
 
         for ch in channelsToVerify {
             let eligibleForChannel = candidates.filter { candidate in
@@ -629,6 +635,12 @@ extension MinerEngine {
                     if !matches.isEmpty {
                         let names = matches.map(\.name).joined(separator: ", ")
                         log("[ChannelSelect]     Verified: \(names) active on approved channel \(channel.displayName)")
+                    } else {
+                        // A live approved channel that is not running the campaign is the one
+                        // case the summary could not otherwise explain.
+                        approvedNoMatchEvidence.append(
+                            "\(channel.displayName): \(Self.activeCampaignEvidence(activeCampaignIds))"
+                        )
                     }
                     for match in matches {
                         let alreadyRecorded = verifiedMatches.contains {
@@ -658,6 +670,9 @@ extension MinerEngine {
             aclBlockedMatchCount > 0 ? "aclBlocked=\(aclBlockedMatchCount)" : nil,
             subscriptionOnlyMatchCount > 0 ? "subscriptionOnly=\(subscriptionOnlyMatchCount)" : nil,
             aclProbeCount > 0 ? "aclProbes=\(aclProbeCount)" : nil,
+            approvedNoMatchEvidence.isEmpty
+                ? nil
+                : "approvedNoMatchEvidence=[\(approvedNoMatchEvidence.joined(separator: "; "))]",
             verificationErrorCount > 0 ? "errors=\(verificationErrorCount)" : nil
         ].compactMap { $0 }.joined(separator: ", ")
         if verifiedChannelCount > 0 || aclProbeCount > 0 || verificationErrorCount > 0 {

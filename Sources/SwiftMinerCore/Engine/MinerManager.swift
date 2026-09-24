@@ -1235,6 +1235,14 @@ public final class MinerManager {
             throw TwitchMinerError.sessionNotStarted
         }
 
+        // A start for a miner that is already mining is a no-op, not a failure. The engine
+        // refuses it, and treating that refusal as a failed start used to mark a healthy,
+        // earning miner "Blocked — Needs attention" until its next status change.
+        if await engine.isActive {
+            Logger.engine.info("Start requested for \(miner.displayName), which is already running; leaving it running")
+            return
+        }
+
         // Surface startup immediately. Engine setup is normally brief, but the UI must
         // never describe a miner waiting here as idle or up to date.
         updateMinerStatus(

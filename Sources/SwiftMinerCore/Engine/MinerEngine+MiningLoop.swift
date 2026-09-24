@@ -236,7 +236,9 @@ extension MinerEngine {
                             priorityGames: priorityGames,
                             excludedGames: excludedGames,
                             strategy: miningStrategy,
-                            includesBadgeAndEmoteCampaigns: enableBadgesEmotes
+                            includesBadgeAndEmoteCampaigns: enableBadgesEmotes,
+                            stallCooldowns: campaignStallCooldownUntil,
+                            now: runtimeClock.nowNanoseconds()
                         )
                         let gameName = gameCandidates[0].gameName
                         if verificationCandidates.count > gameCandidates.count {

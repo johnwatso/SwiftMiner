@@ -18,9 +18,11 @@ struct MinerApp: App {
     @State private var navigation: NavigationModel
     @State private var notificationDelegate = AppNotificationDelegate()
     @State private var didApplyLaunchWindowPreference = false
+    @State private var didRunLaunchSetup = false
     @State private var showLegacyBackupPrompt = false
     @State private var showUncleanExitPrompt = false
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
 
     init() {
         if !SwiftMinerRuntime.isRunningTests {
@@ -45,14 +47,26 @@ struct MinerApp: App {
     }
 
     var body: some Scene {
-        // Main window
-        WindowGroup(id: AppWindowID.main) {
+        // Main window. A single-instance `Window` rather than a `WindowGroup`: SwiftMiner
+        // has exactly one dashboard, so `openWindow(id:)` brings that window forward
+        // instead of spawning a second copy, and the File menu gets no "New Window".
+        Window("SwiftMiner", id: AppWindowID.main) {
             ContentView()
                 .environment(appModel)
                 .environment(navigation)
                 .environmentObject(updater)
                 .environmentObject(unattendedHealth)
                 .task {
+                    // `.task` runs each time the main window opens, and the window is torn
+                    // down when closed, so reopening a backgrounded app would otherwise redo the
+                    // whole launch: reopen the database, re-prompt, and auto-start miners
+                    // that are already mining. Everything below the guard is once per launch.
+                    guard !didRunLaunchSetup else {
+                        presentationController.configure(mode: settings.appPresenceMode)
+                        return
+                    }
+                    didRunLaunchSetup = true
+
                     if !SwiftMinerRuntime.isRunningTests {
                         ApplicationsFolderInstaller.promptToMoveIfNecessary()
                         // Migrate any legacy hardware-UUID account file into the real Keychain
@@ -269,7 +283,11 @@ struct MinerApp: App {
                     NSWorkspace.shared.open(URL(string: "https://swiftminer.app/help/")!)
                 }
                 Button("Export Diagnostic Logs…") {
-                    Task { await LogExporter.presentSavePanel(navigation: navigation) }
+                    // The export presents from the main window, so make sure it is open.
+                    presentationController.prepareToOpenWindow()
+                    openWindow(id: AppWindowID.main)
+                    MainWindow.bringToFront()
+                    LogExporter.beginExport(navigation: navigation)
                 }
                 Button("Raise Issue on GitHub…") {
                     GitHubIssueReporter.openNewIssue()
@@ -456,8 +474,8 @@ struct MinerApp: App {
         switch url.host {
         case "pair":
             navigation.requestSwiftBotPairing()
-            NSApp.activate(ignoringOtherApps: true)
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            presentationController.prepareToOpenWindow()
+            openSettings()
         default:
             break
         }
@@ -968,13 +986,10 @@ struct MenuBarContent: View {
 
     private func openDashboard() {
         presentationController.prepareToOpenWindow()
-
-        if let window = NSApp.windows.first(where: { $0.canBecomeMain }) {
-            window.deminiaturize(nil)
-            window.makeKeyAndOrderFront(nil)
-        } else {
-            openWindow(id: AppWindowID.main)
-        }
+        // Reopens the dashboard if it was closed; `bringToFront` covers the minimised
+        // and behind-another-window cases `openWindow` leaves alone.
+        openWindow(id: AppWindowID.main)
+        MainWindow.bringToFront()
     }
 }
 

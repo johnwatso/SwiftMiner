@@ -606,14 +606,14 @@ public final class NavigationModel {
     /// The app icon rendered to a 128pt PNG — fallback for the login logo.
     private static func appIconPNGData() -> Data? {
         guard let icon = NSApplication.shared.applicationIconImage else { return nil }
-        let size = NSSize(width: 128, height: 128)
-        let rendered = NSImage(size: size)
-        rendered.lockFocus()
-        icon.draw(in: NSRect(origin: .zero, size: size))
-        rendered.unlockFocus()
-        guard let tiff = rendered.tiffRepresentation,
-              let rep = NSBitmapImageRep(data: tiff) else { return nil }
-        return rep.representation(using: .png, properties: [:])
+        let renderer = ImageRenderer(
+            content: Image(nsImage: icon)
+                .resizable()
+                .frame(width: 128, height: 128)
+        )
+        renderer.scale = 2
+        guard let image = renderer.cgImage else { return nil }
+        return NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
     }
 
     /// The portal origin DM deep links are built from, or nil when no public

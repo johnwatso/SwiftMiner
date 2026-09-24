@@ -601,6 +601,22 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertTrue(js.contains("if (placement === 'append') personal.push(name); else personal.unshift(name);"))
     }
 
+    /// Completed drops default to the games the miner is prioritising, with a
+    /// chooser for everything; the choice is per browser and survives no storage.
+    func testCompletedDropsFilterDefaultsToPriorities() {
+        let js = WebDashboardAssets.appJS
+        XCTAssertTrue(js.contains("let completedDropsFilter = readCompletedDropsFilter();"))
+        XCTAssertTrue(js.contains("=== 'all' ? 'all' : 'priorities'"))
+        // Filters against the same effective list the Priorities card previews.
+        XCTAssertTrue(js.contains("new Set(priorityPreviewGames(p).map(g => String(g).toLowerCase()))"))
+        XCTAssertTrue(js.contains("if (!priorities.size) return { rows: all, filterable: false, prioritiesOnly: false };"))
+        XCTAssertTrue(js.contains("data-completed-filter=\"${value}\" aria-pressed=\"${chosen}\""))
+        XCTAssertTrue(js.contains("${option('priorities', 'Priorities')}${option('all', 'All games')}"))
+        XCTAssertTrue(js.contains("No priority games completed yet."))
+        // Both the card and the full-history modal honour the choice.
+        XCTAssertEqual(js.components(separatedBy: "${view.filterable ? completedDropsChooser() : ''}").count - 1, 2)
+    }
+
     /// Exclusions are summarised, never ranked — they have no order.
     func testExclusionsAreSummarisedNotRanked() {
         let js = WebDashboardAssets.appJS
