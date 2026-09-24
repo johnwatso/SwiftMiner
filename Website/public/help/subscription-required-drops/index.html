@@ -29,8 +29,6 @@
     <link rel="stylesheet" href="../../assets/css/tailwind.css">
     <link rel="stylesheet" href="../assets/css/kbase.css">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
-    <script src="../assets/js/search-index.js" defer></script>
-    <script src="../assets/js/search.js" defer></script>
     <script src="../assets/js/kbase.js" defer></script>
 </head>
 <body>
@@ -40,7 +38,6 @@
         <header class="article-header">
             <h1>Drops That Require a Twitch Subscription</h1>
             <p class="article-intro">Some Twitch Drops campaigns hand out rewards only to paid subscribers of the channel or publisher. Watch time alone will never complete them, so SwiftMiner reports them rather than mining them.</p>
-            <div class="search-wrap" style="margin-top: 1.5rem; max-width: 100%;"><i class="ph-bold ph-magnifying-glass" style="position: absolute; top: 50%; left: 1.1rem; transform: translateY(-50%); color: var(--muted);"></i><input id="help-search" class="search" type="search" placeholder="Search help topics" aria-label="Search help topics" style="width: 100%; height: 48px; padding: 0 1.2rem 0 3rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-solid); color: var(--ink); font: inherit; outline: none; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);"></div>
         </header>
         <div class="kb-grid">
             <main class="kb-content">
@@ -62,14 +59,14 @@
 
                 <h2 id="notifications">Discord notifications</h2>
                 <p>If the Discord integration is enabled and the miner is linked to a Discord account, SwiftMiner can send a DM when a prioritised campaign turns out to be subscription-gated. The DM names the campaign and links to it in your web dashboard.</p>
-                <p>These reminders are controlled by the <strong>Action required</strong> notification type in Settings &gt; Integrations. Turning it off stops the automatic DM; you can still send one by hand from the Pending item. See <a href="../notifications/">Notifications</a>.</p>
+                <p>These reminders are controlled by the <strong>Action required</strong> notification type in Settings &gt; Integrations. Turning it off stops the automatic DM; you can still send one by hand from the Pending item.</p>
 
                 <h2 id="not-account-linking">Not the same as account linking</h2>
-                <p>A subscription requirement is not the same problem as an unlinked publisher account. If the warning asks you to link an EA, Ubisoft, Riot, or similar account, the reward is not gated behind payment and the fix is different — see <a href="../twitch-drops-not-progressing/">Twitch Drops Not Progressing on Mac</a>.</p>
+                <p>A subscription requirement is not the same problem as an unlinked publisher account. If the warning asks you to link an EA, Ubisoft, Riot, or similar account, the reward is not gated behind payment and the fix is different — see <a href="../troubleshooting/#drops-not-progressing">Drops Not Progressing</a> in Troubleshooting.</p>
             </main>
             <aside class="kb-sidebar" aria-label="Sidebar">
                 <div class="sidebar-section"><h2 class="sidebar-title">On this page</h2><ul class="toc-list"><li><a href="#what-it-means" class="toc-link">What it means</a></li><li><a href="#why-not-mine" class="toc-link">Why not mined</a></li><li><a href="#options" class="toc-link">Your options</a></li><li><a href="#notifications" class="toc-link">Discord notifications</a></li><li><a href="#not-account-linking" class="toc-link">Vs account linking</a></li></ul></div>
-                <div class="sidebar-section"><h2 class="sidebar-title">Related Articles</h2><ul class="related-links"><li><a href="../game-rules/"><i class="ph-bold ph-sliders"></i> Game Rules</a></li><li><a href="../twitch-drops-not-progressing/"><i class="ph-bold ph-warning"></i> Drops Not Progressing</a></li><li><a href="../notifications/"><i class="ph-bold ph-bell"></i> Notifications</a></li><li><a href="../web-dashboard/"><i class="ph-bold ph-globe"></i> Web Dashboard</a></li></ul></div>
+                <div class="sidebar-section"><h2 class="sidebar-title">Related Articles</h2><ul class="related-links"><li><a href="../game-rules/"><i class="ph-bold ph-sliders"></i> Game Rules</a></li><li><a href="../troubleshooting/"><i class="ph-bold ph-wrench"></i> Troubleshooting</a></li><li><a href="../web-dashboard/"><i class="ph-bold ph-globe"></i> Web Dashboard</a></li></ul></div>
             </aside>
         </div>
     </div>
