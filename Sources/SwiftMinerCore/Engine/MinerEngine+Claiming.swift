@@ -43,20 +43,23 @@ extension MinerEngine {
                     && !claimedDropIds.contains($0.dropId)
                     && !isLikelyInternalTestProgress($0)
             }
-            let skippedInternalTestDrops = snapshot.progress.filter {
+            let newlySkippedInternalTestDrops = snapshot.progress.filter {
                 $0.isComplete
                     && !$0.isClaimed
                     && !claimedDropIds.contains($0.dropId)
                     && isLikelyInternalTestProgress($0)
-            }.count
+                    && !reportedInternalTestDropIds.contains($0.dropId)
+            }
+            reportedInternalTestDropIds.formUnion(newlySkippedInternalTestDrops.map(\.dropId))
 
             if claimable.isEmpty {
                 log("No claimable drops found in inventory")
             } else {
                 log("Found \(claimable.count) claimable drop(s): \(claimable.map { $0.dropName }.joined(separator: ", "))")
             }
-            if skippedInternalTestDrops > 0 {
-                log("Skipped \(skippedInternalTestDrops) internal/test claimable drop(s)")
+            if !newlySkippedInternalTestDrops.isEmpty {
+                let names = newlySkippedInternalTestDrops.map(\.dropName).joined(separator: ", ")
+                log("Skipped \(newlySkippedInternalTestDrops.count) internal/test claimable drop(s): \(names). They stay unclaimed and won't be reported again.")
             }
 
             for progress in claimable {

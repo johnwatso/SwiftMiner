@@ -150,6 +150,9 @@ struct AdvancedSettingsView: View {
     @State private var showClientIdAlert = false
     @State private var tempClientId = ""
     @State private var backupMessage: String?
+    @State private var settingsBackupExport: SettingsBackupFile?
+    @State private var isExportingSettingsBackup = false
+    @State private var isImportingSettingsBackup = false
     @State private var queryHashStateVersion = 0
 
     /// The live update, if one is running. Shared rather than owned by this view: a run
@@ -589,11 +592,35 @@ struct AdvancedSettingsView: View {
     private var backupSection: some View {
         Section {
             HStack(spacing: 8) {
+                // Each dialog hangs off its own button: two file dialogs on one view can
+                // leave only the last one working.
                 Button("Export Settings\u{2026}") {
                     exportSettingsBackup()
                 }
+                .fileExporter(
+                    isPresented: $isExportingSettingsBackup,
+                    item: settingsBackupExport,
+                    contentTypes: [.json],
+                    defaultFilename: "SwiftMiner Settings Backup.json"
+                ) { result in
+                    settingsBackupExport = nil
+                    switch result {
+                    case .success:
+                        backupMessage = "Settings backup exported."
+                    case .failure(let error):
+                        backupMessage = "Export failed: \(error.localizedDescription)"
+                    }
+                } onCancellation: {
+                    settingsBackupExport = nil
+                }
                 Button("Import Settings\u{2026}") {
-                    importSettingsBackup()
+                    isImportingSettingsBackup = true
+                }
+                .fileImporter(
+                    isPresented: $isImportingSettingsBackup,
+                    allowedContentTypes: [.json]
+                ) { result in
+                    importSettingsBackup(result)
                 }
             }
 
@@ -609,25 +636,16 @@ struct AdvancedSettingsView: View {
 
     private func exportSettingsBackup() {
         do {
-            let data = try settings.exportBackupData()
-            let panel = NSSavePanel()
-            panel.allowedContentTypes = [.json]
-            panel.nameFieldStringValue = "SwiftMiner Settings Backup.json"
-            panel.canCreateDirectories = true
-            guard panel.runModal() == .OK, let url = panel.url else { return }
-            try data.write(to: url, options: .atomic)
-            backupMessage = "Settings backup exported."
+            settingsBackupExport = SettingsBackupFile(data: try settings.exportBackupData())
+            isExportingSettingsBackup = true
         } catch {
             backupMessage = "Export failed: \(error.localizedDescription)"
         }
     }
 
-    private func importSettingsBackup() {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.json]
-        panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+    private func importSettingsBackup(_ result: Result<URL, Error>) {
         do {
+            let url = try result.get()
             let data = try Data(contentsOf: url)
             try settings.importBackupData(data)
             Task {
@@ -653,4 +671,13 @@ struct AdvancedSettingsView: View {
         queryHashStateVersion &+= 1
     }
 
+}
+
+/// A settings backup as the save dialog writes it.
+private struct SettingsBackupFile: Transferable {
+    let data: Data
+
+    static var transferRepresentation: some TransferRepresentation {
+        DataRepresentation(exportedContentType: .json) { $0.data }
+    }
 }

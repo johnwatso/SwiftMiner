@@ -93,7 +93,7 @@ struct EventLogView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    Task { await LogExporter.presentSavePanel(navigation: navigation) }
+                    LogExporter.beginExport(navigation: navigation)
                 } label: {
                     Image(systemName: "square.and.arrow.up")
                 }

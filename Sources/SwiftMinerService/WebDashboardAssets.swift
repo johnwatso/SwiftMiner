@@ -773,6 +773,7 @@ enum WebDashboardAssets {
         .completed-check { width: 19px; height: 19px; flex: none; display: grid; place-items: center; border-radius: 50%; color: var(--green); background: rgba(52,199,89,0.16); }
         .completed-check svg { width: 12px; height: 12px; }
         .completed-list { display: flex; flex-direction: column; }
+        .modal-card .completed-filter { margin-bottom: 14px; }
 
         /* Account removal: a danger-zone row at the foot of the page. Red is
            spent on the icon, the label and the button — the surface itself

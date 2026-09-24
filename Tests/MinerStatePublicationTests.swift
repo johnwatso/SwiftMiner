@@ -13,6 +13,26 @@ final class MinerStatePublicationTests: XCTestCase {
         return manager
     }
 
+    /// Reopening the window re-ran launch auto-start against miners that were already
+    /// mining; the engine refused, and that refusal marked every miner Blocked.
+    func testStartingAMinerThatIsAlreadyRunningLeavesItsStateAlone() async throws {
+        let manager = makeManager()
+        let engine = MinerEngine(clientId: "test")
+        await engine.setRunningForTesting(true)
+        manager.engines["miner"] = engine
+        let statusChangedAt = manager.miners[0].statusChangedAt
+
+        try await manager.startMiner(
+            minerId: "miner", priorityGames: ["Game"], excludedGames: [], strategy: .prioritiseSelected
+        )
+
+        XCTAssertEqual(manager.miners[0].status, .watching)
+        XCTAssertEqual(manager.miners[0].statusChangedAt, statusChangedAt)
+        XCTAssertNotEqual(manager.miners[0].workerState, .failed)
+        let stillRunning = await engine.isActive
+        XCTAssertTrue(stillRunning)
+    }
+
     func testRepeatedEngineStateDoesNotNotifyConsumersOrResetStatusAge() {
         let manager = makeManager()
         let statusChangedAt = manager.miners[0].statusChangedAt

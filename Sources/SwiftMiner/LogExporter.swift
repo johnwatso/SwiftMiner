@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import SwiftMinerCore
+import SwiftUI
 import UniformTypeIdentifiers
 
 /// Builds a single plain-text diagnostic report covering app version,
@@ -687,123 +688,12 @@ enum LogExporter {
         )
     }
 
+    /// Starts an export: shows the progress sheet at once, builds the report, then offers
+    /// the save dialog from that sheet. `DiagnosticExportPresenter` on the main window
+    /// hosts all of it, so callers that may have no window open must open it first.
     @MainActor
-    static func presentSavePanel(navigation: NavigationModel) async {
-        let progressSheet = presentProgressSheet()
-        defer { dismiss(progressSheet) }
-
-        // Let AppKit present the sheet before snapshotting a potentially large activity log.
-        // The report itself is built off the main actor below, so the Activity Log symbol
-        // remains animated while redaction and string formatting run.
-        await Task.yield()
-        let snapshot = await makeSnapshot(navigation: navigation)
-        let report = await Task.detached(priority: .userInitiated) {
-            buildReport(snapshot)
-        }.value
-
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.plainText]
-        panel.nameFieldStringValue = defaultFilename(for: snapshot.generatedAt)
-        panel.title = "Export Diagnostic Logs"
-        panel.message = "Save a redacted diagnostic report you can attach to a GitHub issue."
-        panel.canCreateDirectories = true
-        panel.directoryURL = FileManager.default.urls(
-            for: defaultExportDirectory,
-            in: .userDomainMask
-        ).first
-
-        guard await present(panel) == .OK, let url = panel.url else { return }
-
-        do {
-            try report.write(to: url, atomically: true, encoding: .utf8)
-            NSWorkspace.shared.activateFileViewerSelecting([url])
-        } catch {
-            let alert = NSAlert()
-            alert.alertStyle = .warning
-            alert.messageText = "Couldn't save diagnostic logs"
-            alert.informativeText = error.localizedDescription
-            alert.runModal()
-        }
-    }
-
-    /// A save panel started from a SwiftUI command needs a window-attached sheet
-    /// on current macOS releases. `runModal()` can return without presenting in
-    /// that context, which made Export Diagnostic Logs appear to do nothing.
-    @MainActor
-    private static func present(_ panel: NSSavePanel) async -> NSApplication.ModalResponse {
-        guard let window = NSApp.keyWindow ?? NSApp.mainWindow else {
-            return panel.runModal()
-        }
-
-        return await withCheckedContinuation { continuation in
-            panel.beginSheetModal(for: window) { response in
-                continuation.resume(returning: response)
-            }
-        }
-    }
-
-    private struct ProgressSheet {
-        let panel: NSPanel
-        let parentWindow: NSWindow?
-        let symbolCycler: ActivityLogSymbolCycler
-    }
-
-    /// Displays immediately while a potentially large diagnostics export is snapshotted,
-    /// redacted, and formatted. This avoids the appearance that the export action was ignored.
-    @MainActor
-    private static func presentProgressSheet() -> ProgressSheet {
-        let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 380, height: 154),
-            styleMask: [.titled],
-            backing: .buffered,
-            defer: false
-        )
-        panel.title = "Export Diagnostic Logs"
-        panel.isReleasedWhenClosed = false
-        panel.isMovable = false
-        panel.standardWindowButton(.closeButton)?.isHidden = true
-        panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
-        panel.standardWindowButton(.zoomButton)?.isHidden = true
-
-        let content = NSView(frame: panel.contentView?.bounds ?? .zero)
-
-        let symbolCycler = ActivityLogSymbolCycler(frame: NSRect(x: 27, y: 71, width: 30, height: 30))
-        content.addSubview(symbolCycler)
-
-        let title = NSTextField(labelWithString: "Preparing diagnostics…")
-        title.font = .systemFont(ofSize: 16, weight: .semibold)
-        title.frame = NSRect(x: 74, y: 90, width: 272, height: 22)
-        content.addSubview(title)
-
-        let detail = NSTextField(wrappingLabelWithString: "Collecting and redacting activity data. This can take a moment for a large log.")
-        detail.font = .systemFont(ofSize: 13)
-        detail.textColor = .secondaryLabelColor
-        detail.maximumNumberOfLines = 2
-        detail.frame = NSRect(x: 74, y: 42, width: 272, height: 40)
-        content.addSubview(detail)
-
-        panel.contentView = content
-        symbolCycler.start()
-
-        if let parentWindow = NSApp.keyWindow ?? NSApp.mainWindow {
-            parentWindow.beginSheet(panel)
-            return ProgressSheet(panel: panel, parentWindow: parentWindow, symbolCycler: symbolCycler)
-        }
-
-        panel.center()
-        panel.level = .floating
-        panel.makeKeyAndOrderFront(nil)
-        return ProgressSheet(panel: panel, parentWindow: nil, symbolCycler: symbolCycler)
-    }
-
-    @MainActor
-    private static func dismiss(_ progressSheet: ProgressSheet) {
-        progressSheet.symbolCycler.stop()
-        if let parentWindow = progressSheet.parentWindow {
-            parentWindow.endSheet(progressSheet.panel)
-        } else {
-            progressSheet.panel.orderOut(nil)
-        }
+    static func beginExport(navigation: NavigationModel) {
+        DiagnosticExportSession.shared.begin(navigation: navigation)
     }
 
     static func defaultFilename(for date: Date) -> String {
@@ -815,72 +705,189 @@ enum LogExporter {
     }
 }
 
+/// Drives one diagnostics export from the moment it is requested until the file is saved.
+///
+/// The report can take a while for a large activity log, so a progress card appears
+/// over the dashboard immediately and the save dialog only once there is something to
+/// save. Both are presented from the main window: a save dialog started from a SwiftUI
+/// menu command with no window behind it returned without appearing, which made
+/// Export Diagnostic Logs look like it did nothing.
+@MainActor
+@Observable
+final class DiagnosticExportSession {
+    static let shared = DiagnosticExportSession()
+
+    private(set) var isPreparing = false
+    var isExporterPresented = false
+    var isShowingFailure = false
+    private(set) var report: DiagnosticReportFile?
+    private(set) var filename: String?
+    private(set) var failureMessage = ""
+
+    private init() {}
+
+    func begin(navigation: NavigationModel) {
+        // A second request while one is running would only restart the same work.
+        guard !isPreparing, !isExporterPresented else { return }
+        isPreparing = true
+
+        Task {
+            // Let the progress card appear before snapshotting a potentially large
+            // activity log. The report itself is built off the main actor, so the card
+            // stays animated while redaction and string formatting run.
+            await Task.yield()
+            let snapshot = await LogExporter.makeSnapshot(navigation: navigation)
+            let report = await Task.detached(priority: .userInitiated) {
+                LogExporter.buildReport(snapshot)
+            }.value
+            self.report = DiagnosticReportFile(text: report)
+            filename = LogExporter.defaultFilename(for: snapshot.generatedAt)
+            isPreparing = false
+            isExporterPresented = true
+        }
+    }
+
+    func finish(savedTo url: URL) {
+        report = nil
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    func fail(_ error: Error) {
+        report = nil
+        failureMessage = error.localizedDescription
+        isShowingFailure = true
+    }
+
+    func cancel() {
+        report = nil
+    }
+}
+
+/// The finished report as the save dialog writes it: UTF-8 plain text.
+struct DiagnosticReportFile: Transferable {
+    let text: String
+
+    static var transferRepresentation: some TransferRepresentation {
+        DataRepresentation(exportedContentType: .plainText) { file in
+            Data(file.text.utf8)
+        }
+    }
+}
+
+extension View {
+    /// Hosts the diagnostics export progress card, save dialog and failure alert.
+    /// Attach once, to the main window, inside the SwiftMiner appearance so the card
+    /// picks up the current theme.
+    func diagnosticExportPresenter() -> some View {
+        modifier(DiagnosticExportPresenter())
+    }
+}
+
+private struct DiagnosticExportPresenter: ViewModifier {
+    @Bindable private var session = DiagnosticExportSession.shared
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                if session.isPreparing {
+                    DiagnosticExportProgressCard()
+                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                }
+            }
+            .animation(.easeOut(duration: 0.18), value: session.isPreparing)
+            .fileExporter(
+                isPresented: $session.isExporterPresented,
+                item: session.report,
+                contentTypes: [.plainText],
+                defaultFilename: session.filename
+            ) { result in
+                switch result {
+                case .success(let url): session.finish(savedTo: url)
+                case .failure(let error): session.fail(error)
+                }
+            } onCancellation: {
+                session.cancel()
+            }
+            .fileDialogMessage("Save a redacted diagnostic report you can attach to a GitHub issue.")
+            .fileDialogDefaultDirectory(
+                FileManager.default.urls(for: LogExporter.defaultExportDirectory, in: .userDomainMask).first
+            )
+            .alert("Couldn't save diagnostic logs", isPresented: $session.isShowingFailure) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(session.failureMessage)
+            }
+    }
+}
+
+/// Floats over the dashboard while the report is built. Glass on macOS 26 and a
+/// material surface before it, through the same surface the rest of the app uses.
+private struct DiagnosticExportProgressCard: View {
+    var body: some View {
+        HStack(alignment: .center, spacing: 16) {
+            ActivityLogSymbolCycler()
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Preparing diagnostics…")
+                    .font(.system(size: 16, weight: .semibold))
+                Text("Collecting and redacting activity data. This can take a moment for a large log.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(22)
+        .frame(width: 380)
+        .background {
+            AppearanceRoundedSurface(
+                role: .elevated,
+                cornerRadius: 18,
+                material: .regularMaterial,
+                usesNativeGlass: true
+            )
+        }
+        .shadow(color: .black.opacity(0.18), radius: 18, y: 6)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// Cycles through the same category symbols used by Activity Log rows while a
 /// diagnostics report is prepared, making long exports feel visibly active.
-private final class ActivityLogSymbolCycler: NSImageView {
-    private let symbols = EventFilter.allCases.map { (symbol: $0.symbol, color: $0.diagnosticSymbolColor) }
-    private var symbolIndex = 0
-    private var timer: Timer?
+private struct ActivityLogSymbolCycler: View {
+    private static let filters = EventFilter.allCases
 
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        imageScaling = .scaleProportionallyUpOrDown
-        contentTintColor = .secondaryLabelColor
-        setAccessibilityLabel("Preparing diagnostics")
-        updateSymbol()
-    }
-
-    required init?(coder: NSCoder) {
-        nil
-    }
-
-    func start() {
-        guard timer == nil else { return }
-
-        let timer = Timer(
-            timeInterval: 0.65,
-            target: self,
-            selector: #selector(advanceSymbol),
-            userInfo: nil,
-            repeats: true
-        )
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
-    }
-
-    func stop() {
-        timer?.invalidate()
-        timer = nil
-    }
-
-    @objc private func advanceSymbol() {
-        symbolIndex = (symbolIndex + 1) % symbols.count
-        updateSymbol()
-    }
-
-    private func updateSymbol() {
-        guard !symbols.isEmpty else { return }
-        let symbol = symbols[symbolIndex]
-        contentTintColor = symbol.color
-        image = NSImage(systemSymbolName: symbol.symbol, accessibilityDescription: "Preparing diagnostics")
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 0.65)) { context in
+            let filter = Self.filters[
+                Int(context.date.timeIntervalSinceReferenceDate / 0.65) % Self.filters.count
+            ]
+            // Sized as type rather than stretched with `.resizable()`: symbols have
+            // different aspect ratios and optical centres, and a font-sized symbol
+            // stays centred in the fixed box as it cycles.
+            Image(systemName: filter.symbol)
+                .font(.system(size: 24, weight: .regular))
+                .foregroundStyle(filter.diagnosticSymbolColor)
+                .frame(width: 32, height: 32, alignment: .center)
+        }
+        .frame(width: 32, height: 32)
+        .accessibilityLabel("Preparing diagnostics")
     }
 }
 
 private extension EventFilter {
-    /// Matches the category colours used by Activity Log rows in SwiftUI.
-    var diagnosticSymbolColor: NSColor {
+    /// Matches the category colours used by Activity Log rows.
+    var diagnosticSymbolColor: Color {
         switch self {
-        case .mining: return .systemBlue
-        case .heartbeats: return .systemPink
-        case .drops: return .systemGreen
-        case .warnings: return .systemOrange
-        case .errors: return .systemRed
-        case .accountLink: return .systemPurple
-        case .scan: return .systemTeal
-        case .discord: return .systemIndigo
-        case .audit: return .systemBrown
-        case .updates: return .systemCyan
-        case .system: return .systemGray
+        case .mining: return .blue
+        case .heartbeats: return .pink
+        case .drops: return .green
+        case .warnings: return .orange
+        case .errors: return .red
+        case .accountLink: return .purple
+        case .scan: return .teal
+        case .discord: return .indigo
+        case .audit: return .brown
+        case .updates: return .cyan
+        case .system: return .gray
         }
     }
 }

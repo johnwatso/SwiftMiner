@@ -18,6 +18,7 @@ extension WebDashboardAssets {
     let personalAddOpen = false;
     let personalMenuIndex = null;
     let completedDropsModalOpen = false;
+    let completedDropsFilter = readCompletedDropsFilter();
     let prioritiesModalOpen = false;
     let activityModalOpen = false;
     var exclusionsModalOpen = false;
@@ -1319,17 +1320,59 @@ extension WebDashboardAssets {
       </div>`;
     }
 
+    /// The Priorities / All choice is a viewing preference, so it lives in this
+    /// browser only; storage can be unavailable, and the default still works.
+    function readCompletedDropsFilter() {
+      try {
+        return localStorage.getItem('swiftminer.completedDropsFilter') === 'all' ? 'all' : 'priorities';
+      } catch (_) {
+        return 'priorities';
+      }
+    }
+
+    function setCompletedDropsFilter(value) {
+      completedDropsFilter = value === 'all' ? 'all' : 'priorities';
+      try { localStorage.setItem('swiftminer.completedDropsFilter', completedDropsFilter); } catch (_) {}
+      render(PROJ);
+    }
+
+    /// Completions for the games this miner is actually prioritising — the same
+    /// effective list the Priorities card previews. With no priorities there is
+    /// nothing to narrow to, so the chooser disappears and everything shows.
+    function completedDropsView(p) {
+      const all = p.recentCompletedCampaigns || [];
+      const priorities = new Set(priorityPreviewGames(p).map(g => String(g).toLowerCase()));
+      if (!priorities.size) return { rows: all, filterable: false, prioritiesOnly: false };
+      if (completedDropsFilter === 'all') return { rows: all, filterable: true, prioritiesOnly: false };
+      const rows = all.filter(c => priorities.has(String(c.game || '').toLowerCase()));
+      return { rows, filterable: true, prioritiesOnly: true };
+    }
+
+    function completedDropsChooser() {
+      const option = (value, label) => {
+        const chosen = completedDropsFilter === value;
+        return `<button type="button" class="${chosen ? 'active' : ''}" data-completed-filter="${value}" aria-pressed="${chosen}">${label}</button>`;
+      };
+      return `<div class="segmented completed-filter" role="group" aria-label="Show completed drops for">
+        ${option('priorities', 'Priorities')}${option('all', 'All games')}
+      </div>`;
+    }
+
     /// The most recent completions only. The full history is a click away
     /// rather than the tallest thing on the page.
     function dropsCard(p) {
-      const recents = p.recentCompletedCampaigns || [];
+      const view = completedDropsView(p);
+      const recents = view.rows;
       const dropsThisWeek = Number(p.dropsClaimedThisWeek || 0);
-      if (!recents.length && !dropsThisWeek) return '';
+      if (!(p.recentCompletedCampaigns || []).length && !dropsThisWeek) return '';
       const shown = recents.slice(0, 4);
       const rows = shown.map(completedRow).join('');
       const countLabel = `${dropsThisWeek} ${dropsThisWeek === 1 ? 'drop' : 'drops'} this week`;
       const countTitle = `${dropsThisWeek} ${dropsThisWeek === 1 ? 'drop' : 'drops'} claimed this week`;
-      const empty = rows ? '' : '<div class="empty-activity">No campaign completions to show yet.</div>';
+      const emptyCopy = view.prioritiesOnly
+        ? 'No priority games completed yet.'
+        : 'No campaign completions to show yet.';
+      const empty = rows ? '' : `<div class="empty-activity">${emptyCopy}</div>`;
       return `<section class="card section-card" id="route-drops" aria-label="Recent completed drops">
         <div class="section-head">
           <span class="section-icon" aria-hidden="true">
@@ -1338,23 +1381,29 @@ extension WebDashboardAssets {
           <div class="section-title"><h3>Recent Completed Drops</h3></div>
           <span class="section-note" title="${esc(countTitle)}" aria-label="${esc(countTitle)}">${esc(countLabel)}</span>
         </div>
+        ${view.filterable ? completedDropsChooser() : ''}
         <div class="completed-list">${rows || empty}</div>
         ${recents.length > shown.length ? `<div class="section-foot"><button class="text-action" id="viewalldrops" type="button">View all completed drops →</button></div>` : ''}
       </section>`;
     }
 
     function completedDropsModal(p) {
-      const rows = (p.recentCompletedCampaigns || []).map(completedRow).join('');
+      const view = completedDropsView(p);
+      const rows = view.rows.map(completedRow).join('');
+      const emptyCopy = view.prioritiesOnly
+        ? 'No priority games completed yet.'
+        : 'No campaign completions to show yet.';
       return `<div class="modal-backdrop" id="completeddropsmodal">
         <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="completeddropstitle" tabindex="-1">
           <div class="modal-header">
             <div class="copy">
               <div class="modal-title" id="completeddropstitle">Completed drops</div>
-              <div class="modal-subtitle">Every campaign this miner has finished.</div>
+              <div class="modal-subtitle">${view.prioritiesOnly ? 'Every priority-game campaign this miner has finished.' : 'Every campaign this miner has finished.'}</div>
             </div>
             <button class="btn-secondary" id="closecompleteddrops" type="button">Close</button>
           </div>
-          <div class="completed-list">${rows || '<div class="muted">No campaign completions to show yet.</div>'}</div>
+          ${view.filterable ? completedDropsChooser() : ''}
+          <div class="completed-list">${rows || `<div class="muted">${emptyCopy}</div>`}</div>
         </section>
       </div>`;
     }
@@ -1365,6 +1414,9 @@ extension WebDashboardAssets {
     }
 
     function wireCompletedDrops() {
+      document.querySelectorAll('[data-completed-filter]').forEach(button => {
+        button.addEventListener('click', () => setCompletedDropsFilter(button.dataset.completedFilter));
+      });
       const open = $('viewalldrops');
       if (open) open.addEventListener('click', () => { completedDropsModalOpen = true; render(PROJ); });
       const modal = $('completeddropsmodal');

@@ -10,6 +10,7 @@ import UniformTypeIdentifiers
 struct WebDashboardSettingsView: View {
     @Bindable var settings: Settings
     @Environment(NavigationModel.self) private var navigation
+    @Environment(\.openURL) private var openURL
     @State private var showingInternetSetup = false
     @State private var showingLocalSetup = false
     @State private var draftLocalUsername = ""
@@ -585,7 +586,7 @@ struct WebDashboardSettingsView: View {
 
     private func openWebpage(_ value: String) {
         guard let url = Settings.normalizedWebDashboardURL(from: value) else { return }
-        NSWorkspace.shared.open(url)
+        openURL(url)
     }
 
     /// Subdomain restricted to DNS-label characters, or nil if unusable.

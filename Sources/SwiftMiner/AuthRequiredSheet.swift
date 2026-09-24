@@ -49,6 +49,7 @@ struct AuthRequiredSheet: View {
     @Binding var isPresented: Bool
     let reconnectingMinerId: String?
     @Environment(NavigationModel.self) private var navigation
+    @Environment(\.openURL) private var openURL
 
     @State private var stage: AccountAddSheetStage
     @State private var loginService = MinerLoginService()
@@ -649,7 +650,7 @@ struct AuthRequiredSheet: View {
             .tahoeCard()
 
             Button {
-                NSWorkspace.shared.open(url)
+                openURL(url)
             } label: {
                 Label("Open Twitch Activation Page", systemImage: "safari")
             }

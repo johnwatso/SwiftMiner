@@ -18,6 +18,7 @@ struct ContentView: View {
         }
         .background(WindowZoomConfigurator())
         .frame(minWidth: 800, minHeight: 600)
+        .diagnosticExportPresenter()
         .swiftMinerAppearance(style: settings.appearanceStyle)
         .sheet(isPresented: $nav.showAddAccountSheet) {
             AuthRequiredSheet(
@@ -665,6 +666,7 @@ private struct WindowZoomConfigurator: NSViewRepresentable {
     }
 
     private func configure(_ window: NSWindow, coordinator: Coordinator) {
+        MainWindow.current = window
         if !coordinator.didConfigure {
             coordinator.didConfigure = true
             window.styleMask.insert(.resizable)
@@ -687,6 +689,26 @@ private struct WindowZoomConfigurator: NSViewRepresentable {
 
     final class Coordinator: NSObject {
         var didConfigure = false
+    }
+}
+
+/// The dashboard's AppKit window, recorded by `WindowZoomConfigurator` because that
+/// view only ever lives in it.
+///
+/// `openWindow(id:)` reopens a closed dashboard but will not un-minimise one or order it
+/// in front of the app's other windows, so reopening goes through `bringToFront()`.
+@MainActor
+enum MainWindow {
+    fileprivate(set) static weak var current: NSWindow?
+
+    static func bringToFront() {
+        // A closed window is neither visible nor minimised; SwiftUI replaces it on
+        // reopen, and the new one registers itself when it appears.
+        guard let window = current, window.isVisible || window.isMiniaturized else { return }
+        if window.isMiniaturized {
+            window.deminiaturize(nil)
+        }
+        window.makeKeyAndOrderFront(nil)
     }
 }
 

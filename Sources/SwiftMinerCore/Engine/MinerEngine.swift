@@ -433,6 +433,9 @@ public actor MinerEngine {
     var ignoredAccountLinkWarningGames: Set<String> = []
     var warnedUnlinkedPriorityGames: Set<String> = []
     var subscriptionWarningKeys: [String: Date] = [:]
+    /// Internal/test drops already reported as skipped. Twitch leaves them claimable
+    /// indefinitely, so reporting on every two-minute inventory check was pure noise.
+    var reportedInternalTestDropIds: Set<String> = []
     var failoverStreamers: [GameFailoverStreamer] = []
     var failoverCooldowns: [String: Date] = [:]
     var pendingFailoverTarget: PendingFailoverTarget?
@@ -1035,6 +1038,13 @@ public actor MinerEngine {
     public var isActive: Bool {
         isRunning
     }
+
+    #if DEBUG
+    /// Lets tests stand in for a started engine without any network work.
+    func setRunningForTesting(_ running: Bool) {
+        isRunning = running
+    }
+    #endif
     
     // MARK: - Private Methods
 

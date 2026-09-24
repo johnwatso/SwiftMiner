@@ -367,8 +367,8 @@ html.light .integration-logo-light {
 }
 
 .swift-language-mark {
-    width: 1.8rem;
-    height: 1.8rem;
+    width: 1.5rem;
+    height: 1.5rem;
     display: block;
     transform: translateY(0.03rem);
 }
@@ -437,10 +437,6 @@ html.light .integration-logo-light {
     gap: 1.25rem;
 }
 
-.feature-grid {
-    grid-auto-rows: minmax(220px, auto);
-}
-
 .feature-beta {
     display: inline-flex;
     margin-left: 0.35rem;
@@ -459,18 +455,6 @@ html.light .integration-logo-light {
 
 html.dark .feature-beta {
     color: #fbbf24;
-}
-
-@media (min-width: 768px) {
-    .feature-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-}
-
-@media (min-width: 1280px) {
-    .feature-grid {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
 }
 
 .security-link {
@@ -1175,9 +1159,8 @@ html.light .how-step-confetti i {
     }
 }
 
-/* "Written for the Mac" strip. Deliberately not another card grid: the two
-   sections around it already use cards, so this row is one panel divided by
-   hairlines, which reads as a spec sheet rather than a third set of tiles. */
+/* Spec-sheet strip, shared by the core-benefits row and "Written for the Mac":
+   one panel divided by hairlines rather than another set of separate tiles. */
 .native-eyebrow {
     display: flex;
     justify-content: center;
