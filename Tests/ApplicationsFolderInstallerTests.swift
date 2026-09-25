@@ -127,6 +127,7 @@ final class ApplicationsFolderInstallerTests: XCTestCase {
         let oldMarkerURL = installedBundleURL.appendingPathComponent("old-version")
         XCTAssertTrue(fileManager.createFile(atPath: newMarkerURL.path, contents: Data()))
         XCTAssertTrue(fileManager.createFile(atPath: oldMarkerURL.path, contents: Data()))
+        quarantine(sourceBundleURL)
 
         let result = try ApplicationsFolderInstaller.moveApp(
             from: sourceBundleURL,
@@ -138,6 +139,40 @@ final class ApplicationsFolderInstallerTests: XCTestCase {
         XCTAssertFalse(fileManager.fileExists(atPath: sourceBundleURL.path))
         XCTAssertTrue(fileManager.fileExists(atPath: installedBundleURL.appendingPathComponent("new-version").path))
         XCTAssertFalse(fileManager.fileExists(atPath: installedBundleURL.appendingPathComponent("old-version").path))
+        XCTAssertFalse(isQuarantined(result))
+    }
+
+    /// A quarantined app moved by anything other than Finder keeps being translocated,
+    /// and Sparkle refuses to update a translocated app. The move has to clear it.
+    func testMoveAppClearsQuarantineFromTheWholeBundle() throws {
+        let fileManager = FileManager.default
+        let temporaryDirectoryURL = fileManager.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? fileManager.removeItem(at: temporaryDirectoryURL) }
+
+        let sourceBundleURL = temporaryDirectoryURL
+            .appendingPathComponent("Downloads", isDirectory: true)
+            .appendingPathComponent("SwiftMiner.app", isDirectory: true)
+        let applicationsDirectoryURL = temporaryDirectoryURL.appendingPathComponent("Applications", isDirectory: true)
+        let sourceContentsURL = sourceBundleURL.appendingPathComponent("Contents", isDirectory: true)
+        let sourcePlistURL = sourceContentsURL.appendingPathComponent("Info.plist")
+        try fileManager.createDirectory(at: sourceContentsURL, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: applicationsDirectoryURL, withIntermediateDirectories: true)
+        XCTAssertTrue(fileManager.createFile(atPath: sourcePlistURL.path, contents: Data()))
+        for url in [sourceBundleURL, sourceContentsURL, sourcePlistURL] {
+            quarantine(url)
+        }
+
+        let destinationURL = try ApplicationsFolderInstaller.moveApp(
+            from: sourceBundleURL,
+            to: applicationsDirectoryURL,
+            fileManager: fileManager
+        )
+
+        let destinationContentsURL = destinationURL.appendingPathComponent("Contents", isDirectory: true)
+        XCTAssertFalse(isQuarantined(destinationURL))
+        XCTAssertFalse(isQuarantined(destinationContentsURL))
+        XCTAssertFalse(isQuarantined(destinationContentsURL.appendingPathComponent("Info.plist")))
     }
 
     func testRelaunchConfigurationStartsASeparateActivatedInstance() {
@@ -145,5 +180,23 @@ final class ApplicationsFolderInstallerTests: XCTestCase {
 
         XCTAssertTrue(configuration.activates)
         XCTAssertTrue(configuration.createsNewApplicationInstance)
+    }
+
+    private func quarantine(_ url: URL) {
+        let value = Array("0083;66f3a2b0;Safari;".utf8)
+        let result = setxattr(
+            url.path,
+            ApplicationsFolderInstaller.quarantineAttributeName,
+            value,
+            value.count,
+            0,
+            XATTR_NOFOLLOW
+        )
+        XCTAssertEqual(result, 0, "Could not quarantine \(url.path): \(String(cString: strerror(errno)))")
+        XCTAssertTrue(isQuarantined(url))
+    }
+
+    private func isQuarantined(_ url: URL) -> Bool {
+        getxattr(url.path, ApplicationsFolderInstaller.quarantineAttributeName, nil, 0, 0, XATTR_NOFOLLOW) >= 0
     }
 }

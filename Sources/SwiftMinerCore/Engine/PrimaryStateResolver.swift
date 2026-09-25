@@ -60,7 +60,7 @@ public enum PrimaryStateResolver {
         case .watching:
             // Map to .mining with progress details
             if let campaign = miner.allCampaigns.first(where: { $0.id == primary.campaignId }),
-               let activeDrop = campaign.drops.first(where: { !$0.isClaimed }) {
+               let activeDrop = campaign.dropInProgress {
                 let dropState = miner.stateStore?.dropStates.first { $0.dropId == activeDrop.id }
                 let currentMinutes = max(dropState?.progressMinutes ?? 0, activeDrop.progress?.currentMinutes ?? 0)
                 let requiredMinutes = max(dropState?.requiredMinutes ?? 0, activeDrop.progress?.requiredMinutes ?? activeDrop.requiredMinutes)
@@ -102,7 +102,7 @@ public enum PrimaryStateResolver {
     private static func overrideProgress(for miner: MinerManager.ManagedMiner) -> MiningProgress? {
         guard let campaignId = miner.currentCampaignId,
               let campaign = miner.allCampaigns.first(where: { $0.id == campaignId }),
-              let activeDrop = campaign.drops.first(where: { !$0.isClaimed }) else {
+              let activeDrop = campaign.dropInProgress else {
             return nil
         }
         let dropState = miner.stateStore?.dropStates.first { $0.dropId == activeDrop.id }
@@ -172,8 +172,8 @@ public enum PrimaryStateResolver {
            let campaignId = miner.currentCampaignId,
            let campaign = miner.allCampaigns.first(where: { $0.id == campaignId }) {
             
-            // Find the active drop (first unclaimed)
-            if let activeDrop = campaign.drops.first(where: { !$0.isClaimed }) {
+            // Find the drop being earned (not a subscription reward listed ahead of it)
+            if let activeDrop = campaign.dropInProgress {
                 let dropState = miner.stateStore?.dropStates.first { $0.dropId == activeDrop.id }
                 let currentMinutes = max(dropState?.progressMinutes ?? 0, activeDrop.progress?.currentMinutes ?? 0)
                 let requiredMinutes = max(dropState?.requiredMinutes ?? 0, activeDrop.progress?.requiredMinutes ?? activeDrop.requiredMinutes)
