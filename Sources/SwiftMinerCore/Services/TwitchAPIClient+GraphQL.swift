@@ -924,17 +924,38 @@ extension TwitchAPIClient {
             }
             : nil
 
-        for game in campaignDiscoveryGames.prefix(Self.maxPrioritisedDiscoveryGames) {
-            do {
-                let slug = try await getGameSlug(name: game)
-                let channels = try await getLiveChannels(gameSlug: slug, limit: 30)
+        // Each game is a slug lookup then a directory read. Run them side by side — one after
+        // another they spent most of the prioritised pass waiting on round trips — and put the
+        // answers back in priority order.
+        let games = Array(campaignDiscoveryGames.prefix(Self.maxPrioritisedDiscoveryGames))
+        let lookups: [(index: Int, game: String, result: Result<[Channel], Error>)] = await withTaskGroup(
+            of: (Int, String, Result<[Channel], Error>).self
+        ) { group in
+            for (index, game) in games.enumerated() {
+                group.addTask {
+                    do {
+                        let slug = try await self.getGameSlug(name: game)
+                        return (index, game, .success(try await self.getLiveChannels(gameSlug: slug, limit: 30)))
+                    } catch {
+                        return (index, game, .failure(error))
+                    }
+                }
+            }
+            var collected: [(index: Int, game: String, result: Result<[Channel], Error>)] = []
+            for await lookup in group { collected.append(lookup) }
+            return collected.sorted { $0.index < $1.index }
+        }
+
+        for lookup in lookups {
+            switch lookup.result {
+            case .success(let channels):
                 answeredRequests += 1
-                coveredGames.insert(Self.normalizedLookupKey(game))
+                coveredGames.insert(Self.normalizedLookupKey(lookup.game))
                 for channel in channels.prefix(Self.maxDiscoveryChannelsPerPrioritisedGame)
                     where seenChannels.insert(channel.id).inserted {
                     channelIds.append(channel.id)
                 }
-            } catch {
+            case .failure(let error):
                 lastError = error
             }
         }
