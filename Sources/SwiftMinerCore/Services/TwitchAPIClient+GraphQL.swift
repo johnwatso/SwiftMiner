@@ -817,7 +817,7 @@ extension TwitchAPIClient {
     static let maxPrioritisedDiscoveryGames = 10
     static let maxDiscoveryChannelsPerPrioritisedGame = 3
     static let maxBrowsedDiscoveryGames = 120
-    static let discoveryConcurrency = 6
+    static let discoveryConcurrency = 10
     static let discoveredCampaignsTTL: TimeInterval = 10 * 60
 
     /// Games whose live channels are searched first when this account's token cannot read
@@ -864,6 +864,13 @@ extension TwitchAPIClient {
         var answeredRequests = 0
         var lastError: Error?
 
+        // The all-games browse is the slow part; start it while prioritised games are looked up.
+        let browseTask = Task { [self] in
+            try await SharedDropsDirectory.shared.channelsByGame { [self] in
+                try await fetchDropsEnabledChannelsByGame()
+            }
+        }
+
         for game in campaignDiscoveryGames.prefix(Self.maxPrioritisedDiscoveryGames) {
             do {
                 let slug = try await getGameSlug(name: game)
@@ -880,9 +887,7 @@ extension TwitchAPIClient {
         }
 
         do {
-            let browsed = try await SharedDropsDirectory.shared.channelsByGame { [self] in
-                try await fetchDropsEnabledChannelsByGame()
-            }
+            let browsed = try await browseTask.value
             answeredRequests += 1
             for entry in browsed.prefix(Self.maxBrowsedDiscoveryGames)
                 where !coveredGames.contains(Self.normalizedLookupKey(entry.gameName))
@@ -942,63 +947,76 @@ extension TwitchAPIClient {
     /// ends after roughly 1,600 streams. Reading it from both ends of the viewer count reaches
     /// small games the top of the list never gets to.
     func fetchDropsEnabledChannelsByGame() async throws -> [SharedDropsDirectory.Entry] {
+        async let mostWatched = dropsEnabledChannels(sort: "VIEWER_COUNT", maxPages: 30)
+        async let leastWatched = dropsEnabledChannels(sort: "VIEWER_COUNT_ASC", maxPages: 20)
+        let pages = await [mostWatched, leastWatched]
+
+        guard pages.contains(where: { $0.answered }) else {
+            throw pages.compactMap(\.error).first ?? TwitchMinerError.networkError("Live channel browse failed")
+        }
+        var entries: [SharedDropsDirectory.Entry] = []
+        var seenGames = Set<String>()
+        for entry in pages.flatMap(\.entries) where seenGames.insert(Self.normalizedLookupKey(entry.gameName)).inserted {
+            entries.append(entry)
+        }
+        return entries
+    }
+
+    /// One direction of Browse → Live Channels, filtered to drops, as game/channel pairs.
+    private func dropsEnabledChannels(
+        sort: String,
+        maxPages: Int
+    ) async -> (entries: [SharedDropsDirectory.Entry], answered: Bool, error: Error?) {
         var entries: [SharedDropsDirectory.Entry] = []
         var seenGames = Set<String>()
         var answered = false
-        var lastError: Error?
+        var cursor: String?
+        for _ in 0..<maxPages {
+            var variables: [String: Any] = [
+                "imageWidth": 50,
+                "limit": 30,
+                "platformType": "all",
+                "options": [
+                    "includeRestricted": ["SUB_ONLY_LIVE"],
+                    "sort": sort,
+                    "freeformTags": NSNull(),
+                    "tags": [],
+                    "recommendationsContext": ["platform": "web"],
+                    "requestID": "JIRA-VXP-2397",
+                    "broadcasterLanguages": [],
+                    "systemFilters": ["DROPS_ENABLED"]
+                ],
+                "sortTypeIsRecency": false,
+                "includeCostreaming": false
+            ]
+            if let cursor { variables["cursor"] = cursor }
 
-        for (sort, maxPages) in [("VIEWER_COUNT", 30), ("VIEWER_COUNT_ASC", 20)] {
-            var cursor: String?
-            for _ in 0..<maxPages {
-                var variables: [String: Any] = [
-                    "imageWidth": 50,
-                    "limit": 30,
-                    "platformType": "all",
-                    "options": [
-                        "includeRestricted": ["SUB_ONLY_LIVE"],
-                        "sort": sort,
-                        "freeformTags": NSNull(),
-                        "tags": [],
-                        "recommendationsContext": ["platform": "web"],
-                        "requestID": "JIRA-VXP-2397",
-                        "broadcasterLanguages": [],
-                        "systemFilters": ["DROPS_ENABLED"]
-                    ],
-                    "sortTypeIsRecency": false,
-                    "includeCostreaming": false
-                ]
-                if let cursor { variables["cursor"] = cursor }
-
-                let data: Data
-                do {
-                    data = try await makeGraphQLRequest(request: graphQLRequest(for: .browsePagePopular, variables: variables))
-                } catch {
-                    lastError = error
-                    break
-                }
-                answered = true
-                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-                guard let streams = (json?["data"] as? [String: Any])?["streams"] as? [String: Any],
-                      let edges = streams["edges"] as? [[String: Any]], !edges.isEmpty else { break }
-
-                for edge in edges {
-                    if let next = edge["cursor"] as? String, !next.isEmpty { cursor = next }
-                    guard let node = edge["node"] as? [String: Any],
-                          let broadcaster = node["broadcaster"] as? [String: Any],
-                          let channelId = broadcaster["id"] as? String,
-                          let game = node["game"] as? [String: Any],
-                          let gameName = (game["displayName"] as? String) ?? (game["name"] as? String),
-                          seenGames.insert(Self.normalizedLookupKey(gameName)).inserted else { continue }
-                    entries.append(SharedDropsDirectory.Entry(gameName: gameName, channelId: channelId))
-                }
-
-                let hasNextPage = ((streams["pageInfo"] as? [String: Any])?["hasNextPage"] as? Bool) ?? false
-                guard hasNextPage else { break }
+            let data: Data
+            do {
+                data = try await makeGraphQLRequest(request: graphQLRequest(for: .browsePagePopular, variables: variables))
+            } catch {
+                return (entries, answered, error)
             }
-        }
+            answered = true
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            guard let streams = (json?["data"] as? [String: Any])?["streams"] as? [String: Any],
+                  let edges = streams["edges"] as? [[String: Any]], !edges.isEmpty else { break }
 
-        if !answered, let lastError { throw lastError }
-        return entries
+            for edge in edges {
+                if let next = edge["cursor"] as? String, !next.isEmpty { cursor = next }
+                guard let node = edge["node"] as? [String: Any],
+                      let broadcaster = node["broadcaster"] as? [String: Any],
+                      let channelId = broadcaster["id"] as? String,
+                      let game = node["game"] as? [String: Any],
+                      let gameName = (game["displayName"] as? String) ?? (game["name"] as? String),
+                      seenGames.insert(Self.normalizedLookupKey(gameName)).inserted else { continue }
+                entries.append(SharedDropsDirectory.Entry(gameName: gameName, channelId: channelId))
+            }
+
+            let hasNextPage = ((streams["pageInfo"] as? [String: Any])?["hasNextPage"] as? Bool) ?? false
+            guard hasNextPage else { break }
+        }
+        return (entries, answered, nil)
     }
 
     /// The full campaigns a live channel is running, from `DropsHighlightService_AvailableDrops`.

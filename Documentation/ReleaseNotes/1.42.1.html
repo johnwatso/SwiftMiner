@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SwiftMiner 1.42.1 - Release Notes</title>
-  <meta name="description" content="Release notes for SwiftMiner 1.42.1: steadier mining, safer relaunches, reliable exports, and clearer dashboard and support tools.">
+  <meta name="description" content="Release notes for SwiftMiner 1.42.1: adding Twitch accounts works again, update and relaunch fixes, steadier waiting miners, and a week of diagnostics.">
   <link rel="canonical" href="https://swiftminer.app/release-notes/1.42.1.html">
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
@@ -27,61 +27,54 @@
   <main>
     <h1>SwiftMiner 1.42.1</h1>
     <p class="meta">Version 1.42.1 &middot; Build 2026092520</p>
-    <p class="intro">SwiftMiner 1.42.1 restores adding Twitch accounts, makes miners steadier while working and waiting, prevents reopening the app from disturbing active sessions, makes backups and diagnostics more reliable, and sharpens the dashboard and support experience.</p>
+    <p class="intro">SwiftMiner 1.42.1 fixes adding Twitch accounts, which stopped working after a change on Twitch&rsquo;s side, along with updates for copies moved to Applications and several miner start-up glitches. Waiting miners also do less redundant work, and diagnostics now keep a full week of history.</p>
 
     <section>
-      <h2>&#128029; Adding accounts</h2>
+      <h2>&#128029; Bug fixes</h2>
       <ul>
-        <li>Adding a Twitch account works again. Twitch stopped accepting SwiftMiner&rsquo;s sign-in on September 18, so new accounts and Discord invitations failed with &ldquo;invalid client&rdquo;. New accounts now sign in through Twitch&rsquo;s TV app instead.</li>
-        <li>Accounts you added before this update keep working exactly as before and do not need to sign in again.</li>
-        <li>Newly added accounts find campaigns across every game with live Drops-enabled streams, checking prioritised games most thoroughly. Twitch only reveals whether a game account is linked once a campaign has progress, so these accounts may watch a new game briefly to find out before settling on campaigns they can claim.</li>
+        <li>Adding a Twitch account works again. Since September 18, new accounts and Discord invitations failed with &ldquo;invalid client&rdquo;. Accounts you already added were not affected and do not need to sign in again.</li>
+        <li>Copies moved with the &ldquo;Move to Applications&rdquo; prompt can update again, instead of failing every update check with &ldquo;SwiftMiner can&rsquo;t be updated if it&rsquo;s running from the location it was downloaded to&rdquo;.</li>
+        <li>Opening SwiftMiner while it is already running no longer restarts active miners or wrongly shows them as blocked. Repeated start requests from SwiftBot or the web dashboard are now ignored too.</li>
+        <li>A campaign paused for making no progress now stays paused for its full 30 minutes, instead of being picked again straight away as a fallback for the same game.</li>
+        <li>Backing up settings and exporting diagnostics now use the standard macOS save dialog, which opens reliably.</li>
+        <li>The web dashboard now reopens as a single window and comes to the front, whether it was closed, minimised or behind another window.</li>
+        <li>Skipped Twitch test Drops are now logged once, not on every automatic claim check.</li>
       </ul>
     </section>
 
     <section>
-      <h2>&#128029; Mining reliability</h2>
+      <h2>&#9881;&#65039; Steadier mining</h2>
       <ul>
-        <li>A live approved channel only wakes a waiting miner when the campaign it needs is active there. This avoids repeated campaign and inventory scans when a broadcaster stays live with unrelated Drops.</li>
-        <li>Waiting miners keep stable Twitch channel monitoring across ordinary rescans instead of repeatedly disconnecting and reconnecting the same subscriptions.</li>
-        <li>Automatic reward checks now follow their two-minute cadence even when channel events wake the miner more frequently. A manual claim still refreshes immediately.</li>
-        <li>Reopening SwiftMiner while it is already running no longer tries to start active miners again or incorrectly marks them as blocked. Duplicate start requests from SwiftBot and the web dashboard are safely ignored too.</li>
-        <li>A campaign paused after repeated no-progress stalls now stays out of same-game fallback choices for its 30-minute cooldown, so miners do not immediately return to the same unproductive campaign.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h2>&#128029; Updates</h2>
-      <ul>
-        <li>A copy moved to Applications by SwiftMiner&rsquo;s own &ldquo;Move to Applications&rdquo; prompt can update again. macOS had kept running it from a hidden temporary location, so every update check failed with &ldquo;SwiftMiner can&rsquo;t be updated if it&rsquo;s running from the location it was downloaded to&rdquo;.</li>
+        <li>Newly added accounts sign in through Twitch&rsquo;s TV app and search for campaigns across every game with live Drops streams, checking your priority games most thoroughly. Twitch only shows whether a game account is linked once a campaign has some progress, so these accounts may briefly watch a new game to find out.</li>
+        <li>A waiting miner only wakes up when an approved channel goes live with the campaign it is waiting for, not when that channel streams unrelated Drops.</li>
+        <li>Waiting miners keep their connection to Twitch channel updates between scans, rather than disconnecting and reconnecting each time.</li>
+        <li>Automatic reward checks run every two minutes, even when channel activity wakes the miner more often. Claiming manually still checks right away.</li>
       </ul>
     </section>
 
     <section>
       <h2>&#128203; Diagnostics</h2>
       <ul>
-        <li>Diagnostics are written to a separate dated log file each day. SwiftMiner retains seven daily files and includes the complete seven-day timeline when you export diagnostic logs.</li>
-        <li>Export Diagnostic Logs now opens on the Desktop by default, making the finished report easier to find.</li>
-        <li>Settings backups and diagnostic reports now use reliable native file dialogs. A progress card remains visible while a large diagnostic report is collected and redacted, then the saved file is revealed in Finder.</li>
-        <li>Long-running, multi-miner sessions prune Activity Log history in batches, reducing CPU spent repeatedly sorting the same entries.</li>
-        <li>Internal Twitch test Drops are reported only once when skipped, keeping repeated automatic claim checks from filling the Activity Log with the same message.</li>
+        <li>Diagnostic logs are now split into one file per day, and SwiftMiner keeps the last seven. An export includes the whole week.</li>
+        <li>Export Diagnostic Logs starts in the Desktop folder. A progress card stays on screen while a large report is gathered and redacted, and the finished file is shown in Finder.</li>
+        <li>Long sessions with several miners use less CPU to trim the Activity Log.</li>
       </ul>
     </section>
 
     <section>
       <h2>&#127912; Interface</h2>
       <ul>
-        <li>Claimed rewards keep the Drops shelf compact. Miner ownership remains available from each reward card&rsquo;s info button and hover details instead of appearing as a label beneath every reward.</li>
-        <li>When a miner waits for a campaign restricted to approved channels, its Overview card shows a small Limited badge so the narrower stream choice is easier to understand.</li>
-        <li>The web dashboard can show completed Drops for priority games or all games. The choice is remembered separately in each browser.</li>
-        <li>The dashboard now reopens as a single window and reliably comes forward whether it was closed, minimised, or behind another window.</li>
+        <li>Claimed rewards take up less room on the Drops shelf. To see which miner earned a reward, use its info button or hover over the card.</li>
+        <li>A miner waiting for a campaign that only runs on approved channels shows a small Limited badge on its Overview card.</li>
+        <li>The web dashboard can show completed Drops for priority games or for all games, and each browser remembers its own choice.</li>
       </ul>
     </section>
 
     <section>
-      <h2>&#128218; Help and project story</h2>
+      <h2>&#128218; Help</h2>
       <ul>
-        <li>The Help Center now focuses on a shorter set of maintained guides. Older article links redirect to their current destinations, so existing bookmarks still lead to useful instructions.</li>
-        <li>A new About article tells SwiftMiner&rsquo;s story from its first automation and Windows VM setup through the original Mac prototype and native rewrite, with clearer credit for the projects that helped shape it.</li>
+        <li>The Help Center has been trimmed to a smaller set of up-to-date guides. Old article links redirect to the current page, so bookmarks still work.</li>
+        <li>A new About article covers SwiftMiner&rsquo;s history, from the first automation scripts and a Windows VM setup through the first Mac prototype to the native rewrite, and credits the projects that helped along the way.</li>
       </ul>
     </section>
 

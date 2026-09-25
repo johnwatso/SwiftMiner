@@ -33,6 +33,9 @@ public enum CampaignService {
         }()
 
         let (dashboardCampaigns, snapshot) = try await (campaignsTask, inventoryTask)
+        // Campaigns found on live channels (TV-client accounts) carry drop definitions without
+        // reward type or preconditions; inventory's are complete, so they take precedence.
+        let inventoryDefinesDrops = await !apiClient.canReadDropsDashboard
         
         // Merge discovered campaigns from inventory (some campaigns like CDL are missing from dashboard)
         // Also trust inventory for isAccountConnected status (often more accurate than dashboard)
@@ -40,7 +43,11 @@ public enum CampaignService {
         for discovered in snapshot.discoveredCampaigns {
             if let index = allCampaigns.firstIndex(where: { $0.id == discovered.id }) {
                 let existing = allCampaigns[index]
-                let merged = mergeDashboardCampaign(existing, withInventory: discovered)
+                let merged = mergeDashboardCampaign(
+                    existing,
+                    withInventory: discovered,
+                    inventoryDefinesDrops: inventoryDefinesDrops
+                )
                 if merged.isAccountConnected && !existing.isAccountConnected {
                     Logger.campaigns.info("Inventory confirmed connection for \(discovered.name)")
                 }
@@ -69,18 +76,35 @@ public enum CampaignService {
     /// Combines the broad dashboard campaign with account-specific Inventory metadata.
     /// Inventory is allowed to fill fields that the dashboard omitted, especially approved
     /// channels for short-lived esports campaigns.
+    ///
+    /// `inventoryDefinesDrops` is set for accounts whose campaigns come from live channels
+    /// rather than the dashboard. `DropsHighlightService_AvailableDrops` omits each reward's
+    /// type, so such a drop reads as an in-game item until inventory says otherwise — WARDOGS'
+    /// badge was mined for a quarter of an hour with badge campaigns switched off. Once
+    /// inventory has the campaign its drop list is used outright: it lists every watch-time
+    /// tier with full definitions and leaves out subscription rewards, whose unknown type
+    /// would otherwise keep a badge-only campaign looking like an in-game one.
     internal static func mergeDashboardCampaign(
         _ dashboard: Campaign,
-        withInventory inventory: Campaign
+        withInventory inventory: Campaign,
+        inventoryDefinesDrops: Bool = false
     ) -> Campaign {
-        Campaign(
+        let drops: [Drop]
+        if dashboard.drops.isEmpty {
+            drops = inventory.drops
+        } else if inventoryDefinesDrops, !inventory.drops.isEmpty {
+            drops = inventory.drops
+        } else {
+            drops = dashboard.drops
+        }
+        return Campaign(
             id: dashboard.id,
             name: dashboard.name.isEmpty ? inventory.name : dashboard.name,
             game: dashboard.game.name.isEmpty ? inventory.game : dashboard.game,
             status: dashboard.status,
             startDate: dashboard.startDate,
             endDate: dashboard.endDate,
-            drops: dashboard.drops.isEmpty ? inventory.drops : dashboard.drops,
+            drops: drops,
             channels: dashboard.channels.isEmpty ? inventory.channels : dashboard.channels,
             isAccountConnected: dashboard.isAccountConnected || inventory.isAccountConnected,
             allowIsEnabled: dashboard.allowIsEnabled ?? inventory.allowIsEnabled,
