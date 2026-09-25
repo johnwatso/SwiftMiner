@@ -944,12 +944,16 @@ extension TwitchAPIClient {
     /// One live drops-enabled channel per game, most-watched first, across all of Twitch.
     ///
     /// Browse → Live Channels accepts the `DROPS_ENABLED` filter for every game at once, but
-    /// ends after roughly 1,600 streams. Reading it from both ends of the viewer count reaches
-    /// small games the top of the list never gets to.
+    /// ends after roughly 1,600 streams. Reading it in several orders at once — including
+    /// fewest viewers first — reaches small games the top of the list never gets to.
     func fetchDropsEnabledChannelsByGame() async throws -> [SharedDropsDirectory.Entry] {
-        async let mostWatched = dropsEnabledChannels(sort: "VIEWER_COUNT", maxPages: 30)
-        async let leastWatched = dropsEnabledChannels(sort: "VIEWER_COUNT_ASC", maxPages: 20)
-        let pages = await [mostWatched, leastWatched]
+        // The list ends after roughly 1,600 streams and pages are sequential, so several short
+        // reads in different orders reach further, sooner, than one long one.
+        async let mostWatched = dropsEnabledChannels(sort: "VIEWER_COUNT", maxPages: 15)
+        async let leastWatched = dropsEnabledChannels(sort: "VIEWER_COUNT_ASC", maxPages: 15)
+        async let newest = dropsEnabledChannels(sort: "RECENT", maxPages: 10)
+        async let relevant = dropsEnabledChannels(sort: "RELEVANCE", maxPages: 10)
+        let pages = await [mostWatched, leastWatched, newest, relevant]
 
         guard pages.contains(where: { $0.answered }) else {
             throw pages.compactMap(\.error).first ?? TwitchMinerError.networkError("Live channel browse failed")
@@ -986,7 +990,7 @@ extension TwitchAPIClient {
                     "broadcasterLanguages": [],
                     "systemFilters": ["DROPS_ENABLED"]
                 ],
-                "sortTypeIsRecency": false,
+                "sortTypeIsRecency": sort == "RECENT",
                 "includeCostreaming": false
             ]
             if let cursor { variables["cursor"] = cursor }
