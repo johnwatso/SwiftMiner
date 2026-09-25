@@ -1770,3 +1770,48 @@ final class Counter: @unchecked Sendable {
         return count
     }
 }
+
+/// Campaigns found on live channels carry drop definitions without reward types.
+final class LiveChannelCampaignMergeTests: XCTestCase {
+    private func campaign(drops: [Drop]) -> Campaign {
+        Campaign(
+            id: "wardogs", name: "WARDOGS Beta & Launch", game: Game(id: "743893402", name: "WARDOGS"),
+            status: .active, startDate: Date().addingTimeInterval(-3600), endDate: Date().addingTimeInterval(86_400),
+            drops: drops
+        )
+    }
+
+    private func drop(_ id: String, minutes: Int, subs: Int = 0, type: RewardType) -> Drop {
+        Drop(id: id, name: id, requiredMinutes: minutes,
+             reward: Reward(id: "b-\(id)", type: type, name: id, description: ""), requiredSubs: subs)
+    }
+
+    /// WARDOGS: the channel lists a subscription reward and the 30-minute drop, both read as
+    /// in-game; inventory knows the watch drop is a badge. Inventory's list must win, so the
+    /// badge filter applies.
+    func testInventoryDropsReplaceChannelDropsForLiveChannelAccounts() {
+        let fromChannel = campaign(drops: [
+            drop("warlord", minutes: 0, subs: 1, type: .inGame),
+            drop("wardog", minutes: 30, type: .inGame)
+        ])
+        let fromInventory = campaign(drops: [drop("wardog", minutes: 30, type: .badge)])
+
+        let merged = CampaignService.mergeDashboardCampaign(fromChannel, withInventory: fromInventory, inventoryDefinesDrops: true)
+
+        XCTAssertEqual(merged.drops.map(\.id), ["wardog"])
+        XCTAssertTrue(merged.hasOnlyBadgesOrEmotes)
+    }
+
+    /// Dashboard accounts keep the dashboard's complete drop list, as before.
+    func testDashboardDropsStillWinForDashboardAccounts() {
+        let fromDashboard = campaign(drops: [
+            drop("warlord", minutes: 0, subs: 1, type: .badge),
+            drop("wardog", minutes: 30, type: .badge)
+        ])
+        let fromInventory = campaign(drops: [drop("wardog", minutes: 30, type: .badge)])
+
+        let merged = CampaignService.mergeDashboardCampaign(fromDashboard, withInventory: fromInventory)
+
+        XCTAssertEqual(merged.drops.map(\.id), ["warlord", "wardog"])
+    }
+}
