@@ -841,7 +841,7 @@ extension TwitchAPIClient {
     public func campaignIDsAwaitingLinkState() -> Set<String> {
         guard !canReadDropsDashboard else { return [] }
         let reported = Set(lastKnownInProgressCampaigns.map(\.id))
-        return Set(discoveredCampaigns?.campaigns.map(\.id) ?? []).subtracting(reported)
+        return discoveredCampaignIDs.subtracting(reported)
     }
 
     /// Campaigns for an account whose token cannot read the drops dashboard.
@@ -850,14 +850,52 @@ extension TwitchAPIClient {
     /// TV-issued tokens — with or without an integrity token — but still answers the directory
     /// and `DropsHighlightService_AvailableDrops`. So campaigns are found the way a viewer finds
     /// them: live drops-enabled channels, and the campaigns each of those channels is running.
-    /// Prioritised games are searched directly; every other game comes from Browse → Live
-    /// Channels filtered to drops. Inventory then adds the campaigns already under way, with
-    /// their allow-lists and account-link state.
+    /// Inventory then adds the campaigns already under way, with their allow-lists and
+    /// account-link state.
+    ///
+    /// A full pass over every game costs around 190 requests, and the request coordinator allows
+    /// five a second per account, so it cannot finish in under ~40 seconds. Prioritised games are
+    /// the ones a TV account mines without a confirmed link, so they are searched first and
+    /// returned at once; the all-games pass runs in the background and is picked up by the next
+    /// refresh. Until it lands, the last full result is kept rather than letting the list shrink.
     func discoverCampaignsFromLiveChannels() async throws -> [Campaign] {
         if let cached = discoveredCampaigns, cached.expiresAt > Date() {
             return cached.campaigns
         }
 
+        let prioritised = try await discoverCampaigns(includingAllGames: false)
+        var byID = Dictionary((discoveredCampaigns?.campaigns ?? []).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        for campaign in prioritised.campaigns { byID[campaign.id] = campaign }
+        let campaigns = byID.values.sorted { $0.endDate < $1.endDate }
+        discoveredCampaignIDs.formUnion(campaigns.map(\.id))
+        Logger.campaigns.info("Found \(prioritised.campaigns.count) campaign(s) for prioritised games; searching every game in the background")
+
+        startFullCampaignDiscoveryIfNeeded()
+        return campaigns
+    }
+
+    private func startFullCampaignDiscoveryIfNeeded() {
+        guard fullDiscoveryTask == nil else { return }
+        fullDiscoveryTask = Task { [weak self] in
+            guard let self else { return }
+            await self.runFullCampaignDiscovery()
+        }
+    }
+
+    private func runFullCampaignDiscovery() async {
+        defer { fullDiscoveryTask = nil }
+        guard let result = try? await discoverCampaigns(includingAllGames: true) else { return }
+        discoveredCampaignIDs.formUnion(result.campaigns.map(\.id))
+        discoveredCampaigns = DiscoveredCampaignsCacheEntry(
+            campaigns: result.campaigns,
+            expiresAt: Date().addingTimeInterval(Self.discoveredCampaignsTTL)
+        )
+        Logger.campaigns.info("Found \(result.campaigns.count) campaign(s) on \(result.channelCount) live drops channel(s)")
+    }
+
+    /// One discovery pass: prioritised games several channels deep, and optionally one channel
+    /// for every other game with live drops-enabled streams.
+    private func discoverCampaigns(includingAllGames: Bool) async throws -> (campaigns: [Campaign], channelCount: Int) {
         var channelIds: [String] = []
         var seenChannels = Set<String>()
         var coveredGames = Set<String>()
@@ -865,11 +903,13 @@ extension TwitchAPIClient {
         var lastError: Error?
 
         // The all-games browse is the slow part; start it while prioritised games are looked up.
-        let browseTask = Task { [self] in
-            try await SharedDropsDirectory.shared.channelsByGame { [self] in
-                try await fetchDropsEnabledChannelsByGame()
+        let browseTask: Task<[SharedDropsDirectory.Entry], Error>? = includingAllGames
+            ? Task { [self] in
+                try await SharedDropsDirectory.shared.channelsByGame { [self] in
+                    try await fetchDropsEnabledChannelsByGame()
+                }
             }
-        }
+            : nil
 
         for game in campaignDiscoveryGames.prefix(Self.maxPrioritisedDiscoveryGames) {
             do {
@@ -886,16 +926,18 @@ extension TwitchAPIClient {
             }
         }
 
-        do {
-            let browsed = try await browseTask.value
-            answeredRequests += 1
-            for entry in browsed.prefix(Self.maxBrowsedDiscoveryGames)
-                where !coveredGames.contains(Self.normalizedLookupKey(entry.gameName))
-                    && seenChannels.insert(entry.channelId).inserted {
-                channelIds.append(entry.channelId)
+        if let browseTask {
+            do {
+                let browsed = try await browseTask.value
+                answeredRequests += 1
+                for entry in browsed.prefix(Self.maxBrowsedDiscoveryGames)
+                    where !coveredGames.contains(Self.normalizedLookupKey(entry.gameName))
+                        && seenChannels.insert(entry.channelId).inserted {
+                    channelIds.append(entry.channelId)
+                }
+            } catch {
+                lastError = error
             }
-        } catch {
-            lastError = error
         }
 
         let queue = channelIds
@@ -931,14 +973,7 @@ extension TwitchAPIClient {
         if answeredRequests == 0, let lastError {
             throw lastError
         }
-
-        let campaigns = found.values.sorted { $0.endDate < $1.endDate }
-        Logger.campaigns.info("Found \(campaigns.count) campaign(s) on \(channelIds.count) live drops channel(s)")
-        discoveredCampaigns = DiscoveredCampaignsCacheEntry(
-            campaigns: campaigns,
-            expiresAt: Date().addingTimeInterval(Self.discoveredCampaignsTTL)
-        )
-        return campaigns
+        return (found.values.sorted { $0.endDate < $1.endDate }, channelIds.count)
     }
 
     /// One live drops-enabled channel per game, most-watched first, across all of Twitch.
