@@ -162,6 +162,25 @@ final class MinerSchedulingTests: XCTestCase {
         XCTAssertEqual(count, 1)
     }
 
+    // MARK: - Drop in progress
+
+    /// WARDOGS lists a one-sub, 0-minute reward ahead of its 30-minute watch drop. The card
+    /// must follow the watch drop, not report the subscription reward at 0%.
+    func testDropInProgressSkipsASubscriptionRewardListedFirst() {
+        let subscriptionReward = Drop(id: "warlord", name: "WARLORD", requiredMinutes: 0, requiredSubs: 1)
+        let watchDrop = drop(id: "wardog", required: 30, current: 9)
+        let c = campaign(id: "c-wardogs", endsInDays: 5, drops: [subscriptionReward, watchDrop])
+
+        XCTAssertEqual(c.dropInProgress?.id, "wardog")
+    }
+
+    func testDropInProgressFallsBackToFirstUnclaimedWhenNothingIsEarnable() {
+        let subscriptionReward = Drop(id: "warlord", name: "WARLORD", requiredMinutes: 0, requiredSubs: 1)
+        let c = campaign(id: "c-sub-only", endsInDays: 5, drops: [subscriptionReward])
+
+        XCTAssertEqual(c.dropInProgress?.id, "warlord")
+    }
+
     // MARK: - shouldDeferPreemption
 
     func testDeferPreemption_WhenActiveDropNearlyComplete() {

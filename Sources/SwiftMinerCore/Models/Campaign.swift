@@ -603,6 +603,17 @@ public struct Campaign: Codable, Sendable, Identifiable, Equatable {
         }
     }
 
+    /// The drop watching is working towards: the first one still earnable by watching, else
+    /// the first not yet earned, else the first unclaimed. Twitch can list a subscription
+    /// reward ahead of the watch-time drops (WARDOGS lists its 0-minute, one-sub "WARLORD"
+    /// before the 30-minute "WARDOG"), and that reward must not stand in for the drop the
+    /// miner is actually earning.
+    public var dropInProgress: Drop? {
+        earnableDrops.first
+            ?? drops.first(where: { !$0.isClaimed && !$0.isClaimable })
+            ?? drops.first(where: { !$0.isClaimed })
+    }
+
     /// Returns drops that can be claimed now or earned soon (not claimed and all preconditions met).
     public var eligibleDrops: [Drop] {
         drops.filter { drop in

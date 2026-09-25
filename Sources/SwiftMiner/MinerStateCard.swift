@@ -1462,8 +1462,7 @@ struct MinerActivitySnapshot {
         for campaign: Campaign,
         miner: MinerManager.ManagedMiner
     ) -> ActiveDropProgress? {
-        guard let drop = campaign.drops.first(where: { !$0.isClaimed && !$0.isClaimable })
-            ?? campaign.drops.first(where: { !$0.isClaimed }) else {
+        guard let drop = campaign.dropInProgress else {
             return nil
         }
 

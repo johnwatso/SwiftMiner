@@ -1,6 +1,7 @@
 import AppKit
 import CoreServices
 import Foundation
+import SwiftMinerCore
 
 /// Offers to place a manually downloaded copy of the app in `/Applications`.
 ///
@@ -9,6 +10,7 @@ import Foundation
 @MainActor
 enum ApplicationsFolderInstaller {
     private static let applicationsDirectoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
+    static let quarantineAttributeName = "com.apple.quarantine"
 
     static func promptToMoveIfNecessary(bundleURL: URL = Bundle.main.bundleURL) {
         let downloadsDirectoryURL = FileManager.default.urls(
@@ -86,20 +88,45 @@ enum ApplicationsFolderInstaller {
         fileManager: FileManager = .default
     ) throws -> URL {
         let destinationURL = destinationURL(for: bundleURL, applicationsDirectoryURL: applicationsDirectoryURL)
+        let installedURL: URL
         if fileManager.fileExists(atPath: destinationURL.path) {
             // Manual downloads are commonly launched while an older SwiftMiner is
             // already installed. Replace it atomically after the user accepts the
             // move prompt instead of requiring a trip to Finder first.
-            return try fileManager.replaceItemAt(
+            installedURL = try fileManager.replaceItemAt(
                 destinationURL,
                 withItemAt: bundleURL,
                 backupItemName: nil,
                 options: [.usingNewMetadataOnly]
             ) ?? destinationURL
+        } else {
+            try fileManager.moveItem(at: bundleURL, to: destinationURL)
+            installedURL = destinationURL
         }
 
-        try fileManager.moveItem(at: bundleURL, to: destinationURL)
-        return destinationURL
+        removeQuarantine(from: installedURL, fileManager: fileManager)
+        return installedURL
+    }
+
+    /// Gatekeeper stops translocating a quarantined download only once the user
+    /// moves it in Finder. A programmatic move keeps the quarantine attribute, so
+    /// the Applications copy would still launch from a private AppTranslocation
+    /// path on every launch, and Sparkle refuses to update from there. The app
+    /// has already passed Gatekeeper's first-launch check by the time it offers
+    /// this move, so clearing the attribute skips no assessment.
+    static func removeQuarantine(from bundleURL: URL, fileManager: FileManager = .default) {
+        let contents = fileManager.enumerator(at: bundleURL, includingPropertiesForKeys: nil)?
+            .compactMap { $0 as? URL } ?? []
+        for url in [bundleURL] + contents
+        where removexattr(url.path, quarantineAttributeName, XATTR_NOFOLLOW) != 0 {
+            let code = errno
+            guard code != ENOATTR else { continue }
+            Logger.app.warning(
+                "Could not clear quarantine from \(url.path): \(String(cString: strerror(code))); "
+                    + "SwiftMiner may keep running translocated, which blocks updates"
+            )
+            return
+        }
     }
 
     static func relaunchConfiguration() -> NSWorkspace.OpenConfiguration {
