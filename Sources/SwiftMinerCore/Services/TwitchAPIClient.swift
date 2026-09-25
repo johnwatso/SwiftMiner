@@ -166,6 +166,11 @@ public actor TwitchAPIClient {
         TwitchClientIDs.canReadDropsDashboard(clientId)
     }
 
+    /// Origin matching the first-party client that issued this account's token.
+    var clientOrigin: String {
+        TwitchClientIDs.origin(for: clientId)
+    }
+
     private var accountId: String?
 
     /// Prioritised games searched on live channels when this account cannot read the drops
@@ -176,6 +181,8 @@ public actor TwitchAPIClient {
     var discoveredCampaignIDs: Set<String> = []
     var provisionalDiscoveredCampaigns: DiscoveredCampaignsCacheEntry?
     var fullDiscoveryTask: Task<Void, Never>?
+    /// Invalidates late results when priorities change during an in-flight all-games pass.
+    var campaignDiscoveryGeneration: UInt64 = 0
 
     struct DiscoveredCampaignsCacheEntry {
         let campaigns: [Campaign]
@@ -1558,8 +1565,8 @@ public actor TwitchAPIClient {
         urlRequest.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         urlRequest.setValue("*/*", forHTTPHeaderField: "Accept")
         urlRequest.setValue("en-US", forHTTPHeaderField: "Accept-Language")
-        urlRequest.setValue("https://www.twitch.tv", forHTTPHeaderField: "Origin")
-        urlRequest.setValue("https://www.twitch.tv", forHTTPHeaderField: "Referer")
+        urlRequest.setValue(clientOrigin, forHTTPHeaderField: "Origin")
+        urlRequest.setValue(clientOrigin, forHTTPHeaderField: "Referer")
 
         // Twitch requires integrity token for dropCampaigns and other protected fields
         if let integrity = try? await getIntegrityToken() {
@@ -1701,8 +1708,8 @@ public actor TwitchAPIClient {
         urlRequest.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         urlRequest.setValue("*/*", forHTTPHeaderField: "Accept")
         urlRequest.setValue("en-US", forHTTPHeaderField: "Accept-Language")
-        urlRequest.setValue("https://www.twitch.tv", forHTTPHeaderField: "Origin")
-        urlRequest.setValue("https://www.twitch.tv", forHTTPHeaderField: "Referer")
+        urlRequest.setValue(clientOrigin, forHTTPHeaderField: "Origin")
+        urlRequest.setValue(clientOrigin, forHTTPHeaderField: "Referer")
 
         if let integrity = try? await getIntegrityToken() {
             urlRequest.setValue(integrity, forHTTPHeaderField: "Client-Integrity")
@@ -1806,8 +1813,8 @@ public actor TwitchAPIClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         // Use same User-Agent as GQL requests for consistency
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        request.setValue("https://www.twitch.tv", forHTTPHeaderField: "Origin")
-        request.setValue("https://www.twitch.tv", forHTTPHeaderField: "Referer")
+        request.setValue(clientOrigin, forHTTPHeaderField: "Origin")
+        request.setValue(clientOrigin, forHTTPHeaderField: "Referer")
 
         let startedAt = Date()
         let data: Data

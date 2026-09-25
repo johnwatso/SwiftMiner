@@ -339,11 +339,37 @@ final class TwitchAuthServiceTests: XCTestCase {
 
         XCTAssertEqual(response.deviceCode, "device_abc")
         XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Client-Id"), "test_client_id")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Origin"), TwitchClientIDs.webOrigin)
         XCTAssertEqual(request.value(forHTTPHeaderField: "Referer"), "https://www.twitch.tv")
         XCTAssertEqual(request.value(forHTTPHeaderField: "X-Device-Id")?.count, 32)
         XCTAssertFalse(request.value(forHTTPHeaderField: "User-Agent")?.isEmpty ?? true)
         XCTAssertTrue(body.contains("client_id=test_client_id"))
         XCTAssertTrue(body.contains("scopes=user:read:follows"))
+    }
+
+    func testTVDeviceFlowPresentsOneConsistentTVFingerprint() async throws {
+        let tvService = TwitchAuthService(
+            clientId: TwitchClientIDs.tv,
+            tokenStore: TestTokenStore(),
+            urlSession: mockSession
+        )
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            let data = #"{"device_code":"device_abc","expires_in":1800,"interval":5,"user_code":"ABCD-1234","verification_uri":"https://www.twitch.tv/activate"}"#.data(using: .utf8)!
+            return (response, data)
+        }
+
+        _ = try await tvService.initiateDeviceFlow()
+        let request = try XCTUnwrap(MockURLProtocol.lastRequest)
+
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Client-Id"), TwitchClientIDs.tv)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), TwitchClientIDs.tvUserAgent)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Origin"), TwitchClientIDs.tvOrigin)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Referer"), TwitchClientIDs.tvOrigin)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Device-Id")?.count, 32)
     }
 
     func testInitiateDeviceFlowPropagatesAPIError() async {
@@ -543,6 +569,43 @@ final class AccountClientIDTests: XCTestCase {
         XCTAssertEqual(AccountClientRegistry.shared.clientId(for: accountId), TwitchClientIDs.tv)
     }
 
+    func testFailedTokenPersistenceKeepsExistingClientAndTokenPaired() async throws {
+        let store = TestTokenStore()
+        try await store.save(account: Account(
+            id: accountId, username: "miner", accessToken: "android-token", refreshToken: "r",
+            tokenExpiry: Date().addingTimeInterval(3600), scopes: []
+        ))
+        await store.failSaves(with: NSError(
+            domain: "TwitchAuthServiceTests",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "simulated Keychain failure"]
+        ))
+        AccountClientRegistry.shared.record(TwitchClientIDs.android, for: accountId)
+        MockURLProtocol.requestHandler = { [accountId] request in
+            let ok = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            if request.url?.path == "/oauth2/validate" {
+                let body = #"{"client_id":"\#(TwitchClientIDs.tv)","login":"miner","scopes":[],"user_id":"\#(accountId)","expires_in":3600}"#
+                return (ok, Data(body.utf8))
+            }
+            return (ok, Data(#"{"access_token":"tv-token","refresh_token":"tv-refresh","expires_in":3600,"scope":[],"token_type":"bearer"}"#.utf8))
+        }
+        let service = TwitchAuthService(
+            clientId: TwitchClientIDs.tv,
+            tokenStore: store,
+            urlSession: mockSession
+        )
+
+        do {
+            _ = try await service.pollForToken(deviceCode: "device-code", interval: 0)
+            XCTFail("Expected the simulated Keychain failure")
+        } catch {
+            XCTAssertEqual(AccountClientRegistry.shared.clientId(for: accountId), TwitchClientIDs.android)
+        }
+
+        let stored = try await store.loadAccount(twitchUserId: accountId)
+        XCTAssertEqual(stored?.accessToken, "android-token")
+    }
+
     func testRevocationPresentsTheAccountsIssuingClient() async throws {
         let store = TestTokenStore()
         try await store.save(account: Account(
@@ -566,6 +629,8 @@ final class AccountClientIDTests: XCTestCase {
         XCTAssertNil(AccountClientRegistry.shared.clientId(for: accountId))
         XCTAssertTrue(TwitchClientIDs.canReadDropsDashboard(TwitchClientIDs.android))
         XCTAssertFalse(TwitchClientIDs.canReadDropsDashboard(TwitchClientIDs.tv))
+        XCTAssertEqual(TwitchClientIDs.origin(for: TwitchClientIDs.android), TwitchClientIDs.webOrigin)
+        XCTAssertEqual(TwitchClientIDs.origin(for: TwitchClientIDs.tv), TwitchClientIDs.tvOrigin)
     }
 
     func testRegistryRecordsReplacesAndForgets() {
@@ -592,6 +657,38 @@ final class AccountClientIDTests: XCTestCase {
     func testTVAccountsPresentTheTVAppUserAgent() {
         AccountClientRegistry.shared.record(TwitchClientIDs.tv, for: accountId)
         XCTAssertEqual(TwitchClientFingerprint.shared.userAgent(for: accountId), TwitchClientIDs.tvUserAgent)
+    }
+
+    func testTVAccountsUseTVOriginForGraphQLWithoutChangingLegacyDefaults() async throws {
+        AccountClientRegistry.shared.record(TwitchClientIDs.tv, for: accountId)
+        MockURLProtocol.requestHandler = { request in
+            let ok = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            if request.url?.path == "/integrity" {
+                return (ok, Data(#"{"token":"integrity","expiration":4102444800000}"#.utf8))
+            }
+            return (ok, Data(#"{"data":{"channel":{"viewerDropCampaigns":[]}}}"#.utf8))
+        }
+        let auth = TwitchAuthService(
+            clientId: TwitchClientIDs.android,
+            tokenStore: TestTokenStore(),
+            urlSession: mockSession
+        )
+        let client = TwitchAPIClient(
+            authService: auth,
+            clientId: TwitchClientIDs.android,
+            session: mockSession,
+            persistsCampaignCaches: false
+        )
+        await client.setAccountId(accountId)
+        await client.updateAccessToken("tv-token")
+
+        _ = try await client.fetchAvailableDrops(channelId: "tv-origin-\(accountId)")
+        let request = try XCTUnwrap(MockURLProtocol.lastRequest)
+
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Client-Id"), TwitchClientIDs.tv)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), TwitchClientIDs.tvUserAgent)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Origin"), TwitchClientIDs.tvOrigin)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Referer"), TwitchClientIDs.tvOrigin)
     }
 
     func testAndroidAccountsKeepAnAndroidUserAgent() {

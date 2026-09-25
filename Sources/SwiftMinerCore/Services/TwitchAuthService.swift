@@ -29,6 +29,10 @@ public actor TwitchAuthService {
         (0..<32).map { _ in String(format: "%x", Int.random(in: 0...15)) }.joined()
     }
 
+    /// One device identity for both halves of a device-code exchange. Generating another ID for
+    /// the token poll would make the request look as though it came from a different TV box.
+    private let deviceId = TwitchAuthService.randomDeviceId()
+
     private var currentAccount: Account?
     private var refreshTask: Task<String, Error>?
     
@@ -72,6 +76,16 @@ public actor TwitchAuthService {
     /// the scope callers check a token against cannot drift apart.
     public static let followedChannelsScope = "user:read:follows"
 
+    private func applyIssuingClientHeaders(to request: inout URLRequest) {
+        let origin = TwitchClientIDs.origin(for: clientId)
+        request.setValue(clientId, forHTTPHeaderField: "Client-Id")
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue(origin, forHTTPHeaderField: "Origin")
+        request.setValue(origin, forHTTPHeaderField: "Referer")
+        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
+        request.setValue(deviceId, forHTTPHeaderField: "X-Device-Id")
+    }
+
     /// Initiates device code flow and returns the device code info for user to authorize.
     ///
     /// Device login intentionally requests no scopes by default. The optional
@@ -81,11 +95,7 @@ public actor TwitchAuthService {
         var request = URLRequest(url: deviceCodeURL)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        request.setValue("https://www.twitch.tv", forHTTPHeaderField: "Referer")
-        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
-        // Random 32-char hex device ID (same as Twitch web app's "unique_id" cookie)
-        request.setValue(Self.randomDeviceId(), forHTTPHeaderField: "X-Device-Id")
+        applyIssuingClientHeaders(to: &request)
 
         let scopes = Self.deviceAuthorizationScopes(
             includeFollowedChannels: includeFollowedChannels
@@ -148,10 +158,13 @@ public actor TwitchAuthService {
             Logger.auth.debug("Polling for token...")
 
             do {
-                let fresh = try await requestToken(deviceCode: deviceCode)
-                Logger.auth.info("Token received! User: \(fresh.username)")
-                let account = await mergingStoredIdentity(into: fresh)
+                let issued = try await requestToken(deviceCode: deviceCode)
+                Logger.auth.info("Token received! User: \(issued.account.username)")
+                let account = await mergingStoredIdentity(into: issued.account)
                 try await tokenStore.save(account: account)
+                // Only switch the account's client after its matching token is durable. If the
+                // Keychain write fails, the old token and its old client remain a working pair.
+                AccountClientRegistry.shared.record(issued.clientId, for: account.id)
                 self.currentAccount = account
                 return account
             } catch let error as TwitchMinerError {
@@ -174,10 +187,11 @@ public actor TwitchAuthService {
         }
     }
 
-    private func requestToken(deviceCode: String) async throws -> Account {
+    private func requestToken(deviceCode: String) async throws -> (account: Account, clientId: String) {
         var request = URLRequest(url: tokenURL)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        applyIssuingClientHeaders(to: &request)
 
         let bodyParams = [
             "client_id": clientId,
@@ -222,13 +236,9 @@ public actor TwitchAuthService {
         )
 
         // Validation reports the client that actually issued the token, which is the one every
-        // later request for this account has to present.
-        AccountClientRegistry.shared.record(
-            userInfo.clientId.isEmpty ? clientId : userInfo.clientId,
-            for: account.id
-        )
-
-        return account
+        // later request for this account has to present. The caller records it only after the
+        // account itself has been saved successfully.
+        return (account, userInfo.clientId.isEmpty ? clientId : userInfo.clientId)
     }
 
     // MARK: - Token Refresh
