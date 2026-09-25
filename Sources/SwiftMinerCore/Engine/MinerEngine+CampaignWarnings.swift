@@ -35,6 +35,8 @@ extension MinerEngine {
             campaign.isTimeActive
                 && !campaign.isLikelyInternalTestCampaign
                 && !campaign.isAccountConnected
+                // Unknown is not unlinked: a TV account learns link state from inventory.
+                && !campaignsAwaitingLinkState.contains(campaign.id)
                 && priorityGamesLower.contains(campaign.gameName.lowercased())
                 && campaign.drops.contains(where: { !$0.isClaimed })
         }

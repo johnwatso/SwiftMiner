@@ -16,6 +16,7 @@ public enum GQLQuery: String, CaseIterable, Codable, Identifiable, Sendable {
     case dropsHighlightServiceAvailableDrops = "DropsHighlightService_AvailableDrops"
     case channelPointsContext = "ChannelPointsContext"
     case claimCommunityPoints = "ClaimCommunityPoints"
+    case browsePagePopular = "BrowsePage_Popular"
 
     public var id: String { rawValue }
 
@@ -49,6 +50,7 @@ public enum GQLQuery: String, CaseIterable, Codable, Identifiable, Sendable {
         case .dropsHighlightServiceAvailableDrops: return "Available drops"
         case .channelPointsContext: return "Channel points"
         case .claimCommunityPoints: return "Claim channel points"
+        case .browsePagePopular: return "Live channels"
         }
     }
 
@@ -116,6 +118,8 @@ public enum GQLQuery: String, CaseIterable, Codable, Identifiable, Sendable {
             ]
         case .dropsHighlightServiceAvailableDrops:
             return [["data", "channel", "viewerDropCampaigns"]]
+        case .browsePagePopular:
+            return [["data", "streams", "edges"]]
         default:
             return []
         }
@@ -157,6 +161,7 @@ public enum GQLQuery: String, CaseIterable, Codable, Identifiable, Sendable {
         case .dropsHighlightServiceAvailableDrops: return GQLHashes.availableDrops
         case .channelPointsContext: return GQLHashes.channelPointsContext
         case .claimCommunityPoints: return GQLHashes.claimCommunityPoints
+        case .browsePagePopular: return GQLHashes.browsePagePopular
         }
     }
 }
@@ -250,6 +255,9 @@ public enum GQLHashes {
     public static let availableDrops = "782dad0f032942260171d2d80a654f88bdd0c5a9dddc392e9bc92218a0f42d20"
     public static let channelPointsContext = "374314de591e69925fce3ddc2bcf085796f56ebb8cad67a0daa3165c03adc345"
     public static let claimCommunityPoints = "46aaeebe02c99afdf4fc97c7c0cba964124bf6b0af229395f1f6d1feed05b3d0"
+    /// Browse → Live Channels. Captured from twitch.tv on 2026-09-25; accepts the
+    /// `DROPS_ENABLED` system filter across every game.
+    public static let browsePagePopular = "97fed6737c9ef90e8552fb7d02bf4e5d20da0af3cad2a5492d9c93f94e95c29e"
 }
 
 public enum TwitchQueryHashSource: String, Sendable {
