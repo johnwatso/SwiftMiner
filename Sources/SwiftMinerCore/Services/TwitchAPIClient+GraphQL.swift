@@ -819,6 +819,8 @@ extension TwitchAPIClient {
     static let maxBrowsedDiscoveryGames = 120
     static let discoveryConcurrency = 10
     static let discoveredCampaignsTTL: TimeInterval = 10 * 60
+    /// How long the prioritised pass answers for while the all-games pass is still running.
+    static let provisionalDiscoveryTTL: TimeInterval = 3 * 60
 
     /// Games whose live channels are searched first when this account's token cannot read
     /// the drops dashboard. Set from the miner's prioritised games.
@@ -862,12 +864,22 @@ extension TwitchAPIClient {
         if let cached = discoveredCampaigns, cached.expiresAt > Date() {
             return cached.campaigns
         }
+        // While the all-games pass runs, every other caller (the miner and the Drops views both
+        // ask at launch) is answered from the prioritised pass. Repeating that pass would queue
+        // it behind the background search's requests and take the better part of a minute.
+        if let provisional = provisionalDiscoveredCampaigns, provisional.expiresAt > Date() {
+            return provisional.campaigns
+        }
 
         let prioritised = try await discoverCampaigns(includingAllGames: false)
         var byID = Dictionary((discoveredCampaigns?.campaigns ?? []).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         for campaign in prioritised.campaigns { byID[campaign.id] = campaign }
         let campaigns = byID.values.sorted { $0.endDate < $1.endDate }
         discoveredCampaignIDs.formUnion(campaigns.map(\.id))
+        provisionalDiscoveredCampaigns = DiscoveredCampaignsCacheEntry(
+            campaigns: campaigns,
+            expiresAt: Date().addingTimeInterval(Self.provisionalDiscoveryTTL)
+        )
         Logger.campaigns.info("Found \(prioritised.campaigns.count) campaign(s) for prioritised games; searching every game in the background")
 
         startFullCampaignDiscoveryIfNeeded()
@@ -885,6 +897,7 @@ extension TwitchAPIClient {
     private func runFullCampaignDiscovery() async {
         defer { fullDiscoveryTask = nil }
         guard let result = try? await discoverCampaigns(includingAllGames: true) else { return }
+        provisionalDiscoveredCampaigns = nil
         discoveredCampaignIDs.formUnion(result.campaigns.map(\.id))
         discoveredCampaigns = DiscoveredCampaignsCacheEntry(
             campaigns: result.campaigns,

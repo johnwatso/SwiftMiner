@@ -174,6 +174,7 @@ public actor TwitchAPIClient {
     var discoveredCampaigns: DiscoveredCampaignsCacheEntry?
     /// Every campaign ID discovery has returned, from either pass.
     var discoveredCampaignIDs: Set<String> = []
+    var provisionalDiscoveredCampaigns: DiscoveredCampaignsCacheEntry?
     var fullDiscoveryTask: Task<Void, Never>?
 
     struct DiscoveredCampaignsCacheEntry {
