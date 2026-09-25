@@ -172,6 +172,9 @@ public actor TwitchAPIClient {
     /// dashboard, and the last result of that search.
     var campaignDiscoveryGames: [String] = []
     var discoveredCampaigns: DiscoveredCampaignsCacheEntry?
+    /// Every campaign ID discovery has returned, from either pass.
+    var discoveredCampaignIDs: Set<String> = []
+    var fullDiscoveryTask: Task<Void, Never>?
 
     struct DiscoveredCampaignsCacheEntry {
         let campaigns: [Campaign]
