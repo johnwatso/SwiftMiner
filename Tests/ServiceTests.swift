@@ -1537,12 +1537,80 @@ final class ServiceTests: XCTestCase {
             return (response, json.data(using: .utf8)!)
         }
 
-        let first = try await apiClient.fetchAvailableDrops(channelId: "channel-1")
-        let second = try await apiClient.fetchAvailableDrops(channelId: "channel-1")
+        let channelId = "available-drops-cache-test-channel"
+        let first = try await apiClient.fetchAvailableDrops(channelId: channelId)
+        let second = try await apiClient.fetchAvailableDrops(channelId: channelId)
 
         XCTAssertEqual(first, ["campaign-a", "campaign-b"])
         XCTAssertEqual(second, ["campaign-a", "campaign-b"])
         XCTAssertEqual(operations.recordedValues.filter { $0 == "DropsHighlightService_AvailableDrops" }.count, 1)
+    }
+
+    func testCampaignDiscoveryRejectsAnAllChannelFailure() async throws {
+        MockURLProtocol.requestHandler = { request in
+            if request.url?.path == "/integrity" {
+                let ok = HTTPURLResponse(
+                    url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+                )!
+                return (ok, Data(#"{"token":"integrity-token","expiration":4102444800000}"#.utf8))
+            }
+            let forbidden = HTTPURLResponse(
+                url: request.url!, statusCode: 403, httpVersion: nil, headerFields: nil
+            )!
+            return (forbidden, Data(#"{"message":"temporary discovery failure"}"#.utf8))
+        }
+
+        do {
+            _ = try await apiClient.fetchCampaignsForDiscovery(
+                channelIds: ["channel-1", "channel-2"]
+            )
+            XCTFail("Every failed detail request must not become a successful empty campaign list")
+        } catch let TwitchMinerError.authenticationFailed(message) {
+            XCTAssertEqual(message, "Forbidden")
+        } catch {
+            XCTFail("Expected the channel-detail failure, got \(error)")
+        }
+    }
+
+    func testCampaignDiscoveryReportsPartialFailureAndKeepsSuccessfulAnswer() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let ok = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            if request.url?.path == "/integrity" {
+                return (ok, Data(#"{"token":"integrity-token","expiration":4102444800000}"#.utf8))
+            }
+            let body = (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data())) as? [String: Any]
+            let variables = body?["variables"] as? [String: Any]
+            if variables?["channelID"] as? String == "bad-channel" {
+                let forbidden = HTTPURLResponse(
+                    url: request.url!, statusCode: 403, httpVersion: nil, headerFields: nil
+                )!
+                return (forbidden, Data(#"{"message":"temporary discovery failure"}"#.utf8))
+            }
+            return (ok, Data(#"{"data":{"channel":{"viewerDropCampaigns":[]}}}"#.utf8))
+        }
+
+        let result = try await apiClient.fetchCampaignsForDiscovery(
+            channelIds: ["good-channel", "bad-channel"]
+        )
+
+        XCTAssertTrue(result.campaigns.isEmpty)
+        XCTAssertEqual(result.failedChannelCount, 1)
+    }
+
+    func testChangingDiscoveryGamesInvalidatesEveryOldDiscoveryLayer() async {
+        await apiClient.seedCampaignDiscoveryStateForTesting()
+        let before = await apiClient.campaignDiscoveryStateForTesting()
+
+        await apiClient.setCampaignDiscoveryGames(["New Priority"])
+        let after = await apiClient.campaignDiscoveryStateForTesting()
+
+        XCTAssertEqual(after.generation, before.generation + 1)
+        XCTAssertEqual(after.games, ["New Priority"])
+        XCTAssertFalse(after.hasCompletedCache)
+        XCTAssertFalse(after.hasProvisionalCache)
+        XCTAssertFalse(after.hasFullTask)
     }
 
     func testGetLiveChannelsUsesShortLivedDirectoryCache() async throws {
@@ -1662,6 +1730,36 @@ private extension ServiceTests {
 }
 
 // MARK: - Mocking Infrastructure
+
+private extension TwitchAPIClient {
+    func seedCampaignDiscoveryStateForTesting() {
+        let entry = DiscoveredCampaignsCacheEntry(
+            campaigns: [],
+            expiresAt: Date().addingTimeInterval(600)
+        )
+        discoveredCampaigns = entry
+        provisionalDiscoveredCampaigns = entry
+        fullDiscoveryTask = Task {
+            try? await Task.sleep(nanoseconds: 60_000_000_000)
+        }
+    }
+
+    func campaignDiscoveryStateForTesting() -> (
+        generation: UInt64,
+        games: [String],
+        hasCompletedCache: Bool,
+        hasProvisionalCache: Bool,
+        hasFullTask: Bool
+    ) {
+        (
+            campaignDiscoveryGeneration,
+            campaignDiscoveryGames,
+            discoveredCampaigns != nil,
+            provisionalDiscoveredCampaigns != nil,
+            fullDiscoveryTask != nil
+        )
+    }
+}
 
 private final class StringRequestRecorder: @unchecked Sendable {
     private let lock = NSLock()

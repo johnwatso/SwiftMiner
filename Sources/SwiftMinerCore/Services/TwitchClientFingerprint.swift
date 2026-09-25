@@ -81,6 +81,9 @@ public final class TwitchClientFingerprint: @unchecked Sendable {
 
 /// Twitch's first-party client IDs SwiftMiner signs in with.
 public enum TwitchClientIDs {
+    public static let webOrigin = "https://www.twitch.tv"
+    public static let tvOrigin = "https://android.tv.twitch.tv"
+
     /// Twitch's Android app — TwitchDropsMiner's `ANDROID_APP`. Every account added before
     /// September 2026 holds a token issued to it, and its tokens can still read the drops
     /// dashboard without an integrity token. Twitch stopped accepting it for new device-code
@@ -100,6 +103,14 @@ public enum TwitchClientIDs {
     /// Whether tokens from this client can read the drops dashboard and campaign details.
     public static func canReadDropsDashboard(_ clientId: String) -> Bool {
         clientId != tv
+    }
+
+    /// The first-party surface represented by `clientId`. Twitch's TV device flow and GQL
+    /// requests use the Android TV origin; legacy Android accounts keep the public web origin
+    /// they have always presented. Keeping the whole fingerprint together avoids sending a TV
+    /// token with a mixture of TV and web-client headers.
+    public static func origin(for clientId: String) -> String {
+        clientId == tv ? tvOrigin : webOrigin
     }
 }
 

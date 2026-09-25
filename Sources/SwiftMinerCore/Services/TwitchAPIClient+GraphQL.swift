@@ -831,7 +831,11 @@ extension TwitchAPIClient {
             .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
         guard normalized != campaignDiscoveryGames else { return }
         campaignDiscoveryGames = normalized
+        campaignDiscoveryGeneration &+= 1
         discoveredCampaigns = nil
+        provisionalDiscoveredCampaigns = nil
+        fullDiscoveryTask?.cancel()
+        fullDiscoveryTask = nil
     }
 
     /// Campaigns found on live channels whose account-link state Twitch has not reported yet.
@@ -871,8 +875,21 @@ extension TwitchAPIClient {
             return provisional.campaigns
         }
 
-        let prioritised = try await discoverCampaigns(includingAllGames: false)
-        var byID = Dictionary((discoveredCampaigns?.campaigns ?? []).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let prioritised: (campaigns: [Campaign], channelCount: Int, failedRequestCount: Int)
+        do {
+            prioritised = try await discoverCampaigns(includingAllGames: false)
+        } catch {
+            // A stale campaign list is safer than translating a transient Twitch failure into
+            // "this account has no campaigns". It remains expired, so the next caller retries.
+            if let stale = discoveredCampaigns?.campaigns, !stale.isEmpty {
+                Logger.campaigns.warning("Prioritised campaign discovery failed; keeping \(stale.count) last-known campaign(s): \(error.localizedDescription)")
+                return stale
+            }
+            throw error
+        }
+        let lastKnown = (discoveredCampaigns?.campaigns ?? [])
+            + (provisionalDiscoveredCampaigns?.campaigns ?? [])
+        var byID = Dictionary(lastKnown.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         for campaign in prioritised.campaigns { byID[campaign.id] = campaign }
         let campaigns = byID.values.sorted { $0.endDate < $1.endDate }
         discoveredCampaignIDs.formUnion(campaigns.map(\.id))
@@ -888,31 +905,66 @@ extension TwitchAPIClient {
 
     private func startFullCampaignDiscoveryIfNeeded() {
         guard fullDiscoveryTask == nil else { return }
+        let generation = campaignDiscoveryGeneration
         fullDiscoveryTask = Task { [weak self] in
             guard let self else { return }
-            await self.runFullCampaignDiscovery()
+            await self.runFullCampaignDiscovery(generation: generation)
         }
     }
 
-    private func runFullCampaignDiscovery() async {
-        defer { fullDiscoveryTask = nil }
-        guard let result = try? await discoverCampaigns(includingAllGames: true) else { return }
-        provisionalDiscoveredCampaigns = nil
-        discoveredCampaignIDs.formUnion(result.campaigns.map(\.id))
+    private func runFullCampaignDiscovery(generation: UInt64) async {
+        defer {
+            if generation == campaignDiscoveryGeneration {
+                fullDiscoveryTask = nil
+            }
+        }
+        let result: (campaigns: [Campaign], channelCount: Int, failedRequestCount: Int)
+        do {
+            result = try await discoverCampaigns(includingAllGames: true)
+        } catch is CancellationError {
+            return
+        } catch {
+            Logger.campaigns.warning("Full live-channel campaign discovery failed; keeping the last-known result: \(error.localizedDescription)")
+            return
+        }
+        guard !Task.isCancelled, generation == campaignDiscoveryGeneration else { return }
+
+        // A partial pass must not erase campaigns that happened to sit behind failed channel
+        // requests. Merge it into the last-known result and retry sooner than a complete pass.
+        let lastKnown = (discoveredCampaigns?.campaigns ?? [])
+            + (provisionalDiscoveredCampaigns?.campaigns ?? [])
+        var byID = Dictionary(lastKnown.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        for campaign in result.campaigns { byID[campaign.id] = campaign }
+        let campaigns = result.failedRequestCount == 0
+            ? result.campaigns
+            : byID.values.sorted { $0.endDate < $1.endDate }
+        if result.failedRequestCount == 0 {
+            provisionalDiscoveredCampaigns = nil
+        }
+        discoveredCampaignIDs.formUnion(campaigns.map(\.id))
         discoveredCampaigns = DiscoveredCampaignsCacheEntry(
-            campaigns: result.campaigns,
-            expiresAt: Date().addingTimeInterval(Self.discoveredCampaignsTTL)
+            campaigns: campaigns,
+            expiresAt: Date().addingTimeInterval(
+                result.failedRequestCount == 0 ? Self.discoveredCampaignsTTL : Self.provisionalDiscoveryTTL
+            )
         )
-        Logger.campaigns.info("Found \(result.campaigns.count) campaign(s) on \(result.channelCount) live drops channel(s)")
+        if result.failedRequestCount > 0 {
+            Logger.campaigns.warning("Campaign discovery was partial: \(result.failedRequestCount) discovery request(s) failed while checking \(result.channelCount) live channel(s); keeping \(campaigns.count) current or last-known campaign(s)")
+        } else {
+            Logger.campaigns.info("Found \(campaigns.count) campaign(s) on \(result.channelCount) live drops channel(s)")
+        }
     }
 
     /// One discovery pass: prioritised games several channels deep, and optionally one channel
     /// for every other game with live drops-enabled streams.
-    private func discoverCampaigns(includingAllGames: Bool) async throws -> (campaigns: [Campaign], channelCount: Int) {
+    private func discoverCampaigns(
+        includingAllGames: Bool
+    ) async throws -> (campaigns: [Campaign], channelCount: Int, failedRequestCount: Int) {
         var channelIds: [String] = []
         var seenChannels = Set<String>()
         var coveredGames = Set<String>()
         var answeredRequests = 0
+        var failedRequestCount = 0
         var lastError: Error?
 
         // The all-games browse is the slow part; start it while prioritised games are looked up.
@@ -956,6 +1008,7 @@ extension TwitchAPIClient {
                     channelIds.append(channel.id)
                 }
             case .failure(let error):
+                failedRequestCount += 1
                 lastError = error
             }
         }
@@ -970,44 +1023,90 @@ extension TwitchAPIClient {
                     channelIds.append(entry.channelId)
                 }
             } catch {
+                failedRequestCount += 1
                 lastError = error
             }
         }
 
-        let queue = channelIds
-        let results: [[Campaign]?] = await withTaskGroup(of: [Campaign]?.self) { group in
-            var next = 0
-            var collected: [[Campaign]?] = []
-            while next < min(Self.discoveryConcurrency, queue.count) {
-                let channelId = queue[next]
-                next += 1
-                group.addTask { try? await self.fetchAvailableDropCampaigns(channelId: channelId) }
-            }
-            while let result = await group.next() {
-                collected.append(result)
-                if next < queue.count {
-                    let channelId = queue[next]
-                    next += 1
-                    group.addTask { try? await self.fetchAvailableDropCampaigns(channelId: channelId) }
-                }
-            }
-            return collected
-        }
-
-        var found: [String: Campaign] = [:]
-        for campaigns in results.compactMap({ $0 }) {
-            answeredRequests += 1
-            for campaign in campaigns where found[campaign.id] == nil {
-                found[campaign.id] = campaign
-            }
-        }
+        let channelResult = try await fetchCampaignsForDiscovery(channelIds: channelIds)
 
         // Nothing answered at all: surface the failure so the caller retries rather than
         // concluding that no campaigns exist.
         if answeredRequests == 0, let lastError {
             throw lastError
         }
-        return (found.values.sorted { $0.endDate < $1.endDate }, channelIds.count)
+        return (
+            channelResult.campaigns.sorted { $0.endDate < $1.endDate },
+            channelIds.count,
+            failedRequestCount + channelResult.failedChannelCount
+        )
+    }
+
+    /// Fetch campaign definitions for a bounded set of live channels.
+    ///
+    /// A directory response only proves that channels exist; it does not answer which campaigns
+    /// they carry. If every detail request fails, propagate that failure instead of caching an
+    /// empty campaign list as a successful discovery result.
+    func fetchCampaignsForDiscovery(
+        channelIds: [String]
+    ) async throws -> (campaigns: [Campaign], failedChannelCount: Int) {
+        let queue = channelIds
+        let results: [Result<[Campaign], Error>] = await withTaskGroup(
+            of: Result<[Campaign], Error>.self
+        ) { group in
+            var next = 0
+            var collected: [Result<[Campaign], Error>] = []
+            while next < min(Self.discoveryConcurrency, queue.count) {
+                let channelId = queue[next]
+                next += 1
+                group.addTask {
+                    do {
+                        return .success(try await self.fetchAvailableDropCampaigns(channelId: channelId))
+                    } catch {
+                        return .failure(error)
+                    }
+                }
+            }
+            while let result = await group.next() {
+                collected.append(result)
+                if next < queue.count {
+                    let channelId = queue[next]
+                    next += 1
+                    group.addTask {
+                        do {
+                            return .success(try await self.fetchAvailableDropCampaigns(channelId: channelId))
+                        } catch {
+                            return .failure(error)
+                        }
+                    }
+                }
+            }
+            return collected
+        }
+
+        var found: [String: Campaign] = [:]
+        var successfulChannelCount = 0
+        var failedChannelCount = 0
+        var lastError: Error?
+        for result in results {
+            switch result {
+            case .success(let campaigns):
+                successfulChannelCount += 1
+                for campaign in campaigns where found[campaign.id] == nil {
+                    found[campaign.id] = campaign
+                }
+            case .failure(let error):
+                failedChannelCount += 1
+                lastError = error
+            }
+        }
+
+        if !channelIds.isEmpty, successfulChannelCount == 0 {
+            throw lastError ?? TwitchMinerError.networkError(
+                "Every live-channel campaign request failed"
+            )
+        }
+        return (Array(found.values), failedChannelCount)
     }
 
     /// One live drops-enabled channel per game, most-watched first, across all of Twitch.
