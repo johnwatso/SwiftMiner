@@ -150,7 +150,33 @@ actor SharedTwitchLookupCache {
 
 /// Twitch API Client supporting both GraphQL and REST endpoints
 public actor TwitchAPIClient {
-    private let clientId: String
+    /// The client ID used before an account is attached, and for accounts added before the
+    /// client registry existed.
+    private let defaultClientId: String
+
+    /// The client this account's token was issued to. Resolved per request so re-signing an
+    /// account in with a different client takes effect without rebuilding its engine.
+    var clientId: String {
+        accountId.flatMap { AccountClientRegistry.shared.clientId(for: $0) } ?? defaultClientId
+    }
+
+    /// Whether this account's token can read the drops dashboard. TV-issued tokens cannot, so
+    /// their campaigns are discovered from live channels instead.
+    var canReadDropsDashboard: Bool {
+        TwitchClientIDs.canReadDropsDashboard(clientId)
+    }
+
+    private var accountId: String?
+
+    /// Prioritised games searched on live channels when this account cannot read the drops
+    /// dashboard, and the last result of that search.
+    var campaignDiscoveryGames: [String] = []
+    var discoveredCampaigns: DiscoveredCampaignsCacheEntry?
+
+    struct DiscoveredCampaignsCacheEntry {
+        let campaigns: [Campaign]
+        let expiresAt: Date
+    }
     private let authService: TwitchAuthService
     private var accessToken: String
     private let session: URLSession
@@ -172,6 +198,7 @@ public actor TwitchAPIClient {
     /// auth/api/spade traffic for the same miner share a fingerprint and
     /// concurrent miners spread across the pool.
     public func setAccountId(_ accountId: String) {
+        self.accountId = accountId
         userAgent = TwitchClientFingerprint.shared.userAgent(for: accountId)
     }
 
@@ -459,7 +486,7 @@ public actor TwitchAPIClient {
         persistsCampaignCaches: Bool = true
     ) {
         self.authService = authService
-        self.clientId = clientId
+        self.defaultClientId = clientId
         self.accessToken = "" // Will be updated from auth service
         self.requestCoordinator = requestCoordinator
         self.runtimeClock = runtimeClock

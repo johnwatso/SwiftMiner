@@ -185,7 +185,9 @@ public final class NavigationModel {
                 }
             }
         )
-        let clientId = Settings.shared.resolvedClientId
+        // This service starts the device sign-ins Discord invitations hand out, so it uses the
+        // sign-in client. Refresh and revocation resolve each account's own issuing client.
+        let clientId = Settings.shared.resolvedSignInClientId
         let authService = TwitchAuthService(clientId: clientId, tokenStore: minerManager.tokenStore)
         let routes = DiscordAPIRoutes(
             manager: sqliteManager,

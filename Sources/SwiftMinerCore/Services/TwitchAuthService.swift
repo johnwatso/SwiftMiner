@@ -4,7 +4,7 @@ import Foundation
 public actor TwitchAuthService {
     /// Twitch's own Android app client ID — same one used by TwitchDropsMiner.
     /// Using this is required for the device flow to return a token accepted by GQL.
-    public static let twitchAndroidClientId = "kd1unb4b3q4t58fwlpcbzcbnm76a8fp"
+    public static let twitchAndroidClientId = TwitchClientIDs.android
 
     private let clientId: String
     private let tokenStore: any TokenStore
@@ -47,6 +47,15 @@ public actor TwitchAuthService {
         self.clientId = clientId
         self.tokenStore = tokenStore
         self.urlSession = urlSession
+        if clientId == TwitchClientIDs.tv {
+            userAgent = TwitchClientIDs.tvUserAgent
+        }
+    }
+
+    /// The client ID an account's token was issued to. Refresh and revocation must present
+    /// that client, not whichever one this service signs new accounts in with.
+    private func issuingClientId(for accountId: String) -> String {
+        AccountClientRegistry.shared.clientId(for: accountId) ?? clientId
     }
 
     // MARK: - Device Code Flow
@@ -104,7 +113,29 @@ public actor TwitchAuthService {
             throw TwitchMinerError.apiError(statusCode: httpResponse.statusCode, message: message)
         }
 
-        return try JSONDecoder().decode(DeviceCodeResponse.self, from: data)
+        let decoded = try JSONDecoder().decode(DeviceCodeResponse.self, from: data)
+        return DeviceCodeResponse(
+            deviceCode: decoded.deviceCode,
+            userCode: decoded.userCode,
+            verificationURI: Self.activationURL(decoded.verificationURI, userCode: decoded.userCode),
+            expiresIn: decoded.expiresIn,
+            interval: decoded.interval
+        )
+    }
+
+    /// The activation page with the code already filled in.
+    ///
+    /// The Android client's `verification_uri` carries `?device-code=`, so Twitch's page opened
+    /// pre-filled. The TV client returns the bare `https://www.twitch.tv/activate`, which would
+    /// leave the person to type the code; the page still honours the parameter when it is added.
+    nonisolated static func activationURL(_ uri: URL, userCode: String) -> URL {
+        guard !userCode.isEmpty,
+              var components = URLComponents(url: uri, resolvingAgainstBaseURL: false) else { return uri }
+        var items = components.queryItems ?? []
+        guard !items.contains(where: { $0.name == "device-code" }) else { return uri }
+        items.append(URLQueryItem(name: "device-code", value: userCode))
+        components.queryItems = items
+        return components.url ?? uri
     }
 
     /// Polls for token after user authorizes the device code
@@ -175,7 +206,7 @@ public actor TwitchAuthService {
         Logger.auth.info("Token decoded successfully")
 
         // Validate token to get user info
-        let userInfo = try await validateToken(tokenResponse.accessToken)
+        let userInfo = try await validateTokenInternal(tokenResponse.accessToken)
 
         // expiresIn may be 0 when using Twitch's web client ID — default to 30 days
         let expirySeconds = tokenResponse.expiresIn > 0
@@ -188,6 +219,13 @@ public actor TwitchAuthService {
             refreshToken: tokenResponse.refreshToken,
             tokenExpiry: Date().addingTimeInterval(expirySeconds),
             scopes: tokenResponse.scope
+        )
+
+        // Validation reports the client that actually issued the token, which is the one every
+        // later request for this account has to present.
+        AccountClientRegistry.shared.record(
+            userInfo.clientId.isEmpty ? clientId : userInfo.clientId,
+            for: account.id
         )
 
         return account
@@ -243,7 +281,7 @@ public actor TwitchAuthService {
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
 
         let bodyParams = [
-            "client_id": clientId,
+            "client_id": issuingClientId(for: account.id),
             "refresh_token": account.refreshToken,
             "grant_type": "refresh_token"
         ]
@@ -481,7 +519,7 @@ public actor TwitchAuthService {
         guard let account = try await tokenStore.loadAccount(twitchUserId: accountId) else { return }
         var components = URLComponents(url: revokeURL, resolvingAgainstBaseURL: false)!
         components.queryItems = [
-            URLQueryItem(name: "client_id", value: clientId),
+            URLQueryItem(name: "client_id", value: issuingClientId(for: account.id)),
             URLQueryItem(name: "token", value: account.accessToken)
         ]
         guard let url = components.url else { return }
