@@ -98,51 +98,79 @@ final class MinerSchedulingTests: XCTestCase {
         )
     }
 
-    /// A campaign whose link state Twitch has not reported is only a probe: it must not jump
-    /// ahead of a campaign known to be linked, even when it ends sooner.
-    func testRanking_LinkProbeRanksAfterLinkedCampaigns() {
-        let probe = unlinkedCampaign(id: "c-probe", gameName: "Other Game", endsInDays: 1)
-        let linked = campaign(id: "c-linked", endsInDays: 5, drops: [drop(id: "d-l", required: 60)])
+    /// A campaign of unknown link state is held to the unlinked rule: an unprioritised game is
+    /// not mined on the off chance (the TV account that "randomly" mined Escape from Tarkov).
+    func testUnknownLinkCampaignForUnprioritisedGameIsNotMined() async {
+        let engine = MinerEngine(clientId: "test", tokenStore: InMemoryTokenStore())
+        let tarkov = unlinkedCampaign(id: "c-tarkov", gameName: "Escape from Tarkov: Arena", endsInDays: 1)
+        await engine._testSetAwaitingLinkState(["c-tarkov"])
 
-        let ranked = MinerEngine.rankCandidates(
-            [probe, linked],
-            priorityKeys: [], strategy: .mineAll, emptyGameKeys: [],
-            awaitingLinkState: ["c-probe"]
+        let candidates = await engine.candidateCampaigns(
+            from: [tarkov], priorityGames: ["WARDOGS"], excludedGames: [], strategy: .mineAll, logSummary: false
         )
-        XCTAssertEqual(ranked.map(\.id), ["c-linked", "c-probe"])
+        XCTAssertTrue(candidates.isEmpty)
     }
 
-    /// Prioritised games were always attempted without a confirmed link, so unknown link state
-    /// must not demote them.
-    func testRanking_PrioritisedCampaignWithUnknownLinkIsNotAProbe() {
-        let prioritised = unlinkedCampaign(id: "c-prio", gameName: "Wanted Game", endsInDays: 5)
-        let linked = campaign(id: "c-linked", endsInDays: 1, drops: [drop(id: "d-l", required: 60)])
-
-        let ranked = MinerEngine.rankCandidates(
-            [linked, prioritised],
-            priorityKeys: ["wanted game"], strategy: .prioritiseSelected, emptyGameKeys: [],
-            awaitingLinkState: ["c-prio"]
+    /// Twitch links a game account, not a campaign: once inventory shows one linked campaign
+    /// for a game, that game's unknown-link campaigns are mined like any linked campaign.
+    func testUnknownLinkCampaignIsMinedWhenItsGameIsLinked() async {
+        let engine = MinerEngine(clientId: "test", tokenStore: InMemoryTokenStore())
+        let linkedGame = Game(id: "g-rust", name: "Rust")
+        let started = Campaign(
+            id: "c-rust-1", name: "c-rust-1", game: linkedGame, status: .active,
+            startDate: now.addingTimeInterval(-3600), endDate: now.addingTimeInterval(86_400),
+            drops: [drop(id: "d-r1", required: 60, current: 60, claimed: true)], isAccountConnected: true
         )
-        XCTAssertEqual(ranked.first?.id, "c-prio")
+        let unknown = Campaign(
+            id: "c-rust-2", name: "c-rust-2", game: linkedGame, status: .active,
+            startDate: now.addingTimeInterval(-3600), endDate: now.addingTimeInterval(86_400),
+            drops: [drop(id: "d-r2", required: 60)], isAccountConnected: false
+        )
+        await engine._testSetAwaitingLinkState(["c-rust-2"])
+
+        let candidates = await engine.candidateCampaigns(
+            from: [started, unknown], priorityGames: [], excludedGames: [], strategy: .mineAll, logSummary: false
+        )
+        XCTAssertEqual(candidates.map(\.id), ["c-rust-2"])
     }
 
-    /// Same-game fallbacks follow the same rule: unknown link state is admitted, a reported
-    /// unlinked campaign for an unprioritised game is still kept out.
-    func testSameGameFallbackAdmitsUnknownLinkButNotReportedUnlinked() {
-        let primary = unlinkedCampaign(id: "c-primary", gameName: "Other Game", endsInDays: 2)
-        let unknown = unlinkedCampaign(id: "c-unknown", gameName: "Other Game", endsInDays: 3)
-        let reportedUnlinked = unlinkedCampaign(id: "c-unlinked", gameName: "Other Game", endsInDays: 3)
+    /// A prioritised game is mined without a confirmed link, whether unknown or unlinked.
+    func testUnknownLinkCampaignForPrioritisedGameIsMined() async {
+        let engine = MinerEngine(clientId: "test", tokenStore: InMemoryTokenStore())
+        let wanted = unlinkedCampaign(id: "c-wanted", gameName: "Wanted Game", endsInDays: 2)
+        await engine._testSetAwaitingLinkState(["c-wanted"])
 
-        let expanded = MinerEngine.sameGameVerificationCandidates(
-            primaryCandidates: [primary],
-            allCampaigns: [primary, unknown, reportedUnlinked],
-            priorityGames: [],
-            excludedGames: [],
-            strategy: .mineAll,
-            includesBadgeAndEmoteCampaigns: true,
-            awaitingLinkState: ["c-primary", "c-unknown"]
+        let candidates = await engine.candidateCampaigns(
+            from: [wanted], priorityGames: ["Wanted Game"], excludedGames: [], strategy: .mineAll, logSummary: false
         )
-        XCTAssertEqual(Set(expanded.map(\.id)), ["c-primary", "c-unknown"])
+        XCTAssertEqual(candidates.map(\.id), ["c-wanted"])
+    }
+
+    /// Same-game fallbacks follow the same rule.
+    func testSameGameFallbackAdmitsUnknownLinkOnlyWhenTheGameIsLinked() {
+        let game = Game(id: "g-other", name: "Other Game")
+        func make(_ id: String, linked: Bool) -> Campaign {
+            Campaign(id: id, name: id, game: game, status: .active,
+                     startDate: now.addingTimeInterval(-3600), endDate: now.addingTimeInterval(86_400),
+                     drops: [drop(id: "d-\(id)", required: 60)], isAccountConnected: linked)
+        }
+        let primary = make("c-primary", linked: true)
+        let unknown = make("c-unknown", linked: false)
+
+        let withLinkedGame = MinerEngine.sameGameVerificationCandidates(
+            primaryCandidates: [primary], allCampaigns: [primary, unknown],
+            priorityGames: [], excludedGames: [], strategy: .mineAll,
+            includesBadgeAndEmoteCampaigns: true, awaitingLinkState: ["c-unknown"]
+        )
+        XCTAssertEqual(Set(withLinkedGame.map(\.id)), ["c-primary", "c-unknown"])
+
+        let unlinkedPrimary = make("c-primary", linked: false)
+        let withoutLinkedGame = MinerEngine.sameGameVerificationCandidates(
+            primaryCandidates: [unlinkedPrimary], allCampaigns: [unlinkedPrimary, unknown],
+            priorityGames: [], excludedGames: [], strategy: .mineAll,
+            includesBadgeAndEmoteCampaigns: true, awaitingLinkState: ["c-primary", "c-unknown"]
+        )
+        XCTAssertEqual(withoutLinkedGame.map(\.id), ["c-primary"])
     }
 
     /// Browse → Live Channels is identical for every account, so one scan serves them all.
@@ -444,4 +472,8 @@ final class MinerSchedulingTests: XCTestCase {
 private actor ManagedCounter {
     private(set) var value = 0
     func increment() { value += 1 }
+}
+
+extension MinerEngine {
+    func _testSetAwaitingLinkState(_ ids: Set<String>) { campaignsAwaitingLinkState = ids }
 }
