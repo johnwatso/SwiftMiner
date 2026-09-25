@@ -811,15 +811,17 @@ extension TwitchAPIClient {
 
     // MARK: - Live-channel campaign discovery
 
-    /// Prioritised games searched per discovery pass, and live channels checked per game.
-    /// Every channel costs one `AvailableDrops` request, so these bound the pass to about
-    /// forty requests; the result is then reused for `discoveredCampaignsTTL`.
-    static let maxDiscoveryGames = 10
-    static let maxDiscoveryChannelsPerGame = 3
-    static let discoveredCampaignsTTL: TimeInterval = 5 * 60
+    /// Prioritised games are searched directly, several channels deep, because a prioritised
+    /// campaign restricted to a few channels must not be missed. Every other game with live
+    /// drops-enabled streams is checked on one channel, which is enough for game-wide campaigns.
+    static let maxPrioritisedDiscoveryGames = 10
+    static let maxDiscoveryChannelsPerPrioritisedGame = 3
+    static let maxBrowsedDiscoveryGames = 120
+    static let discoveryConcurrency = 6
+    static let discoveredCampaignsTTL: TimeInterval = 10 * 60
 
-    /// Games whose live channels are searched for campaigns when this account's token cannot
-    /// read the drops dashboard. Set from the miner's prioritised games.
+    /// Games whose live channels are searched first when this account's token cannot read
+    /// the drops dashboard. Set from the miner's prioritised games.
     public func setCampaignDiscoveryGames(_ games: [String]) {
         var seen = Set<String>()
         let normalized = games
@@ -830,50 +832,92 @@ extension TwitchAPIClient {
         discoveredCampaigns = nil
     }
 
+    /// Campaigns found on live channels whose account-link state Twitch has not reported yet.
+    ///
+    /// A TV-issued token cannot ask whether a campaign's game account is linked; Twitch only
+    /// says so in inventory, once the campaign has progress. Until then the campaign is
+    /// unknown rather than unlinked, and selection may try it — the first credited minute puts
+    /// it in inventory with its real link state. Empty for accounts that read the dashboard.
+    public func campaignIDsAwaitingLinkState() -> Set<String> {
+        guard !canReadDropsDashboard else { return [] }
+        let reported = Set(lastKnownInProgressCampaigns.map(\.id))
+        return Set(discoveredCampaigns?.campaigns.map(\.id) ?? []).subtracting(reported)
+    }
+
     /// Campaigns for an account whose token cannot read the drops dashboard.
     ///
     /// Twitch returns a silent `null` for `ViewerDropsDashboard` and `DropCampaignDetails` to
-    /// TV-issued tokens, but still answers the game directory and
-    /// `DropsHighlightService_AvailableDrops`. So campaigns are found the way a viewer finds
-    /// them: live drops-enabled channels for each prioritised game, and the campaigns each of
-    /// those channels is running. Inventory then adds the campaigns already under way, with
+    /// TV-issued tokens — with or without an integrity token — but still answers the directory
+    /// and `DropsHighlightService_AvailableDrops`. So campaigns are found the way a viewer finds
+    /// them: live drops-enabled channels, and the campaigns each of those channels is running.
+    /// Prioritised games are searched directly; every other game comes from Browse → Live
+    /// Channels filtered to drops. Inventory then adds the campaigns already under way, with
     /// their allow-lists and account-link state.
-    ///
-    /// Only prioritised games are searched. Selection already lets a prioritised game's
-    /// campaign through without a confirmed account link, which is exactly what this path can
-    /// and cannot know.
     func discoverCampaignsFromLiveChannels() async throws -> [Campaign] {
         if let cached = discoveredCampaigns, cached.expiresAt > Date() {
             return cached.campaigns
         }
 
-        let games = Array(campaignDiscoveryGames.prefix(Self.maxDiscoveryGames))
-        guard !games.isEmpty else {
-            Logger.campaigns.info("This account signed in with Twitch's TV client, which cannot list campaigns; prioritise games so SwiftMiner can find them on live channels")
-            return []
-        }
-
-        var found: [String: Campaign] = [:]
+        var channelIds: [String] = []
+        var seenChannels = Set<String>()
+        var coveredGames = Set<String>()
         var answeredRequests = 0
         var lastError: Error?
-        for game in games {
+
+        for game in campaignDiscoveryGames.prefix(Self.maxPrioritisedDiscoveryGames) {
             do {
                 let slug = try await getGameSlug(name: game)
                 let channels = try await getLiveChannels(gameSlug: slug, limit: 30)
                 answeredRequests += 1
-                for channel in channels.prefix(Self.maxDiscoveryChannelsPerGame) {
-                    do {
-                        for campaign in try await fetchAvailableDropCampaigns(channelId: channel.id)
-                            where found[campaign.id] == nil {
-                            found[campaign.id] = campaign
-                        }
-                        answeredRequests += 1
-                    } catch {
-                        lastError = error
-                    }
+                coveredGames.insert(Self.normalizedLookupKey(game))
+                for channel in channels.prefix(Self.maxDiscoveryChannelsPerPrioritisedGame)
+                    where seenChannels.insert(channel.id).inserted {
+                    channelIds.append(channel.id)
                 }
             } catch {
                 lastError = error
+            }
+        }
+
+        do {
+            let browsed = try await SharedDropsDirectory.shared.channelsByGame { [self] in
+                try await fetchDropsEnabledChannelsByGame()
+            }
+            answeredRequests += 1
+            for entry in browsed.prefix(Self.maxBrowsedDiscoveryGames)
+                where !coveredGames.contains(Self.normalizedLookupKey(entry.gameName))
+                    && seenChannels.insert(entry.channelId).inserted {
+                channelIds.append(entry.channelId)
+            }
+        } catch {
+            lastError = error
+        }
+
+        let queue = channelIds
+        let results: [[Campaign]?] = await withTaskGroup(of: [Campaign]?.self) { group in
+            var next = 0
+            var collected: [[Campaign]?] = []
+            while next < min(Self.discoveryConcurrency, queue.count) {
+                let channelId = queue[next]
+                next += 1
+                group.addTask { try? await self.fetchAvailableDropCampaigns(channelId: channelId) }
+            }
+            while let result = await group.next() {
+                collected.append(result)
+                if next < queue.count {
+                    let channelId = queue[next]
+                    next += 1
+                    group.addTask { try? await self.fetchAvailableDropCampaigns(channelId: channelId) }
+                }
+            }
+            return collected
+        }
+
+        var found: [String: Campaign] = [:]
+        for campaigns in results.compactMap({ $0 }) {
+            answeredRequests += 1
+            for campaign in campaigns where found[campaign.id] == nil {
+                found[campaign.id] = campaign
             }
         }
 
@@ -884,12 +928,77 @@ extension TwitchAPIClient {
         }
 
         let campaigns = found.values.sorted { $0.endDate < $1.endDate }
-        Logger.campaigns.info("Found \(campaigns.count) campaign(s) on live channels for \(games.count) prioritised game(s)")
+        Logger.campaigns.info("Found \(campaigns.count) campaign(s) on \(channelIds.count) live drops channel(s)")
         discoveredCampaigns = DiscoveredCampaignsCacheEntry(
             campaigns: campaigns,
             expiresAt: Date().addingTimeInterval(Self.discoveredCampaignsTTL)
         )
         return campaigns
+    }
+
+    /// One live drops-enabled channel per game, most-watched first, across all of Twitch.
+    ///
+    /// Browse → Live Channels accepts the `DROPS_ENABLED` filter for every game at once, but
+    /// ends after roughly 1,600 streams. Reading it from both ends of the viewer count reaches
+    /// small games the top of the list never gets to.
+    func fetchDropsEnabledChannelsByGame() async throws -> [SharedDropsDirectory.Entry] {
+        var entries: [SharedDropsDirectory.Entry] = []
+        var seenGames = Set<String>()
+        var answered = false
+        var lastError: Error?
+
+        for (sort, maxPages) in [("VIEWER_COUNT", 30), ("VIEWER_COUNT_ASC", 20)] {
+            var cursor: String?
+            for _ in 0..<maxPages {
+                var variables: [String: Any] = [
+                    "imageWidth": 50,
+                    "limit": 30,
+                    "platformType": "all",
+                    "options": [
+                        "includeRestricted": ["SUB_ONLY_LIVE"],
+                        "sort": sort,
+                        "freeformTags": NSNull(),
+                        "tags": [],
+                        "recommendationsContext": ["platform": "web"],
+                        "requestID": "JIRA-VXP-2397",
+                        "broadcasterLanguages": [],
+                        "systemFilters": ["DROPS_ENABLED"]
+                    ],
+                    "sortTypeIsRecency": false,
+                    "includeCostreaming": false
+                ]
+                if let cursor { variables["cursor"] = cursor }
+
+                let data: Data
+                do {
+                    data = try await makeGraphQLRequest(request: graphQLRequest(for: .browsePagePopular, variables: variables))
+                } catch {
+                    lastError = error
+                    break
+                }
+                answered = true
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                guard let streams = (json?["data"] as? [String: Any])?["streams"] as? [String: Any],
+                      let edges = streams["edges"] as? [[String: Any]], !edges.isEmpty else { break }
+
+                for edge in edges {
+                    if let next = edge["cursor"] as? String, !next.isEmpty { cursor = next }
+                    guard let node = edge["node"] as? [String: Any],
+                          let broadcaster = node["broadcaster"] as? [String: Any],
+                          let channelId = broadcaster["id"] as? String,
+                          let game = node["game"] as? [String: Any],
+                          let gameName = (game["displayName"] as? String) ?? (game["name"] as? String),
+                          seenGames.insert(Self.normalizedLookupKey(gameName)).inserted else { continue }
+                    entries.append(SharedDropsDirectory.Entry(gameName: gameName, channelId: channelId))
+                }
+
+                let hasNextPage = ((streams["pageInfo"] as? [String: Any])?["hasNextPage"] as? Bool) ?? false
+                guard hasNextPage else { break }
+            }
+        }
+
+        if !answered, let lastError { throw lastError }
+        return entries
     }
 
     /// The full campaigns a live channel is running, from `DropsHighlightService_AvailableDrops`.

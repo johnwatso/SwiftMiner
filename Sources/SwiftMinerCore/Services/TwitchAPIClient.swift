@@ -1941,3 +1941,32 @@ public struct GraphQLRequest {
         return result
     }
 }
+
+/// Live drops-enabled channels across Twitch, one per game, shared by every miner.
+///
+/// The browse is anonymous data, identical for every account, and costs dozens of requests,
+/// so one scan serves all TV accounts until it expires. Which campaigns each channel offers
+/// is viewer-specific and stays per account.
+actor SharedDropsDirectory {
+    static let shared = SharedDropsDirectory()
+    static let ttl: TimeInterval = 15 * 60
+
+    struct Entry: Sendable, Equatable {
+        let gameName: String
+        let channelId: String
+    }
+
+    private var cached: (entries: [Entry], expiresAt: Date)?
+    private var inFlight: Task<[Entry], Error>?
+
+    func channelsByGame(fetch: @escaping @Sendable () async throws -> [Entry]) async throws -> [Entry] {
+        if let cached, cached.expiresAt > Date() { return cached.entries }
+        if let inFlight { return try await inFlight.value }
+        let task = Task { try await fetch() }
+        inFlight = task
+        defer { inFlight = nil }
+        let entries = try await task.value
+        cached = (entries, Date().addingTimeInterval(Self.ttl))
+        return entries
+    }
+}

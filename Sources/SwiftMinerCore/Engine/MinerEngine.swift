@@ -221,6 +221,11 @@ public actor MinerEngine {
     /// the time the skip expires, so the miner moves on instead of looping the
     /// same dead campaign forever.
     var campaignStallCooldownUntil: [String: UInt64] = [:]
+
+    /// Campaigns found on live channels whose account-link state Twitch has not reported yet.
+    /// Only ever non-empty for an account signed in with Twitch's TV client, which cannot ask.
+    /// Refreshed after every campaign fetch; see `TwitchAPIClient.campaignIDsAwaitingLinkState`.
+    var campaignsAwaitingLinkState: Set<String> = []
     /// After this many back-to-back stall windows with no verified progress and
     /// no external claim (and no failover streamer to try), a campaign is
     /// treated as non-earning and put on cooldown.

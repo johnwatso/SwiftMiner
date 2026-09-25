@@ -86,6 +86,82 @@ final class MinerSchedulingTests: XCTestCase {
         XCTAssertEqual(ranked.first?.id, "c-soon")
     }
 
+    // MARK: - Unknown account-link state (TV-client accounts)
+
+    private func unlinkedCampaign(id: String, gameName: String, endsInDays days: Double) -> Campaign {
+        Campaign(
+            id: id, name: id, game: Game(id: "g-\(gameName)", name: gameName), status: .active,
+            startDate: now.addingTimeInterval(-3600),
+            endDate: now.addingTimeInterval(days * 86_400),
+            drops: [drop(id: "d-\(id)", required: 60)],
+            isAccountConnected: false
+        )
+    }
+
+    /// A campaign whose link state Twitch has not reported is only a probe: it must not jump
+    /// ahead of a campaign known to be linked, even when it ends sooner.
+    func testRanking_LinkProbeRanksAfterLinkedCampaigns() {
+        let probe = unlinkedCampaign(id: "c-probe", gameName: "Other Game", endsInDays: 1)
+        let linked = campaign(id: "c-linked", endsInDays: 5, drops: [drop(id: "d-l", required: 60)])
+
+        let ranked = MinerEngine.rankCandidates(
+            [probe, linked],
+            priorityKeys: [], strategy: .mineAll, emptyGameKeys: [],
+            awaitingLinkState: ["c-probe"]
+        )
+        XCTAssertEqual(ranked.map(\.id), ["c-linked", "c-probe"])
+    }
+
+    /// Prioritised games were always attempted without a confirmed link, so unknown link state
+    /// must not demote them.
+    func testRanking_PrioritisedCampaignWithUnknownLinkIsNotAProbe() {
+        let prioritised = unlinkedCampaign(id: "c-prio", gameName: "Wanted Game", endsInDays: 5)
+        let linked = campaign(id: "c-linked", endsInDays: 1, drops: [drop(id: "d-l", required: 60)])
+
+        let ranked = MinerEngine.rankCandidates(
+            [linked, prioritised],
+            priorityKeys: ["wanted game"], strategy: .prioritiseSelected, emptyGameKeys: [],
+            awaitingLinkState: ["c-prio"]
+        )
+        XCTAssertEqual(ranked.first?.id, "c-prio")
+    }
+
+    /// Same-game fallbacks follow the same rule: unknown link state is admitted, a reported
+    /// unlinked campaign for an unprioritised game is still kept out.
+    func testSameGameFallbackAdmitsUnknownLinkButNotReportedUnlinked() {
+        let primary = unlinkedCampaign(id: "c-primary", gameName: "Other Game", endsInDays: 2)
+        let unknown = unlinkedCampaign(id: "c-unknown", gameName: "Other Game", endsInDays: 3)
+        let reportedUnlinked = unlinkedCampaign(id: "c-unlinked", gameName: "Other Game", endsInDays: 3)
+
+        let expanded = MinerEngine.sameGameVerificationCandidates(
+            primaryCandidates: [primary],
+            allCampaigns: [primary, unknown, reportedUnlinked],
+            priorityGames: [],
+            excludedGames: [],
+            strategy: .mineAll,
+            includesBadgeAndEmoteCampaigns: true,
+            awaitingLinkState: ["c-primary", "c-unknown"]
+        )
+        XCTAssertEqual(Set(expanded.map(\.id)), ["c-primary", "c-unknown"])
+    }
+
+    /// Browse → Live Channels is identical for every account, so one scan serves them all.
+    func testSharedDropsDirectoryScansOnceForEveryCaller() async throws {
+        let directory = SharedDropsDirectory()
+        let calls = ManagedCounter()
+        let fetch: @Sendable () async throws -> [SharedDropsDirectory.Entry] = {
+            await calls.increment()
+            return [SharedDropsDirectory.Entry(gameName: "Rust", channelId: "1")]
+        }
+
+        let first = try await directory.channelsByGame(fetch: fetch)
+        let second = try await directory.channelsByGame(fetch: fetch)
+
+        XCTAssertEqual(first, second)
+        let count = await calls.value
+        XCTAssertEqual(count, 1)
+    }
+
     // MARK: - shouldDeferPreemption
 
     func testDeferPreemption_WhenActiveDropNearlyComplete() {
@@ -344,4 +420,9 @@ final class MinerSchedulingTests: XCTestCase {
 
         XCTAssertEqual(visited, Set(channelIds))
     }
+}
+
+private actor ManagedCounter {
+    private(set) var value = 0
+    func increment() { value += 1 }
 }

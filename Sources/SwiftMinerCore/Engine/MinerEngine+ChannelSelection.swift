@@ -91,7 +91,11 @@ extension MinerEngine {
             // be attempted when its game is prioritised for THIS miner. Otherwise an
             // unlinked, non-prioritised campaign would leak into mining (e.g. another
             // miner's prioritised game appearing here). Linked campaigns are unaffected.
+            // A campaign whose link state Twitch has not reported yet (TV accounts) is
+            // unknown, not unlinked: it may be tried, ranked last, and its first credited
+            // minute puts it in inventory with the real answer.
             if !campaign.isAccountConnected
+                && !campaignsAwaitingLinkState.contains(campaign.id)
                 && !prioritySet.contains(gameName)
                 && !prioritySet.contains(gameId) {
                 filteredOutReasons["unlinked_not_prioritised", default: 0] += 1
@@ -280,7 +284,8 @@ extension MinerEngine {
             campaigns,
             priorityKeys: priorityKeys,
             strategy: strategy,
-            emptyGameKeys: emptyGameKeys
+            emptyGameKeys: emptyGameKeys,
+            awaitingLinkState: campaignsAwaitingLinkState
         )
     }
 
@@ -292,10 +297,18 @@ extension MinerEngine {
         _ campaigns: [Campaign],
         priorityKeys: [String],
         strategy: MiningStrategy,
-        emptyGameKeys: Set<String>
+        emptyGameKeys: Set<String>,
+        awaitingLinkState: Set<String> = []
     ) -> [Campaign] {
         func isEmptyGame(_ campaign: Campaign) -> Bool {
             emptyGameKeys.contains(normalizedGameSelectionKey(campaign.gameName))
+        }
+        // An unprioritised campaign of unknown link state is only worth trying once nothing
+        // known-good is available, so it ranks after every other live candidate.
+        func isLinkProbe(_ campaign: Campaign) -> Bool {
+            awaitingLinkState.contains(campaign.id)
+                && !campaign.isAccountConnected
+                && priorityIndex(for: campaign, priorityKeys: priorityKeys) == Int.max
         }
         return campaigns.enumerated().sorted { lhs, rhs in
             let left = lhs.element
@@ -305,6 +318,10 @@ extension MinerEngine {
             let leftEmpty = isEmptyGame(left)
             let rightEmpty = isEmptyGame(right)
             if leftEmpty != rightEmpty { return !leftEmpty }
+
+            let leftProbe = isLinkProbe(left)
+            let rightProbe = isLinkProbe(right)
+            if leftProbe != rightProbe { return !leftProbe }
 
             let leftPriority = priorityIndex(for: left, priorityKeys: priorityKeys)
             let rightPriority = priorityIndex(for: right, priorityKeys: priorityKeys)
@@ -352,7 +369,8 @@ extension MinerEngine {
         strategy: MiningStrategy,
         includesBadgeAndEmoteCampaigns: Bool,
         stallCooldowns: [String: UInt64] = [:],
-        now: UInt64 = 0
+        now: UInt64 = 0,
+        awaitingLinkState: Set<String> = []
     ) -> [Campaign] {
         guard let primary = primaryCandidates.first else { return [] }
 
@@ -385,7 +403,9 @@ extension MinerEngine {
 
             // Preserve the original leakage guard: unlinked campaigns are only attemptable when
             // this miner explicitly prioritises the game.
-            if !campaign.isAccountConnected && !selectedGameIsPrioritised { continue }
+            if !campaign.isAccountConnected
+                && !awaitingLinkState.contains(campaign.id)
+                && !selectedGameIsPrioritised { continue }
 
             seen.insert(campaign.id)
             expanded.append(campaign)

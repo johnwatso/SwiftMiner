@@ -60,6 +60,7 @@ extension MinerEngine {
                 onOperationalEvent?(.campaignRefresh)
                 
                 self.allCampaigns = allEnriched
+                campaignsAwaitingLinkState = await apiClient.campaignIDsAwaitingLinkState()
                 var candidates = candidateCampaigns(
                     from: allEnriched,
                     priorityGames: priorityGames,
@@ -95,6 +96,7 @@ extension MinerEngine {
                     onOperationalEvent?(.successfulPoll)
                     onOperationalEvent?(.campaignRefresh)
                     self.allCampaigns = allEnriched
+                    campaignsAwaitingLinkState = await apiClient.campaignIDsAwaitingLinkState()
                     candidates = candidateCampaigns(
                         from: allEnriched,
                         priorityGames: priorityGames,
@@ -238,7 +240,8 @@ extension MinerEngine {
                             strategy: miningStrategy,
                             includesBadgeAndEmoteCampaigns: enableBadgesEmotes,
                             stallCooldowns: campaignStallCooldownUntil,
-                            now: runtimeClock.nowNanoseconds()
+                            now: runtimeClock.nowNanoseconds(),
+                            awaitingLinkState: campaignsAwaitingLinkState
                         )
                         let gameName = gameCandidates[0].gameName
                         if verificationCandidates.count > gameCandidates.count {
@@ -646,6 +649,7 @@ extension MinerEngine {
                             onOperationalEvent?(.successfulPoll)
                             onOperationalEvent?(.campaignRefresh)
                             self.allCampaigns = fetched
+                            campaignsAwaitingLinkState = await apiClient.campaignIDsAwaitingLinkState()
 
                             // If the current campaign no longer exists in the API response,
                             // clear it from session state and rescan immediately.
