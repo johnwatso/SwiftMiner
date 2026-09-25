@@ -499,6 +499,108 @@ final class TwitchAuthServiceTests: XCTestCase {
     }
 }
 
+// MARK: - Per-account client IDs
+
+/// Twitch stopped accepting the Android client for new device sign-ins (2026-09-18), so new
+/// accounts sign in with the TV client while existing accounts keep Android. A token only
+/// works with the client that issued it, so every request has to present that client.
+@MainActor
+final class AccountClientIDTests: XCTestCase {
+    private var mockSession: URLSession!
+    private let accountId = "client-id-test-user"
+
+    override func setUp() async throws {
+        try await super.setUp()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        mockSession = URLSession(configuration: configuration)
+        AccountClientRegistry.shared.remove(accountId: accountId)
+    }
+
+    override func tearDown() async throws {
+        MockURLProtocol.requestHandler = nil
+        MockURLProtocol.lastRequest = nil
+        AccountClientRegistry.shared.remove(accountId: accountId)
+        TwitchClientFingerprint.shared.release(accountId: accountId)
+        mockSession.invalidateAndCancel()
+        mockSession = nil
+        try await super.tearDown()
+    }
+
+    func testSignInRecordsTheClientTwitchSaysIssuedTheToken() async throws {
+        MockURLProtocol.requestHandler = { [accountId] request in
+            let ok = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            if request.url?.path == "/oauth2/validate" {
+                let body = #"{"client_id":"\#(TwitchClientIDs.tv)","login":"miner","scopes":[],"user_id":"\#(accountId)","expires_in":3600}"#
+                return (ok, Data(body.utf8))
+            }
+            return (ok, Data(#"{"access_token":"tv-token","refresh_token":"tv-refresh","expires_in":3600,"scope":[],"token_type":"bearer"}"#.utf8))
+        }
+        let service = TwitchAuthService(clientId: TwitchClientIDs.tv, tokenStore: TestTokenStore(), urlSession: mockSession)
+
+        _ = try await service.pollForToken(deviceCode: "device-code", interval: 0)
+
+        XCTAssertEqual(AccountClientRegistry.shared.clientId(for: accountId), TwitchClientIDs.tv)
+    }
+
+    func testRevocationPresentsTheAccountsIssuingClient() async throws {
+        let store = TestTokenStore()
+        try await store.save(account: Account(
+            id: accountId, username: "miner", accessToken: "tv-token", refreshToken: "r",
+            tokenExpiry: Date().addingTimeInterval(3600), scopes: []
+        ))
+        AccountClientRegistry.shared.record(TwitchClientIDs.tv, for: accountId)
+        MockURLProtocol.requestHandler = { request in
+            (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data())
+        }
+        // The service itself is configured for Android, as the app-wide default still is.
+        let service = TwitchAuthService(clientId: TwitchClientIDs.android, tokenStore: store, urlSession: mockSession)
+
+        try await service.revokeAccess(for: accountId)
+
+        let query = URLComponents(url: try XCTUnwrap(MockURLProtocol.lastRequest?.url), resolvingAgainstBaseURL: false)?.queryItems
+        XCTAssertEqual(query?.first { $0.name == "client_id" }?.value, TwitchClientIDs.tv)
+    }
+
+    func testAccountsWithoutARecordedClientAreTreatedAsAndroid() {
+        XCTAssertNil(AccountClientRegistry.shared.clientId(for: accountId))
+        XCTAssertTrue(TwitchClientIDs.canReadDropsDashboard(TwitchClientIDs.android))
+        XCTAssertFalse(TwitchClientIDs.canReadDropsDashboard(TwitchClientIDs.tv))
+    }
+
+    func testRegistryRecordsReplacesAndForgets() {
+        let registry = AccountClientRegistry(defaults: UserDefaults(suiteName: "AccountClientIDTests.\(UUID().uuidString)")!)
+        registry.record(TwitchClientIDs.android, for: "a")
+        registry.record(TwitchClientIDs.tv, for: "a")
+        registry.record("   ", for: "b")
+        XCTAssertEqual(registry.clientId(for: "a"), TwitchClientIDs.tv)
+        XCTAssertNil(registry.clientId(for: "b"))
+        registry.remove(accountId: "a")
+        XCTAssertNil(registry.clientId(for: "a"))
+    }
+
+    func testActivationLinkIsPrefilledWhenTwitchLeavesTheCodeOut() {
+        let bare = URL(string: "https://www.twitch.tv/activate")!
+        XCTAssertEqual(
+            TwitchAuthService.activationURL(bare, userCode: "ABCDEFGH").absoluteString,
+            "https://www.twitch.tv/activate?device-code=ABCDEFGH"
+        )
+        let prefilled = URL(string: "https://www.twitch.tv/activate?device-code=ZZZZZZZZ")!
+        XCTAssertEqual(TwitchAuthService.activationURL(prefilled, userCode: "ABCDEFGH"), prefilled)
+    }
+
+    func testTVAccountsPresentTheTVAppUserAgent() {
+        AccountClientRegistry.shared.record(TwitchClientIDs.tv, for: accountId)
+        XCTAssertEqual(TwitchClientFingerprint.shared.userAgent(for: accountId), TwitchClientIDs.tvUserAgent)
+    }
+
+    func testAndroidAccountsKeepAnAndroidUserAgent() {
+        XCTAssertTrue(TwitchClientFingerprint.androidUserAgents.contains(
+            TwitchClientFingerprint.shared.userAgent(for: accountId)
+        ))
+    }
+}
+
 // MARK: - Helpers
 
 private extension TwitchAuthServiceTests {

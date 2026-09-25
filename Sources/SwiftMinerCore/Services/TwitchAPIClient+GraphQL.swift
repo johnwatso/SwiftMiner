@@ -35,6 +35,10 @@ extension TwitchAPIClient {
     /// `fetchDropCampaigns()`, which shares this work when the mining engine and the
     /// Drops projection ask for the same cold data at launch.
     private func fetchDropCampaignsUncoalesced() async throws -> [Campaign] {
+        guard canReadDropsDashboard else {
+            return try await discoverCampaignsFromLiveChannels()
+        }
+
         let request = graphQLRequest(
             for: .viewerDropsDashboard,
             variables: ["fetchRewardCampaigns": false]
@@ -803,6 +807,135 @@ extension TwitchAPIClient {
             ttl: availableDropsCacheTTL
         )
         return campaignIds
+    }
+
+    // MARK: - Live-channel campaign discovery
+
+    /// Prioritised games searched per discovery pass, and live channels checked per game.
+    /// Every channel costs one `AvailableDrops` request, so these bound the pass to about
+    /// forty requests; the result is then reused for `discoveredCampaignsTTL`.
+    static let maxDiscoveryGames = 10
+    static let maxDiscoveryChannelsPerGame = 3
+    static let discoveredCampaignsTTL: TimeInterval = 5 * 60
+
+    /// Games whose live channels are searched for campaigns when this account's token cannot
+    /// read the drops dashboard. Set from the miner's prioritised games.
+    public func setCampaignDiscoveryGames(_ games: [String]) {
+        var seen = Set<String>()
+        let normalized = games
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+        guard normalized != campaignDiscoveryGames else { return }
+        campaignDiscoveryGames = normalized
+        discoveredCampaigns = nil
+    }
+
+    /// Campaigns for an account whose token cannot read the drops dashboard.
+    ///
+    /// Twitch returns a silent `null` for `ViewerDropsDashboard` and `DropCampaignDetails` to
+    /// TV-issued tokens, but still answers the game directory and
+    /// `DropsHighlightService_AvailableDrops`. So campaigns are found the way a viewer finds
+    /// them: live drops-enabled channels for each prioritised game, and the campaigns each of
+    /// those channels is running. Inventory then adds the campaigns already under way, with
+    /// their allow-lists and account-link state.
+    ///
+    /// Only prioritised games are searched. Selection already lets a prioritised game's
+    /// campaign through without a confirmed account link, which is exactly what this path can
+    /// and cannot know.
+    func discoverCampaignsFromLiveChannels() async throws -> [Campaign] {
+        if let cached = discoveredCampaigns, cached.expiresAt > Date() {
+            return cached.campaigns
+        }
+
+        let games = Array(campaignDiscoveryGames.prefix(Self.maxDiscoveryGames))
+        guard !games.isEmpty else {
+            Logger.campaigns.info("This account signed in with Twitch's TV client, which cannot list campaigns; prioritise games so SwiftMiner can find them on live channels")
+            return []
+        }
+
+        var found: [String: Campaign] = [:]
+        var answeredRequests = 0
+        var lastError: Error?
+        for game in games {
+            do {
+                let slug = try await getGameSlug(name: game)
+                let channels = try await getLiveChannels(gameSlug: slug, limit: 30)
+                answeredRequests += 1
+                for channel in channels.prefix(Self.maxDiscoveryChannelsPerGame) {
+                    do {
+                        for campaign in try await fetchAvailableDropCampaigns(channelId: channel.id)
+                            where found[campaign.id] == nil {
+                            found[campaign.id] = campaign
+                        }
+                        answeredRequests += 1
+                    } catch {
+                        lastError = error
+                    }
+                }
+            } catch {
+                lastError = error
+            }
+        }
+
+        // Nothing answered at all: surface the failure so the caller retries rather than
+        // concluding that no campaigns exist.
+        if answeredRequests == 0, let lastError {
+            throw lastError
+        }
+
+        let campaigns = found.values.sorted { $0.endDate < $1.endDate }
+        Logger.campaigns.info("Found \(campaigns.count) campaign(s) on live channels for \(games.count) prioritised game(s)")
+        discoveredCampaigns = DiscoveredCampaignsCacheEntry(
+            campaigns: campaigns,
+            expiresAt: Date().addingTimeInterval(Self.discoveredCampaignsTTL)
+        )
+        return campaigns
+    }
+
+    /// The full campaigns a live channel is running, from `DropsHighlightService_AvailableDrops`.
+    ///
+    /// The response carries each campaign's game, window and timed drops with their rewards,
+    /// but no campaign start date, allow-list or account-link state. The start is taken from
+    /// the earliest drop; the allow-list stays empty because channel selection verifies every
+    /// channel against this same query before watching it.
+    func fetchAvailableDropCampaigns(channelId: String) async throws -> [Campaign] {
+        let request = graphQLRequest(
+            for: .dropsHighlightServiceAvailableDrops,
+            variables: ["channelID": channelId]
+        )
+        let data = try await makeGraphQLRequest(request: request)
+        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        guard let channel = (json?["data"] as? [String: Any])?["channel"] as? [String: Any],
+              let campaignDicts = channel["viewerDropCampaigns"] as? [[String: Any]] else {
+            return []
+        }
+
+        // The IDs are what channel verification caches; keep it warm while we have them.
+        let cacheKey = Self.normalizedLookupKey(channelId)
+        let campaignIds = campaignDicts.compactMap { $0["id"] as? String }
+        availableDropsByChannel[cacheKey] = AvailableDropsCacheEntry(
+            campaignIds: campaignIds,
+            expiresAt: Date().addingTimeInterval(availableDropsCacheTTL)
+        )
+
+        return campaignDicts.compactMap { dict -> Campaign? in
+            guard let id = dict["id"] as? String, !id.isEmpty else { return nil }
+            let parsed = parseDetailedCampaign(from: dict)
+            guard parsed.endDate > Date(), !parsed.drops.isEmpty else { return nil }
+            let earliestDropStart = parsed.drops.compactMap(\.dropStartDate).min()
+            return Campaign(
+                id: parsed.id,
+                name: parsed.name,
+                game: parsed.game,
+                status: parsed.status,
+                startDate: earliestDropStart ?? parsed.startDate,
+                endDate: parsed.endDate,
+                drops: parsed.drops,
+                channels: [],
+                isAccountConnected: false,
+                allowIsEnabled: nil
+            )
+        }
     }
 
     /// Response field for the `DropsPage_ClaimDropRewards` mutation.

@@ -986,6 +986,7 @@ public final class MinerManager {
         // revoke the OAuth grant immediately whenever the service is reachable.
         try? await authService.revokeAccess(for: miner.accountId)
         try? await authService.logout(accountId: miner.accountId)
+        AccountClientRegistry.shared.remove(accountId: miner.accountId)
         
         // Remove from collections. The state store owns a self-perpetuating refresh loop, so
         // dropping the reference is not enough — an unstopped store keeps polling Twitch for

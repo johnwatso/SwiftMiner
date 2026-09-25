@@ -68,8 +68,7 @@ public final class MinerLoginService {
         authorizationTask?.cancel()
         deviceAuthorization = nil
 
-        // resolvedClientId always returns a value (falls back to Twitch's web client ID)
-        let clientId = Settings.shared.resolvedClientId
+        let clientId = Settings.shared.resolvedSignInClientId
 
         // Where the client ID came from is useful when a sign-in misbehaves; the ID itself is
         // not, and a user-supplied one does not belong in a log at all.

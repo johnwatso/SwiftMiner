@@ -1291,6 +1291,22 @@ public final class Settings {
         // Fall back to Twitch's own Android app client ID (same approach as TwitchDropsMiner)
         return Settings.twitchAndroidClientId
     }
+
+    /// The client ID new device-code sign-ins are started with.
+    ///
+    /// Twitch stopped accepting the Android client for new device sign-ins in September 2026,
+    /// so without a custom or environment ID new accounts sign in with Twitch's TV client.
+    /// Each account then keeps the client its token was issued to (`AccountClientRegistry`),
+    /// so accounts added earlier stay on Android.
+    public var resolvedSignInClientId: String {
+        let envId = parseClientId(ProcessInfo.processInfo.environment["TWITCH_CLIENT_ID"] ?? "")
+        if !envId.isEmpty { return envId }
+
+        let settingsId = twitchClientId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !settingsId.isEmpty { return settingsId }
+
+        return TwitchClientIDs.tv
+    }
     
     /// Parse client ID from string, handling JSON-wrapped values
     private func parseClientId(_ raw: String) -> String {
