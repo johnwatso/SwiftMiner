@@ -177,6 +177,22 @@
             background: #22d3ee;
             box-shadow: 0 0 14px rgba(34, 211, 238, 0.8);
         }
+        .notice {
+            margin: 20px auto 28px;
+            max-width: 560px;
+            padding: 16px 20px;
+            border: 1px solid rgba(245, 158, 11, 0.5);
+            border-radius: 16px;
+            background: rgba(245, 158, 11, 0.12);
+            color: var(--muted);
+            font-size: 14px;
+            text-align: left;
+        }
+        .notice strong { display: block; margin-bottom: 4px; color: #fbbf24; }
+        @media (prefers-color-scheme: light) {
+            .notice { color: #475569; }
+            .notice strong { color: #b45309; }
+        }
         .steps {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -292,6 +308,12 @@
                 <span class="status-dot" aria-hidden="true"></span>
                 <span>Finding the latest SwiftMiner release…</span>
             </p>
+
+            <!-- Temporary notice: Twitch blocked device-code sign-in (Sept 2026). Remove once the login fix ships. -->
+            <div class="notice" role="note">
+                <strong>New logins are currently broken</strong>
+                Twitch changed its sign-in system, so connecting a new account (step 3 below) will fail right now. Accounts already signed in should keep working, so don't sign out of or remove them. We're working on a fix and it will arrive as an automatic update.
+            </div>
 
             <ol class="steps" aria-label="Installation steps">
                 <li><strong>1. Open the ZIP</strong>Find SwiftMiner in your Downloads folder.</li>
