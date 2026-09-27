@@ -303,6 +303,14 @@ struct MinerApp: App {
             CommandGroup(replacing: .saveItem) {}
             #if DEBUG
             CommandMenu("Developer") {
+                // Spike for the September 2026 Twitch sign-in lockdown: tests whether a
+                // WKWebView session yields integrity tokens Twitch accepts.
+                Button("Twitch Web Session Probe…") {
+                    TwitchWebSessionProbe.shared.show()
+                }
+
+                Divider()
+
                 Button("Preview Update Notification") {
                     Task {
                         UpdateCompletionNotification.registerCategory()
