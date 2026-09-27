@@ -176,6 +176,7 @@
 		98A4D1273566562A5BD80058 /* TwitchAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC5FB969FDB3C8049A2145DB /* TwitchAPIClient.swift */; };
 		98F1B98DFDC37F20414C8566 /* CampaignFeedViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B1614DF3D16D0C1A3162DD6 /* CampaignFeedViews.swift */; };
 		99134A1F3D64818B0029DDED /* LegacyAccountMigrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F6B0366B64D312D5EC9AC30 /* LegacyAccountMigrator.swift */; };
+		9929135EA3569F1D72CA1C6C /* TwitchWebSessionProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DA391B841E20A743B285F5B /* TwitchWebSessionProbe.swift */; };
 		9A56D5BC8DA86C2FF6B9DA2D /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F0E31A0069A6303E581C6D77 /* AppIntents.framework */; };
 		9B97196242668766BCFC7874 /* MinerEngine+Claiming.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3CC200940FA5E68DFAC2AB /* MinerEngine+Claiming.swift */; };
 		9C21DC3640F81C3F3D5884D4 /* MinerEngine+MiningLoop.swift in Sources */ = {isa = PBXBuildFile; fileRef = B116F1DA3E52E53FFC04111E /* MinerEngine+MiningLoop.swift */; };
@@ -507,6 +508,7 @@
 		66D3CD478576ED0783BFEED7 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		69A05685AB6FD2FAAD2107A5 /* popup.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = popup.html; sourceTree = "<group>"; };
 		6A5991355C80575BF49772CB /* DebugAvatarYellowDuck.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = DebugAvatarYellowDuck.png; sourceTree = "<group>"; };
+		6DA391B841E20A743B285F5B /* TwitchWebSessionProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwitchWebSessionProbe.swift; sourceTree = "<group>"; };
 		6E08A9966225179B652AC9C8 /* DropsMinerCampaignFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropsMinerCampaignFilter.swift; sourceTree = "<group>"; };
 		6E3DEEF3F6DA2049777E3722 /* DropsMinerCampaignFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropsMinerCampaignFilterTests.swift; sourceTree = "<group>"; };
 		6FD0314ADE0B514D1123204B /* MinerStatePublicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerStatePublicationTests.swift; sourceTree = "<group>"; };
@@ -915,6 +917,7 @@
 				AD3B416F9FDC5DC4764D6E9C /* SwiftMinerInvitation.swift */,
 				BD3A3FA3D2C53873D6817D19 /* TwitchAvatarStore.swift */,
 				368CD1F54C243641154FAD3E /* TwitchCompatibilityRecovery.swift */,
+				6DA391B841E20A743B285F5B /* TwitchWebSessionProbe.swift */,
 				B867787CA22A6074C1C312B7 /* UnattendedHealthModel.swift */,
 				F86CAAFB40BE4E27C33FD6E3 /* UpToDateUserDriver.swift */,
 				B94A5A973E3B708093027C66 /* DebugAvatars */,
@@ -1642,6 +1645,7 @@
 				683F3FCC5F8DAE7327552AA4 /* SwiftMinerInvitation.swift in Sources */,
 				812443DB837ACE81CF97CCB8 /* TwitchAvatarStore.swift in Sources */,
 				E073C8BD3BBE3D5320421FC2 /* TwitchCompatibilityRecovery.swift in Sources */,
+				9929135EA3569F1D72CA1C6C /* TwitchWebSessionProbe.swift in Sources */,
 				D5A6926B7FE2FD8EDEC43F28 /* UnattendedHealthModel.swift in Sources */,
 				B781D6B4860AC7E854163FD1 /* UpToDateUserDriver.swift in Sources */,
 			);
@@ -1846,7 +1850,7 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/SwiftMinerSafariExtension/SwiftMinerSafariExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026092521;
+				CURRENT_PROJECT_VERSION = 2026092811;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Sources/SwiftMinerSafariExtension/Info.plist;
@@ -1878,7 +1882,7 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/SwiftMiner/SwiftMinerRelease.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026092521;
+				CURRENT_PROJECT_VERSION = 2026092811;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				EXCLUDED_SOURCE_FILE_NAMES = (
@@ -2008,7 +2012,7 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/SwiftMinerSafariExtension/SwiftMinerSafariExtensionDebug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026092521;
+				CURRENT_PROJECT_VERSION = 2026092811;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Sources/SwiftMinerSafariExtension/Info.plist;
@@ -2079,7 +2083,7 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/SwiftMiner/SwiftMiner.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026092521;
+				CURRENT_PROJECT_VERSION = 2026092811;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
