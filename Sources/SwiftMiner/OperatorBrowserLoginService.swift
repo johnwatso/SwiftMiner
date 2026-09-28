@@ -21,18 +21,19 @@ final class OperatorBrowserLoginService {
         case failed(String)
     }
 
-    private static let dataStoreID = UUID(uuidString: "BC84D78C-5850-4C22-A462-0C52AD91F395")!
     private static let webClientID = TwitchClientIDs.web
-    private static let integritySDKURL = "https://k.twitchcdn.net/149e9513-01fa-4fb0-aad4-566afd725d1b/2d206a39-8ed7-437e-a3be-862e0f06eea3/p.js"
 
     private(set) var state: State = .idle
     let webView: WKWebView
 
     private let dataStore: WKWebsiteDataStore
+    private let integrityIssuer: TwitchBrowserIntegrityIssuer
     private var verificationTask: Task<Void, Never>?
 
     init() {
-        dataStore = WKWebsiteDataStore(forIdentifier: Self.dataStoreID)
+        let integrityIssuer = TwitchBrowserIntegrityIssuer()
+        self.integrityIssuer = integrityIssuer
+        dataStore = integrityIssuer.dataStore
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = dataStore
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
@@ -132,7 +133,7 @@ final class OperatorBrowserLoginService {
     }
 
     private func buildValidatedAccount() async throws -> Account {
-        var cookies = await dataStore.httpCookieStore.allCookies()
+        let cookies = await dataStore.httpCookieStore.allCookies()
         guard let authCookie = cookies.first(where: {
             $0.name == "auth-token" && $0.domain.hasSuffix("twitch.tv") && !$0.value.isEmpty
         }) else {
@@ -156,28 +157,11 @@ final class OperatorBrowserLoginService {
         let identity = try await validate(oauthToken: authCookie.value)
         guard identity.clientID == Self.webClientID else { throw LoginError.wrongClient }
 
-        let integrity = try await fetchIntegrityInPage(
+        let integrity = try await integrityIssuer.issue(
             oauthToken: authCookie.value,
+            clientID: Self.webClientID,
             deviceID: deviceID
         )
-
-        // WebKit can publish an HTTP-only cross-site cookie to WKHTTPCookieStore a moment
-        // after the JavaScript fetch has completed. Give that handoff a brief chance to settle.
-        try? await Task.sleep(for: .milliseconds(500))
-        cookies = await dataStore.httpCookieStore.allCookies()
-        guard let sdkCookie = cookies.first(where: {
-            $0.name == RemoteBrowserSessionBundle.sdkCookieName
-                && $0.domain.hasSuffix("twitchcdn.net")
-                && !$0.value.isEmpty
-        }) else {
-            let observedCookies = Set(cookies.map { "\($0.name)@\($0.domain)" })
-                .sorted()
-                .joined(separator: ", ")
-            Logger.auth.warning(
-                "Operator SDK bootstrap completed without its renewal cookie; observed cookie names/domains: \(observedCookies)"
-            )
-            throw LoginError.missingSDKCookie
-        }
 
         let dashboard = try await protectedQuery(
             .viewerDropsDashboard,
@@ -207,10 +191,6 @@ final class OperatorBrowserLoginService {
         let advertisedLifetime = identity.expiresIn > 0
             ? TimeInterval(identity.expiresIn)
             : 30 * 24 * 60 * 60
-        // WebKit represents a browser-session cookie with no expiresDate. Its real lifetime is
-        // the owned persistent data store, so use the OAuth revalidation window as a conservative
-        // renewal horizon rather than pretending the cookie has already expired.
-        let cookieExpiry = sdkCookie.expiresDate ?? now.addingTimeInterval(advertisedLifetime)
         let context = TwitchAuthenticationContext.browser(.init(
             clientID: Self.webClientID,
             origin: TwitchClientIDs.webOrigin,
@@ -220,8 +200,8 @@ final class OperatorBrowserLoginService {
             integrityToken: integrity.token,
             capturedAt: now,
             expiresAt: integrity.expiresAt,
-            sdkCookieValue: sdkCookie.value,
-            cookieExpiresAt: cookieExpiry,
+            sdkCookieValue: integrity.sdkCookieValue,
+            cookieExpiresAt: integrity.cookieExpiresAt,
             generation: 1
         ))
 
@@ -256,124 +236,6 @@ final class OperatorBrowserLoginService {
             throw LoginError.invalidToken
         }
         return identity
-    }
-
-    private func fetchIntegrityInPage(
-        oauthToken: String,
-        deviceID: String
-    ) async throws -> (token: String, expiresAt: Date) {
-        // WebKit blocks third-party cookies even inside an app-owned WKWebView. Run the
-        // official integrity SDK in a private helper view whose first-party origin matches
-        // the SDK cookie, while sharing the same owned website data store. The visible
-        // signed-in Twitch page and its credentials never leave SwiftMiner.
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = dataStore
-        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
-        let integrityWebView = WKWebView(frame: .zero, configuration: configuration)
-        guard let sdkOrigin = URL(string: "https://k.twitchcdn.net/") else {
-            throw LoginError.pageUnavailable
-        }
-        integrityWebView.load(URLRequest(url: sdkOrigin))
-        await waitForPageLoad(integrityWebView)
-
-        let script = """
-        const headers = {
-          'Client-Id': clientId,
-          'Authorization': 'OAuth ' + authToken,
-          'X-Device-Id': deviceId
-        };
-
-        return await new Promise(resolve => {
-          let settled = false;
-          let issued = false;
-          let fallback;
-          const deadline = setTimeout(
-            () => finish({ failure: 'sdk_timeout' }),
-            90000
-          );
-          const finish = value => {
-            if (settled) return;
-            settled = true;
-            clearTimeout(deadline);
-            if (fallback) clearTimeout(fallback);
-            resolve(value);
-          };
-          const issue = async () => {
-            if (issued || settled) return;
-            issued = true;
-            const controller = new AbortController();
-            const fetchDeadline = setTimeout(() => controller.abort(), 30000);
-            try {
-              const response = await window.fetch('https://gql.twitch.tv/integrity', {
-                method: 'POST',
-                headers,
-                body: null,
-                credentials: 'omit',
-                mode: 'cors',
-                signal: controller.signal
-              });
-              finish({ status: response.status, body: await response.text() });
-            } catch (_) {
-              finish({ failure: 'issuance_fetch' });
-            } finally {
-              clearTimeout(fetchDeadline);
-            }
-          };
-          const configure = () => {
-            try {
-              window.KPSDK.configure([{
-                protocol: 'https:',
-                method: 'POST',
-                domain: 'gql.twitch.tv',
-                path: '/integrity'
-              }]);
-              return true;
-            } catch (_) {
-              finish({ failure: 'sdk_configure' });
-              return false;
-            }
-          };
-
-          document.addEventListener('kpsdk-ready', issue, { once: true });
-          if (window.KPSDK) {
-            // Twitch may already have loaded the SDK before Connect was pressed. In that
-            // case its ready event has also passed, so configure it and issue shortly after.
-            if (configure()) fallback = setTimeout(issue, 250);
-            return;
-          }
-
-          document.addEventListener('kpsdk-load', configure, { once: true });
-          const sdkScript = document.createElement('script');
-          sdkScript.onerror = () => finish({ failure: 'sdk_script' });
-          sdkScript.src = sdkURL;
-          (document.body || document.documentElement).appendChild(sdkScript);
-        });
-        """
-        let raw = try await integrityWebView.callAsyncJavaScript(
-            script,
-            arguments: [
-                "clientId": Self.webClientID,
-                "authToken": oauthToken,
-                "deviceId": deviceID,
-                "sdkURL": Self.integritySDKURL,
-            ],
-            in: nil,
-            contentWorld: .page
-        )
-        guard let result = raw as? [String: Any],
-              let status = result["status"] as? Int,
-              status == 200 || status == 429,
-              let body = result["body"] as? String,
-              let json = try? JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any],
-              let token = json["token"] as? String,
-              !token.isEmpty else {
-            throw LoginError.integrityUnavailable
-        }
-        let expiryMilliseconds = json["expiration"] as? Double
-            ?? (Date().timeIntervalSince1970 + 300) * 1_000
-        let expiresAt = Date(timeIntervalSince1970: expiryMilliseconds / 1_000)
-        guard expiresAt > Date() else { throw LoginError.integrityUnavailable }
-        return (token, expiresAt)
     }
 
     private func protectedQuery(
@@ -414,14 +276,10 @@ final class OperatorBrowserLoginService {
         return data
     }
 
-    private func waitForPageLoad(
-        _ targetWebView: WKWebView? = nil,
-        timeout: TimeInterval = 20
-    ) async {
-        let targetWebView = targetWebView ?? webView
+    private func waitForPageLoad(timeout: TimeInterval = 20) async {
         let deadline = Date().addingTimeInterval(timeout)
         try? await Task.sleep(for: .milliseconds(300))
-        while targetWebView.isLoading, Date() < deadline {
+        while webView.isLoading, Date() < deadline {
             try? await Task.sleep(for: .milliseconds(250))
         }
         try? await Task.sleep(for: .seconds(2))
@@ -447,6 +305,13 @@ final class OperatorBrowserLoginService {
             return "The login worked, but Twitch did not return this account's Drops inventory. Nothing was saved."
         case LoginError.pageUnavailable:
             return "The Twitch page was not ready. Wait for it to finish loading and try again."
+        case TwitchBrowserIntegrityIssuer.IssuanceError.missingSDKCookie:
+            return "Twitch did not provide the browser integrity cookie needed for unattended renewal. Reload the Drops page and try again."
+        case TwitchBrowserIntegrityIssuer.IssuanceError.pageUnavailable:
+            return "Twitch's integrity page was not ready. Wait a moment and try again."
+        case TwitchBrowserIntegrityIssuer.IssuanceError.sdkUnavailable,
+             TwitchBrowserIntegrityIssuer.IssuanceError.integrityUnavailable:
+            return "Twitch did not approve this browser session for protected Drops requests. Reload and try again."
         default:
             return "The operator login could not be verified: \(error.localizedDescription)"
         }
