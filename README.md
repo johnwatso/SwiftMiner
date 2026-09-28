@@ -27,6 +27,9 @@
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License">
 </p>
 
+> [!WARNING]
+> **New Twitch logins are currently broken.** Since around 18 September 2026, Twitch has been rejecting the sign-in method SwiftMiner uses, so adding a new account or re-adding an existing one will fail. Accounts that are already signed in should keep working, so **don't sign out of or remove them** for now. We're working on a fix and will ship it as an update.
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="Website/public/assets/landing/overview-dark.webp">
