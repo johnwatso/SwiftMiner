@@ -26,7 +26,7 @@
 <body>
   <main>
     <h1>SwiftMiner 1.42.1</h1>
-    <p class="meta">Version 1.42.1 &middot; Build 2026092823</p>
+    <p class="meta">Version 1.42.1 &middot; Build 2026092910</p>
     <p class="intro">SwiftMiner 1.42.1 fixes adding Twitch accounts, which stopped working after a change on Twitch&rsquo;s side, along with updates for copies moved to Applications and several miner start-up glitches. Waiting miners also do less redundant work, and diagnostics now keep a full week of history.</p>
 
     <section>
@@ -39,6 +39,7 @@
         <li>Backing up settings and exporting diagnostics now use the standard macOS save dialog, which opens reliably.</li>
         <li>The web dashboard now reopens as a single window and comes to the front, whether it was closed, minimised or behind another window.</li>
         <li>Skipped Twitch test Drops are now logged once, not on every automatic claim check.</li>
+        <li>When Twitch rejects the Operator&rsquo;s browser security check, SwiftMiner now renews it straight away and says so in the Activity Log, instead of reporting that Twitch changed a query and suggesting an update via Safari. Previously the Operator could go hours without reading the Drops campaign list.</li>
         <li>Profile pictures now load for every account, including the Operator and accounts signed in through Twitch&rsquo;s TV app. Pictures are read from Twitch&rsquo;s public profile data, so they no longer depend on each account&rsquo;s sign-in.</li>
       </ul>
     </section>

@@ -222,6 +222,59 @@ final class ServiceTests: XCTestCase {
         XCTAssertEqual(store.override(for: .viewerDropsDashboard), candidate)
     }
 
+    /// Twitch refuses an expired or rejected `Client-Integrity` token with a GraphQL error in an
+    /// HTTP 200. That is a session problem: it must not retire the hash that carried it, raise
+    /// the "Twitch changed a query" alarm, or reach the miner as a compatibility error.
+    func testIntegrityRejectionIsASessionErrorNotAQueryChange() async throws {
+        let suiteName = "com.swiftminer.tests.integrity-rejection.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = TwitchQueryHashStore(defaults: defaults)
+        let candidate = String(repeating: "b", count: 64)
+        XCTAssertTrue(store.submitCandidate(candidate, for: .viewerDropsDashboard))
+
+        let client = TwitchAPIClient(
+            authService: authService,
+            clientId: "test_client",
+            session: mockSession,
+            queryHashStore: store,
+            persistsCampaignCaches: false
+        )
+        let integrityRequests = StringRequestRecorder()
+        let rejectionNotices = StringRequestRecorder()
+        let observer = NotificationCenter.default.addObserver(
+            forName: TwitchAPIClient.integrityRejectedNotification,
+            object: nil,
+            queue: nil
+        ) { _ in rejectionNotices.append("rejected") }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            if request.url?.path == "/integrity" {
+                integrityRequests.append("integrity")
+                return (response, Data(#"{"token":"test","expiration":4102444800000}"#.utf8))
+            }
+            return (response, Data(#"{"errors":[{"message":"failed integrity check"}],"data":null}"#.utf8))
+        }
+
+        do {
+            _ = try await client.fetchDropCampaigns()
+            XCTFail("Expected the integrity rejection to surface")
+        } catch TwitchMinerError.integrityRejected(let operation) {
+            XCTAssertEqual(operation, "ViewerDropsDashboard")
+        }
+
+        XCTAssertEqual(store.candidate(for: .viewerDropsDashboard), candidate)
+        XCTAssertNil(store.recoveryNeededSince(for: .viewerDropsDashboard))
+        XCTAssertEqual(rejectionNotices.recordedValues.count, 1)
+
+        // The refused token is dropped, so the next request is issued a fresh one.
+        _ = try? await client.fetchDropCampaigns()
+        XCTAssertEqual(integrityRequests.recordedValues.count, 2)
+    }
+
     /// The recovery alarm is raised by a persisted-query miss that outlasted its retries,
     /// which one out-of-step edge node can produce. A later working reply from the bundled
     /// hash must lower it, or the recovery scan keeps reopening Safari for a healthy query.

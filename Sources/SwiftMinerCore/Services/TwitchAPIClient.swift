@@ -1376,6 +1376,23 @@ public actor TwitchAPIClient {
     /// Twitch sometimes reports an upstream timeout as an HTTP 200 GraphQL response.
     /// These messages describe temporary service conditions rather than a bad query,
     /// so they belong in the same bounded backoff loop as transient HTTP failures.
+    /// Posted when Twitch refuses a request's integrity token. `userInfo["accountId"]` names
+    /// the account, so the app can renew that account's browser session immediately.
+    public static let integrityRejectedNotification = Notification.Name(
+        "SwiftMiner.TwitchAPIClient.integrityRejected"
+    )
+
+    /// Twitch answers a refused `Client-Integrity` token with a body-level GraphQL error such
+    /// as `failed integrity check`, inside an HTTP 200.
+    nonisolated static func isIntegrityRejection(_ message: String) -> Bool {
+        message.localizedCaseInsensitiveContains("integrity")
+    }
+
+    private func invalidateIntegrityToken() {
+        integrityToken = nil
+        integrityTokenExpiry = .distantPast
+    }
+
     private static let retryableGraphQLErrorMessages: Set<String> = [
         "service timeout",
         "request cancelled",
@@ -1429,6 +1446,7 @@ public actor TwitchAPIClient {
                     // GQL errors arrive as HTTP 200 with a body-level error array.
                     // Detect PersistedQueryNotFound so callers get a clear signal.
                     var persistedQueryMissing = false
+                    var integrityRejected = false
                     var retryableGraphQLError: String?
                     if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                        let errors = json["errors"] as? [[String: Any]] {
@@ -1436,6 +1454,8 @@ public actor TwitchAPIClient {
                             if let msg = gqlError["message"] as? String {
                                 if msg.contains("PersistedQueryNotFound") {
                                     persistedQueryMissing = true
+                                } else if Self.isIntegrityRejection(msg) {
+                                    integrityRejected = true
                                 } else if Self.retryableGraphQLErrorMessages.contains(msg) {
                                     retryableGraphQLError = msg
                                 } else {
@@ -1444,6 +1464,22 @@ public actor TwitchAPIClient {
                                 }
                             }
                         }
+                    }
+
+                    if integrityRejected {
+                        // The request already carries the refused token, so retrying it here
+                        // cannot help. Drop the cached token so the next request is issued a
+                        // fresh one, and let the app renew a browser session now rather than
+                        // at its scheduled time. Reported separately from a persisted-query
+                        // miss: this must not retire a working hash or ask for a Safari update.
+                        invalidateIntegrityToken()
+                        NotificationCenter.default.post(
+                            name: Self.integrityRejectedNotification,
+                            object: nil,
+                            userInfo: accountId.map { ["accountId": $0] }
+                        )
+                        Logger.api.warning("[GQL] Twitch rejected the integrity token for \(operationName)")
+                        throw TwitchMinerError.integrityRejected(operation: operationName)
                     }
 
                     if persistedQueryMissing {
