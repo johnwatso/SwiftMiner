@@ -71,6 +71,7 @@ public final class AppModel {
     private let engine: MinerEngine
     private let clientId: String
     private weak var minerManager: MinerManager?
+    private let operatorSessionRenewalCoordinator: OperatorSessionRenewalCoordinator?
     private var badgeRefreshTask: Task<Void, Never>?
     private var lastAppliedBadgeCount: Int?
     #if DEBUG
@@ -83,6 +84,9 @@ public final class AppModel {
         self.clientId = clientId
         self.engine = MinerEngine(clientId: clientId)
         self.minerManager = minerManager
+        self.operatorSessionRenewalCoordinator = minerManager.map {
+            OperatorSessionRenewalCoordinator(minerManager: $0)
+        }
         #if DEBUG
         self.safariQueryHashBridge = SafariQueryHashDebugBridge()
         #endif
@@ -116,6 +120,7 @@ public final class AppModel {
                     guard let self,
                           let manager = self.minerManager else { return }
                     self.reconcileManagerCollection(manager)
+                    self.operatorSessionRenewalCoordinator?.accountCollectionDidChange()
                 }
             }
 
@@ -128,6 +133,7 @@ public final class AppModel {
                     self?.scheduleBadgeRefresh()
                 }
             }
+            operatorSessionRenewalCoordinator?.start()
             return
         }
 
