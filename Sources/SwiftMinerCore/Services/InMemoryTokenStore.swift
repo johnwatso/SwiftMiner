@@ -52,7 +52,8 @@ public actor InMemoryTokenStore: TokenStore {
             refreshToken: existing.refreshToken,
             tokenExpiry: existing.tokenExpiry,
             scopes: existing.scopes,
-            isOperator: existing.isOperator
+            isOperator: existing.isOperator,
+            authenticationContext: existing.authenticationContext
         )
     }
 
@@ -91,7 +92,8 @@ public actor InMemoryTokenStore: TokenStore {
             refreshToken: refreshToken ?? account.refreshToken,
             tokenExpiry: tokenExpiry ?? account.tokenExpiry,
             scopes: account.scopes,
-            isOperator: isOperator ?? account.isOperator
+            isOperator: isOperator ?? account.isOperator,
+            authenticationContext: account.authenticationContext
         )
     }
 }

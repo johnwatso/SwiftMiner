@@ -1296,8 +1296,8 @@ public final class Settings {
     ///
     /// Twitch stopped accepting the Android client for new device sign-ins in September 2026,
     /// so without a custom or environment ID new accounts sign in with Twitch's TV client.
-    /// Each account then keeps the client its token was issued to (`AccountClientRegistry`),
-    /// so accounts added earlier stay on Android.
+    /// Each account then keeps the client its token was issued to in its authentication context,
+    /// with `AccountClientRegistry` retained as the compatibility fallback for older records.
     public var resolvedSignInClientId: String {
         let envId = parseClientId(ProcessInfo.processInfo.environment["TWITCH_CLIENT_ID"] ?? "")
         if !envId.isEmpty { return envId }

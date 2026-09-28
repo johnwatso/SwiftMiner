@@ -15,10 +15,11 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
     }
 
     public func save(account: Account) async throws {
+        let authenticationContextJSON = try Self.encodeAuthenticationContext(account.authenticationContext)
         try await manager.execute { db in
             let sql = """
-            INSERT INTO twitch_accounts (twitch_id, username, nickname, access_token, refresh_token, token_expiry, scopes, owner_discord_id, link_state)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO twitch_accounts (twitch_id, username, nickname, access_token, refresh_token, token_expiry, scopes, owner_discord_id, link_state, auth_context_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(twitch_id) DO UPDATE SET
                 username=excluded.username,
                 nickname=excluded.nickname,
@@ -26,6 +27,7 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
                 refresh_token=excluded.refresh_token,
                 token_expiry=excluded.token_expiry,
                 scopes=excluded.scopes,
+                auth_context_json=excluded.auth_context_json,
                 owner_discord_id=COALESCE(excluded.owner_discord_id, owner_discord_id),
                 link_state=CASE
                     WHEN excluded.owner_discord_id IS NOT NULL THEN 'linked'
@@ -52,6 +54,7 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
                 sqlite3_bind_null(statement, 8)
                 sqlite3_bind_text(statement, 9, "unowned", -1, SQLITE_TRANSIENT)
             }
+            Self.bindOptionalRawText(statement, 10, authenticationContextJSON)
 
             guard sqlite3_step(statement) == SQLITE_DONE else {
                 throw self.dbError(db)
@@ -61,7 +64,7 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
 
     public func loadAllAccounts() async throws -> [Account] {
         return try await manager.query { db in
-            let sql = "SELECT twitch_id, username, nickname, access_token, refresh_token, token_expiry, scopes, owner_discord_id, is_operator FROM twitch_accounts;"
+            let sql = "SELECT twitch_id, username, nickname, access_token, refresh_token, token_expiry, scopes, owner_discord_id, is_operator, auth_context_json FROM twitch_accounts;"
             var statement: OpaquePointer?
             guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
                 throw self.dbError(db)
@@ -70,7 +73,7 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
 
             var results: [Account] = []
             while sqlite3_step(statement) == SQLITE_ROW {
-                results.append(self.parseAccount(statement!))
+                results.append(try self.parseAccount(statement!))
             }
             return results
         }
@@ -78,7 +81,7 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
 
     public func loadAccount(twitchUserId: String) async throws -> Account? {
         return try await manager.query { db in
-            let sql = "SELECT twitch_id, username, nickname, access_token, refresh_token, token_expiry, scopes, owner_discord_id, is_operator FROM twitch_accounts WHERE twitch_id = ?;"
+            let sql = "SELECT twitch_id, username, nickname, access_token, refresh_token, token_expiry, scopes, owner_discord_id, is_operator, auth_context_json FROM twitch_accounts WHERE twitch_id = ?;"
             var statement: OpaquePointer?
             guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
                 throw self.dbError(db)
@@ -88,7 +91,7 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
             sqlite3_bind_text(statement, 1, twitchUserId, -1, SQLITE_TRANSIENT)
 
             if sqlite3_step(statement) == SQLITE_ROW {
-                return self.parseAccount(statement!)
+                return try self.parseAccount(statement!)
             }
             return nil
         }
@@ -186,7 +189,7 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
         }
     }
 
-    private func parseAccount(_ statement: OpaquePointer) -> Account {
+    private func parseAccount(_ statement: OpaquePointer) throws -> Account {
         let id = String(cString: sqlite3_column_text(statement, 0))
         let username = String(cString: sqlite3_column_text(statement, 1))
         let nickname = sqlite3_column_text(statement, 2).map { String(cString: $0) }
@@ -196,6 +199,12 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
         let scopesStr = String(cString: sqlite3_column_text(statement, 6))
         let ownerDiscordId = sqlite3_column_text(statement, 7).map { String(cString: $0) }
         let isOperator = sqlite3_column_int(statement, 8) != 0
+        let authenticationContext: TwitchAuthenticationContext?
+        if let rawContext = sqlite3_column_text(statement, 9).map({ String(cString: $0) }) {
+            authenticationContext = try Self.decodeAuthenticationContext(rawContext)
+        } else {
+            authenticationContext = nil
+        }
         
         let expiry = dateFormatter.date(from: expiryStr) ?? Date()
         let scopes = Self.parseScopes(scopesStr)
@@ -209,7 +218,8 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
             refreshToken: refreshToken ?? "",
             tokenExpiry: expiry,
             scopes: scopes,
-            isOperator: isOperator
+            isOperator: isOperator,
+            authenticationContext: authenticationContext
         )
     }
 
@@ -230,6 +240,36 @@ public final class SQLiteTokenStore: TokenStore, Sendable {
             sqlite3_bind_text(statement, index, value, -1, SQLITE_TRANSIENT)
         } else {
             sqlite3_bind_null(statement, index)
+        }
+    }
+
+    private static func bindOptionalRawText(_ statement: OpaquePointer?, _ index: Int32, _ value: String?) {
+        if let value {
+            sqlite3_bind_text(statement, index, value, -1, SQLITE_TRANSIENT)
+        } else {
+            sqlite3_bind_null(statement, index)
+        }
+    }
+
+    private static func encodeAuthenticationContext(
+        _ context: TwitchAuthenticationContext?
+    ) throws -> String? {
+        guard let context else { return nil }
+        return String(decoding: try JSONEncoder().encode(context), as: UTF8.self)
+    }
+
+    private static func decodeAuthenticationContext(_ value: String) throws -> TwitchAuthenticationContext {
+        do {
+            return try JSONDecoder().decode(TwitchAuthenticationContext.self, from: Data(value.utf8))
+        } catch {
+            // Never include the stored JSON in this error: browser contexts contain an integrity
+            // token and SDK cookie. A non-NULL malformed value must fail closed rather than being
+            // mistaken for a legacy account and silently changing its client fingerprint.
+            throw NSError(
+                domain: "SQLiteTokenStore",
+                code: 4,
+                userInfo: [NSLocalizedDescriptionKey: "The stored Twitch authentication context is invalid."]
+            )
         }
     }
 }

@@ -47,6 +47,7 @@ public actor SQLiteManager {
             refresh_token TEXT,
             token_expiry DATETIME NOT NULL,
             scopes TEXT,
+            auth_context_json TEXT,
             link_state TEXT NOT NULL CHECK(link_state IN ('linked', 'expired', 'unowned')),
             FOREIGN KEY(owner_discord_id) REFERENCES miner_users(discord_id) ON DELETE SET NULL
         );
@@ -397,6 +398,16 @@ public actor SQLiteManager {
         try ensureActivityLogCategorySchema()
         if !isMigrationApplied(13) {
             try execute("INSERT OR IGNORE INTO _schema_migrations (version) VALUES (13);")
+        }
+
+        // Keep the complete issuing-client/browser context beside its OAuth token. This check is
+        // intentionally outside the migration-marker guard so a database left half-upgraded by
+        // an interrupted build repairs itself on the next launch.
+        if !columnExists("auth_context_json", in: "twitch_accounts") {
+            try execute("ALTER TABLE twitch_accounts ADD COLUMN auth_context_json TEXT;")
+        }
+        if !isMigrationApplied(14) {
+            try execute("INSERT OR IGNORE INTO _schema_migrations (version) VALUES (14);")
         }
     }
 

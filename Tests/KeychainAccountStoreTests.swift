@@ -30,7 +30,8 @@ final class KeychainAccountStoreTests: XCTestCase {
             refreshToken: "refresh-\(id)",
             tokenExpiry: Date().addingTimeInterval(3600),
             scopes: ["channel:read"],
-            isOperator: isOperator
+            isOperator: isOperator,
+            authenticationContext: .device(clientID: "client-\(id)")
         )
     }
 
@@ -44,6 +45,7 @@ final class KeychainAccountStoreTests: XCTestCase {
         XCTAssertEqual(loaded.accessToken, "access-twitch-1")
         XCTAssertEqual(loaded.refreshToken, "refresh-twitch-1")
         XCTAssertEqual(loaded.scopes, ["channel:read"])
+        XCTAssertEqual(loaded.authenticationContext, .device(clientID: "client-twitch-1"))
 
         let all = try await store.loadAllAccounts()
         XCTAssertEqual(all.count, 1)
@@ -78,6 +80,7 @@ final class KeychainAccountStoreTests: XCTestCase {
         XCTAssertEqual(loaded.refreshToken, "refresh-twitch-1") // preserved when nil passed
         XCTAssertEqual(loaded.username, "user-twitch-1")
         XCTAssertEqual(loaded.tokenExpiry.timeIntervalSince1970, newExpiry.timeIntervalSince1970, accuracy: 0.001)
+        XCTAssertEqual(loaded.authenticationContext, .device(clientID: "client-twitch-1"))
     }
 
     func testUpdateNickname() async throws {
@@ -88,6 +91,7 @@ final class KeychainAccountStoreTests: XCTestCase {
         let loadedOpt = try await store.loadAccount(twitchUserId: "twitch-1")
         let loaded = try XCTUnwrap(loadedOpt)
         XCTAssertEqual(loaded.nickname, "Boss")
+        XCTAssertEqual(loaded.authenticationContext, .device(clientID: "client-twitch-1"))
     }
 
     func testOperatorExclusivity() async throws {
@@ -111,6 +115,8 @@ final class KeychainAccountStoreTests: XCTestCase {
         let a2After = try XCTUnwrap(a2AfterOpt)
         XCTAssertFalse(a1After.isOperator)
         XCTAssertTrue(a2After.isOperator)
+        XCTAssertEqual(a1After.authenticationContext, .device(clientID: "client-twitch-1"))
+        XCTAssertEqual(a2After.authenticationContext, .device(clientID: "client-twitch-2"))
     }
 
     func testDeleteAccount() async throws {

@@ -58,8 +58,10 @@ public actor TwitchAuthService {
 
     /// The client ID an account's token was issued to. Refresh and revocation must present
     /// that client, not whichever one this service signs new accounts in with.
-    private func issuingClientId(for accountId: String) -> String {
-        AccountClientRegistry.shared.clientId(for: accountId) ?? clientId
+    private func issuingClientId(for account: Account) -> String {
+        account.authenticationContext?.clientID
+            ?? AccountClientRegistry.shared.clientId(for: account.id)
+            ?? clientId
     }
 
     // MARK: - Device Code Flow
@@ -226,19 +228,21 @@ public actor TwitchAuthService {
         let expirySeconds = tokenResponse.expiresIn > 0
             ? TimeInterval(tokenResponse.expiresIn)
             : 30 * 24 * 3600
+        let issuedClientID = userInfo.clientId.isEmpty ? clientId : userInfo.clientId
         let account = Account(
             id: userInfo.userId,
             username: userInfo.login,
             accessToken: tokenResponse.accessToken,
             refreshToken: tokenResponse.refreshToken,
             tokenExpiry: Date().addingTimeInterval(expirySeconds),
-            scopes: tokenResponse.scope
+            scopes: tokenResponse.scope,
+            authenticationContext: .device(clientID: issuedClientID)
         )
 
         // Validation reports the client that actually issued the token, which is the one every
         // later request for this account has to present. The caller records it only after the
         // account itself has been saved successfully.
-        return (account, userInfo.clientId.isEmpty ? clientId : userInfo.clientId)
+        return (account, issuedClientID)
     }
 
     // MARK: - Token Refresh
@@ -290,8 +294,9 @@ public actor TwitchAuthService {
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
 
+        let issuedClientID = issuingClientId(for: account)
         let bodyParams = [
-            "client_id": issuingClientId(for: account.id),
+            "client_id": issuedClientID,
             "refresh_token": account.refreshToken,
             "grant_type": "refresh_token"
         ]
@@ -330,10 +335,15 @@ public actor TwitchAuthService {
             accessToken: tokenResponse.accessToken,
             refreshToken: tokenResponse.refreshToken,
             tokenExpiry: Date().addingTimeInterval(TimeInterval(tokenResponse.expiresIn)),
-            scopes: tokenResponse.scope
+            scopes: tokenResponse.scope,
+            isOperator: account.isOperator,
+            authenticationContext: account.authenticationContext ?? .device(clientID: issuedClientID)
         )
 
         try await tokenStore.save(account: refreshedAccount)
+        if account.authenticationContext == nil {
+            AccountClientRegistry.shared.record(issuedClientID, for: account.id)
+        }
         self.currentAccount = refreshedAccount
         
         onTokenRefresh?(refreshedAccount.accessToken)
@@ -389,6 +399,7 @@ public actor TwitchAuthService {
         lifetime: TimeInterval,
         scopes: [String]? = nil
     ) async -> String {
+        let issuedClientID = issuingClientId(for: account)
         let renewed = Account(
             id: account.id,
             username: account.username,
@@ -397,11 +408,16 @@ public actor TwitchAuthService {
             accessToken: account.accessToken,
             refreshToken: account.refreshToken,
             tokenExpiry: Date().addingTimeInterval(lifetime),
-            scopes: scopes ?? account.scopes
+            scopes: scopes ?? account.scopes,
+            isOperator: account.isOperator,
+            authenticationContext: account.authenticationContext ?? .device(clientID: issuedClientID)
         )
 
         do {
             try await tokenStore.save(account: renewed)
+            if account.authenticationContext == nil {
+                AccountClientRegistry.shared.record(issuedClientID, for: account.id)
+            }
         } catch {
             // The token itself is fine, so the caller must still get it — failing the request
             // here would take a working account offline over a storage fault. But the re-arm only
@@ -470,7 +486,8 @@ public actor TwitchAuthService {
             refreshToken: account.refreshToken,
             tokenExpiry: account.tokenExpiry,
             scopes: account.scopes,
-            isOperator: existing.isOperator
+            isOperator: existing.isOperator,
+            authenticationContext: account.authenticationContext ?? existing.authenticationContext
         )
     }
 
@@ -529,7 +546,7 @@ public actor TwitchAuthService {
         guard let account = try await tokenStore.loadAccount(twitchUserId: accountId) else { return }
         var components = URLComponents(url: revokeURL, resolvingAgainstBaseURL: false)!
         components.queryItems = [
-            URLQueryItem(name: "client_id", value: issuingClientId(for: account.id)),
+            URLQueryItem(name: "client_id", value: issuingClientId(for: account)),
             URLQueryItem(name: "token", value: account.accessToken)
         ]
         guard let url = components.url else { return }

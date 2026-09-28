@@ -48,7 +48,8 @@ public actor KeychainAccountStore: TokenStore {
             refreshToken: refreshToken ?? existing.refreshToken,
             tokenExpiry: expiry,
             scopes: existing.scopes,
-            isOperator: existing.isOperator
+            isOperator: existing.isOperator,
+            authenticationContext: existing.authenticationContext
         ))
     }
 
@@ -63,7 +64,8 @@ public actor KeychainAccountStore: TokenStore {
             refreshToken: existing.refreshToken,
             tokenExpiry: existing.tokenExpiry,
             scopes: existing.scopes,
-            isOperator: existing.isOperator
+            isOperator: existing.isOperator,
+            authenticationContext: existing.authenticationContext
         ))
     }
 
@@ -174,7 +176,8 @@ private extension Account {
             refreshToken: refreshToken,
             tokenExpiry: tokenExpiry,
             scopes: scopes,
-            isOperator: value
+            isOperator: value,
+            authenticationContext: authenticationContext
         )
     }
 }
