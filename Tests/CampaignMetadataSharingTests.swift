@@ -71,6 +71,144 @@ final class CampaignMetadataSharingTests: XCTestCase {
         XCTAssertEqual(shared.allowIsEnabled, true)
     }
 
+    func testOperatorCatalogScrubsViewerStateAndExpires() async throws {
+        let cache = SharedTwitchLookupCache.shared
+        await cache.removeCampaignCatalog()
+
+        let publishedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        await cache.storeCampaignCatalog(
+            [campaign(connected: true, prioritised: true, claimed: true, minutes: 42)],
+            sourceAccountID: "operator-account",
+            ttl: 15 * 60,
+            now: publishedAt
+        )
+
+        let storedSnapshot = await cache.campaignCatalogSnapshot(
+            now: publishedAt.addingTimeInterval(60)
+        )
+        let snapshot = try XCTUnwrap(storedSnapshot)
+        XCTAssertEqual(snapshot.sourceAccountID, "operator-account")
+        XCTAssertEqual(snapshot.publishedAt, publishedAt)
+        XCTAssertEqual(snapshot.campaigns.count, 1)
+        XCTAssertFalse(snapshot.campaigns[0].isAccountConnected)
+        XCTAssertFalse(snapshot.campaigns[0].isPrioritised)
+        XCTAssertFalse(snapshot.campaigns[0].drops[0].isClaimed)
+        XCTAssertNil(snapshot.campaigns[0].drops[0].progress)
+        let expiredSnapshot = await cache.campaignCatalogSnapshot(
+            now: publishedAt.addingTimeInterval(15 * 60 + 1)
+        )
+        XCTAssertNil(expiredSnapshot)
+
+        await cache.removeCampaignCatalog()
+    }
+
+    func testSharedCatalogueKeepsRichOperatorDefinitionAndAddsLocalOnlyCampaigns() {
+        let rich = campaign(connected: false)
+        let limitedCopy = Campaign(
+            id: rich.id,
+            name: rich.name,
+            game: rich.game,
+            status: rich.status,
+            startDate: rich.startDate,
+            endDate: rich.endDate,
+            drops: [],
+            channels: [],
+            isAccountConnected: false
+        )
+        let localOnly = Campaign(
+            id: "local-only",
+            name: "Regional campaign",
+            game: Game(id: "2", name: "Regional Game"),
+            startDate: rich.startDate,
+            endDate: rich.endDate.addingTimeInterval(60),
+            drops: [drop(id: "regional", claimed: false, minutes: nil)],
+            channels: [],
+            isAccountConnected: false
+        )
+
+        let merged = TwitchAPIClient.mergingSharedCampaignCatalog(
+            [rich],
+            withLocalCampaigns: [limitedCopy, localOnly]
+        )
+
+        XCTAssertEqual(Set(merged.map(\.id)), ["campaign", "local-only"])
+        XCTAssertEqual(
+            merged.first(where: { $0.id == "campaign" })?.drops.map(\.id),
+            ["a"],
+            "the TV-channel shell must not replace the operator's complete drop definition"
+        )
+    }
+
+    func testTVClientReadsSharedOperatorCatalogueWithoutMakingANetworkRequest() async throws {
+        let cache = SharedTwitchLookupCache.shared
+        await cache.removeCampaignCatalog()
+        let accountID = "shared-catalog-tv-account"
+        AccountClientRegistry.shared.record(TwitchClientIDs.tv, for: accountID)
+        defer { AccountClientRegistry.shared.remove(accountId: accountID) }
+
+        await cache.storeCampaignCatalog(
+            [campaign(connected: true, claimed: true, minutes: 59)],
+            sourceAccountID: "operator-account",
+            ttl: 15 * 60
+        )
+
+        let client = TwitchAPIClient(
+            authService: TwitchAuthService(clientId: TwitchClientIDs.tv, tokenStore: InMemoryTokenStore()),
+            clientId: TwitchClientIDs.tv,
+            persistsCampaignCaches: false
+        )
+        await client.setAccountId(accountID)
+
+        let fetched = try await client.fetchDropCampaigns()
+
+        XCTAssertEqual(fetched.map(\.id), ["campaign"])
+        XCTAssertFalse(fetched[0].isAccountConnected)
+        XCTAssertFalse(fetched[0].drops[0].isClaimed)
+        XCTAssertNil(fetched[0].drops[0].progress)
+        let awaitingLinkState = await client.campaignIDsAwaitingLinkState()
+        XCTAssertEqual(awaitingLinkState, ["campaign"])
+
+        await cache.removeCampaignCatalog()
+    }
+
+    func testOnlyDashboardCapableOperatorPublishesSharedCatalogue() async throws {
+        let cache = SharedTwitchLookupCache.shared
+        await cache.removeCampaignCatalog()
+
+        let provider = TwitchAPIClient(
+            authService: TwitchAuthService(clientId: TwitchClientIDs.android, tokenStore: InMemoryTokenStore()),
+            clientId: TwitchClientIDs.android,
+            persistsCampaignCaches: false
+        )
+        await provider.setAccountId("operator-account")
+        await provider.setSharedCampaignCatalogProvider(true)
+        await provider.publishSharedCampaignCatalogIfProvider([campaign(connected: true)])
+        let published = await cache.campaignCatalogSnapshot()
+        XCTAssertNotNil(published)
+
+        await cache.removeCampaignCatalog()
+        await provider.setSharedCampaignCatalogProvider(false)
+        await provider.publishSharedCampaignCatalogIfProvider([campaign(connected: true)])
+        let disabled = await cache.campaignCatalogSnapshot()
+        XCTAssertNil(disabled)
+
+        let tvAccountID = "tv-operator-account"
+        AccountClientRegistry.shared.record(TwitchClientIDs.tv, for: tvAccountID)
+        let tvProvider = TwitchAPIClient(
+            authService: TwitchAuthService(clientId: TwitchClientIDs.tv, tokenStore: InMemoryTokenStore()),
+            clientId: TwitchClientIDs.tv,
+            persistsCampaignCaches: false
+        )
+        await tvProvider.setAccountId(tvAccountID)
+        await tvProvider.setSharedCampaignCatalogProvider(true)
+        await tvProvider.publishSharedCampaignCatalogIfProvider([campaign(connected: true)])
+        let tvPublished = await cache.campaignCatalogSnapshot()
+        XCTAssertNil(tvPublished)
+
+        AccountClientRegistry.shared.remove(accountId: tvAccountID)
+        await cache.removeCampaignCatalog()
+    }
+
     /// The reason the shared path was previously restricted to already-linked campaigns:
     /// a linked account whose dashboard entry does not say so must not be served a copy
     /// that reports it unlinked.

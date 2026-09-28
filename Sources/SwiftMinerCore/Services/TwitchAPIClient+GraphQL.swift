@@ -36,6 +36,9 @@ extension TwitchAPIClient {
     /// Drops projection ask for the same cold data at launch.
     private func fetchDropCampaignsUncoalesced() async throws -> [Campaign] {
         guard canReadDropsDashboard else {
+            if let shared = await campaignsFromSharedOperatorCatalog() {
+                return shared
+            }
             return try await discoverCampaignsFromLiveChannels()
         }
 
@@ -142,6 +145,59 @@ extension TwitchAPIClient {
         persistCampaignCachesIfNeeded()
         await traceGQLDebug { "[TwitchAPIClient] fetchDropCampaigns: \(campaigns.count) parsed successfully" }
         return campaigns
+    }
+
+    /// Uses the operator's complete dashboard as a discovery map for a TV-session account.
+    /// The snapshot contains no operator state. Local campaigns already found for this viewer
+    /// remain in the union, while the richer operator definition wins for matching IDs; this
+    /// viewer's inventory is merged later by `CampaignService` and remains authoritative for
+    /// progress, claims and account linkage.
+    private func campaignsFromSharedOperatorCatalog() async -> [Campaign]? {
+        guard let snapshot = await SharedTwitchLookupCache.shared.campaignCatalogSnapshot(),
+              !snapshot.campaigns.isEmpty else { return nil }
+
+        let local = (discoveredCampaigns?.campaigns ?? [])
+            + (provisionalDiscoveredCampaigns?.campaigns ?? [])
+        let campaigns = Self.mergingSharedCampaignCatalog(
+            snapshot.campaigns,
+            withLocalCampaigns: local
+        )
+        discoveredCampaignIDs.formUnion(campaigns.map(\.id))
+        Logger.campaigns.info(
+            "Using operator campaign catalogue: \(snapshot.campaigns.count) shared, \(local.count) locally discovered"
+        )
+        return campaigns
+    }
+
+    /// Called after `DropsService` has merged the operator's own inventory and preserved any
+    /// still-active campaign omitted by one Twitch response. Publishing at that boundary keeps
+    /// a transient partial dashboard/detail response from replacing a known-good shared map.
+    func publishSharedCampaignCatalogIfProvider(_ campaigns: [Campaign]) async {
+        guard publishesSharedCampaignCatalog, canReadDropsDashboard, let accountId else { return }
+        await SharedTwitchLookupCache.shared.storeCampaignCatalog(
+            campaigns,
+            sourceAccountID: accountId,
+            ttl: sharedCampaignCatalogTTL
+        )
+        Logger.campaigns.info(
+            "Operator campaign catalogue published \(campaigns.count) campaign(s) for limited-session miners"
+        )
+    }
+
+    nonisolated static func mergingSharedCampaignCatalog(
+        _ shared: [Campaign],
+        withLocalCampaigns local: [Campaign]
+    ) -> [Campaign] {
+        var byID = Dictionary(
+            uniqueKeysWithValues: CampaignMergeEngine.deduplicatedByID(shared).map { ($0.id, $0) }
+        )
+        for campaign in local where byID[campaign.id] == nil {
+            byID[campaign.id] = campaign
+        }
+        return byID.values.sorted {
+            if $0.endDate != $1.endDate { return $0.endDate < $1.endDate }
+            return $0.id < $1.id
+        }
     }
 
     /// Restores the campaign-details and link-state caches from disk on first use.
@@ -768,15 +824,6 @@ extension TwitchAPIClient {
             await traceGQLDebug { "[TwitchAPIClient] AvailableDrops cache hit for channel \(channelId)" }
             return cached.campaignIds
         }
-        if let shared = await SharedTwitchLookupCache.shared.availableDrops(for: cacheKey, now: now) {
-            availableDropsByChannel[cacheKey] = AvailableDropsCacheEntry(
-                campaignIds: shared,
-                expiresAt: now.addingTimeInterval(availableDropsCacheTTL)
-            )
-            await traceGQLDebug { "[TwitchAPIClient] AvailableDrops shared cache hit for channel \(channelId)" }
-            return shared
-        }
-
         let request = graphQLRequest(
             for: .dropsHighlightServiceAvailableDrops,
             variables: ["channelID": channelId]
@@ -800,11 +847,6 @@ extension TwitchAPIClient {
         availableDropsByChannel[cacheKey] = AvailableDropsCacheEntry(
             campaignIds: campaignIds,
             expiresAt: Date().addingTimeInterval(availableDropsCacheTTL)
-        )
-        await SharedTwitchLookupCache.shared.storeAvailableDrops(
-            campaignIds,
-            key: cacheKey,
-            ttl: availableDropsCacheTTL
         )
         return campaignIds
     }

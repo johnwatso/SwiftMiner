@@ -73,6 +73,7 @@ public actor DropsService {
                     remembered: remembered,
                     inventory: snapshot
                 )
+                await apiClient.publishSharedCampaignCatalogIfProvider(preservation.campaigns)
                 return CampaignRefreshResult(
                     campaigns: preservation.campaigns,
                     preservedIDs: preservation.preservedIDs
