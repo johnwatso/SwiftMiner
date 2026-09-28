@@ -59,7 +59,9 @@ public enum TwitchMinerError: LocalizedError {
             // recognises; keep it stable. The advice after it names the fix available now.
             return "Twitch compatibility update required for \(operation). Choose Update via Safari in Settings → Advanced, or update SwiftMiner."
         case .integrityRejected(let operation):
-            return "Twitch rejected this account's security check for \(operation). SwiftMiner renews it automatically; if this continues, reconnect the account in Settings → Accounts."
+            // "Twitch rejected this account's security check" is what `MinerAttention`
+            // recognises; keep it stable.
+            return "Twitch rejected this account's security check for \(operation). SwiftMiner is renewing it automatically. If this miner stays blocked for more than a few minutes, choose Reconnect Twitch and sign in on the Twitch page again."
         case .claimFailed(let message):
             return "Claim failed: \(message)"
         case .keychainError(let message):

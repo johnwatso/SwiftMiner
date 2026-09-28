@@ -327,6 +327,18 @@ struct MinerAttentionIssue: Equatable {
                     action: .restart
                 )
             }
+            if let latestError,
+               latestError.localizedCaseInsensitiveContains("Twitch rejected this account's security check") {
+                // Twitch refused the browser session's integrity proof. Restarting cannot
+                // help — the same session is reused — so name what can: the automatic
+                // renewal, and signing in again when that renewal cannot recover it.
+                return MinerAttentionIssue(
+                    title: "Twitch needs to re-check this sign-in",
+                    detail: "Twitch stopped accepting the security check for this account's browser sign-in, so SwiftMiner can't read the Drops campaign list. It is renewing the check automatically, which usually takes under a minute.",
+                    recommendation: "No action is needed if this clears by itself. If it is still here after a few minutes, choose Reconnect Twitch and sign in on the Twitch page again. The account's progress is kept.",
+                    action: .reconnect
+                )
+            }
             return MinerAttentionIssue(
                 title: "The mining worker stopped",
                 detail: latestError ?? "SwiftMiner stopped this worker after an unexpected mining error.",
