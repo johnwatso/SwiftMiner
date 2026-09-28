@@ -17,6 +17,10 @@ public enum TwitchMinerError: LocalizedError {
     /// Twitch's private web API no longer recognises a persisted query or has
     /// changed the response shape SwiftMiner depends on.
     case twitchAPICompatibility(operation: String, reason: String)
+    /// Twitch refused the request's `Client-Integrity` proof. The query itself is fine: this
+    /// is a session problem that renewing the integrity token repairs, and must never be
+    /// treated as a retired persisted query.
+    case integrityRejected(operation: String)
     case claimFailed(String)
     case keychainError(String)
     case rateLimited(retryAfter: TimeInterval)
@@ -54,6 +58,8 @@ public enum TwitchMinerError: LocalizedError {
             // The "Twitch compatibility update required" prefix is what `MinerAttention`
             // recognises; keep it stable. The advice after it names the fix available now.
             return "Twitch compatibility update required for \(operation). Choose Update via Safari in Settings → Advanced, or update SwiftMiner."
+        case .integrityRejected(let operation):
+            return "Twitch rejected this account's security check for \(operation). SwiftMiner renews it automatically; if this continues, reconnect the account in Settings → Accounts."
         case .claimFailed(let message):
             return "Claim failed: \(message)"
         case .keychainError(let message):

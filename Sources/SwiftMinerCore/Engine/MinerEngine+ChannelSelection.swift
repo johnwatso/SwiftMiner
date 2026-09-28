@@ -68,7 +68,12 @@ extension MinerEngine {
             }
 
             guard campaign.canAttemptMining else {
-                if !campaign.subscriptionRequiredDrops.isEmpty && campaign.eligibleDrops.isEmpty {
+                // Named apart from "no eligible drops": a campaign this account has already
+                // earned in full is finished, not broken, and a log review must be able to
+                // tell the two apart without reading the account's inventory.
+                if !campaign.drops.isEmpty && campaign.drops.allSatisfy(\.isClaimed) {
+                    filteredOutReasons["already_claimed", default: 0] += 1
+                } else if !campaign.subscriptionRequiredDrops.isEmpty && campaign.eligibleDrops.isEmpty {
                     filteredOutReasons["subscription_required", default: 0] += 1
                 } else {
                     filteredOutReasons["no_eligible_drops", default: 0] += 1

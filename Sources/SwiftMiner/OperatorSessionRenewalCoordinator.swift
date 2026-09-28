@@ -53,10 +53,18 @@ final class OperatorSessionRenewalCoordinator {
         }
     }
 
+    /// A rejected token asks for renewal from every request that carried it; one forced
+    /// renewal per window is enough.
+    static let rejectionRenewalInterval: TimeInterval = 2 * 60
+
     private weak var minerManager: MinerManager?
     private let issuer: any TwitchBrowserIntegrityIssuing
     private let validator: any TwitchBrowserIntegrityValidating
     private var loopTask: Task<Void, Never>?
+    private var rejectionObserver: NSObjectProtocol?
+    private var lastRejectionRenewalAt: Date?
+    /// Scheduled and rejection-driven renewals share the one WebKit issuer, so only one runs.
+    private var isRenewing = false
 
     init(
         minerManager: MinerManager,
@@ -71,6 +79,16 @@ final class OperatorSessionRenewalCoordinator {
     func start() {
         guard loopTask == nil else { return }
         loopTask = makeLoopTask()
+        rejectionObserver = NotificationCenter.default.addObserver(
+            forName: TwitchAPIClient.integrityRejectedNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            let accountId = notification.userInfo?["accountId"] as? String
+            Task { @MainActor [weak self] in
+                await self?.integrityWasRejected(accountId: accountId)
+            }
+        }
     }
 
     /// Re-evaluate immediately after an account is added, removed, or manually reconnected.
@@ -82,6 +100,29 @@ final class OperatorSessionRenewalCoordinator {
     func stop() {
         loopTask?.cancel()
         loopTask = nil
+        if let rejectionObserver {
+            NotificationCenter.default.removeObserver(rejectionObserver)
+        }
+        rejectionObserver = nil
+    }
+
+    /// Twitch refused the Operator's current integrity token before its scheduled renewal.
+    /// Waiting for the schedule left the Operator unable to read the Drops dashboard for
+    /// hours, so renew now — at most once per ``rejectionRenewalInterval``.
+    func integrityWasRejected(accountId: String?, now: Date = Date()) async {
+        guard let operatorMiner = browserOperatorMiner(),
+              accountId == nil || accountId == operatorMiner.accountId else { return }
+        if let lastRejectionRenewalAt,
+           now.timeIntervalSince(lastRejectionRenewalAt) < Self.rejectionRenewalInterval {
+            return
+        }
+        lastRejectionRenewalAt = now
+        do {
+            // A successful renewal logs itself; a non-browser Operator has nothing to renew.
+            _ = try await renewNowIfNeeded(force: true)
+        } catch {
+            logToOperator("[Operator session] Twitch rejected the browser security check and renewing it failed: \(error.localizedDescription). Retrying automatically.")
+        }
     }
 
     @discardableResult
@@ -103,6 +144,11 @@ final class OperatorSessionRenewalCoordinator {
         let renewalDate = OperatorSessionRenewalSchedule.renewalDate(for: browser)
         guard force || renewalDate <= now else { return .notDue(renewalDate) }
         guard browser.generation < Int.max else { throw RenewalError.invalidGeneration }
+        // A renewal already in flight will apply a newer generation; this one would only be
+        // superseded by it.
+        guard !isRenewing else { return .superseded }
+        isRenewing = true
+        defer { isRenewing = false }
 
         let issuance = try await issuer.issue(
             oauthToken: account.accessToken,
@@ -183,7 +229,21 @@ final class OperatorSessionRenewalCoordinator {
         Logger.auth.info(
             "Rotated Operator browser integrity seed to generation \(renewedBrowser.generation); next integrity expiry is \(renewedBrowser.expiresAt)"
         )
+        logToOperator(
+            "[Operator session] Renewed browser security check (generation \(renewedBrowser.generation)); valid until \(renewedBrowser.expiresAt.formatted(date: .omitted, time: .shortened))"
+        )
         return .renewed(generation: renewedBrowser.generation)
+    }
+
+    private func browserOperatorMiner() -> MinerManager.ManagedMiner? {
+        minerManager?.miners.first { $0.isOperator }
+    }
+
+    /// Renewal runs outside the engine, so without this its outcome reached only the Xcode
+    /// console and an overnight failure left nothing in the Operator's Activity Log.
+    private func logToOperator(_ message: String) {
+        guard let minerManager, let miner = browserOperatorMiner() else { return }
+        minerManager.onLogMessage?(miner.id, message)
     }
 
     private func makeLoopTask() -> Task<Void, Never> {
@@ -203,6 +263,9 @@ final class OperatorSessionRenewalCoordinator {
                     delay = min(30 * 60, 60 * pow(2, Double(min(failureCount - 1, 5))))
                     Logger.auth.error(
                         "Operator browser seed rotation failed; retrying in \(Int(delay))s: \(error.localizedDescription)"
+                    )
+                    logToOperator(
+                        "[Operator session] Renewal failed (attempt \(failureCount)): \(error.localizedDescription). Retrying in \(Int(delay / 60)) min."
                     )
                 }
 

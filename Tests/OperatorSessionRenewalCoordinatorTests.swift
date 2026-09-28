@@ -102,6 +102,75 @@ final class OperatorSessionRenewalCoordinatorTests: XCTestCase {
         XCTAssertEqual(stored?.accessToken, account.accessToken)
     }
 
+    func testIntegrityRejectionRenewsImmediatelyOncePerWindow() async throws {
+        let now = Date()
+        // Not due for another hour on schedule; the rejection is what forces it.
+        let browser = makeBrowser(
+            now: now,
+            integrityExpiry: now.addingTimeInterval(3_600),
+            cookieExpiry: now.addingTimeInterval(7_200)
+        )
+        let account = makeAccount(browser: browser)
+        let store = InMemoryTokenStore(accounts: [account])
+        let manager = MinerManager(clientId: "test", tokenStore: store)
+        manager.miners = [MinerManager.ManagedMiner(
+            id: "operator-miner",
+            accountId: account.id,
+            username: account.username,
+            status: .idle,
+            isRunning: true,
+            isOperator: true
+        )]
+        let logged = OperatorLogRecorder()
+        manager.onLogMessage = { _, message in logged.append(message) }
+        let issuer = StubBrowserIntegrityIssuer(issuance: makeIssuance(now: now))
+        let coordinator = OperatorSessionRenewalCoordinator(
+            minerManager: manager,
+            issuer: issuer,
+            validator: StubBrowserIntegrityValidator()
+        )
+
+        await coordinator.integrityWasRejected(accountId: account.id, now: now)
+        // Every request that carried the refused token reports it; one renewal is enough.
+        await coordinator.integrityWasRejected(accountId: account.id, now: now.addingTimeInterval(30))
+
+        XCTAssertEqual(issuer.callCount, 1)
+        let stored = await store.loadAccount(twitchUserId: account.id)
+        guard case .browser(let renewed) = stored?.authenticationContext else {
+            return XCTFail("Expected browser context")
+        }
+        XCTAssertEqual(renewed.generation, 2)
+        XCTAssertTrue(logged.messages.contains { $0.contains("Renewed browser security check") })
+    }
+
+    func testIntegrityRejectionForAnotherAccountLeavesTheOperatorAlone() async throws {
+        let now = Date()
+        let account = makeAccount(browser: makeBrowser(
+            now: now,
+            integrityExpiry: now.addingTimeInterval(3_600),
+            cookieExpiry: now.addingTimeInterval(7_200)
+        ))
+        let manager = MinerManager(clientId: "test", tokenStore: InMemoryTokenStore(accounts: [account]))
+        manager.miners = [MinerManager.ManagedMiner(
+            id: "operator-miner",
+            accountId: account.id,
+            username: account.username,
+            status: .idle,
+            isRunning: true,
+            isOperator: true
+        )]
+        let issuer = StubBrowserIntegrityIssuer(issuance: makeIssuance(now: now))
+        let coordinator = OperatorSessionRenewalCoordinator(
+            minerManager: manager,
+            issuer: issuer,
+            validator: StubBrowserIntegrityValidator()
+        )
+
+        await coordinator.integrityWasRejected(accountId: "someone-else", now: now)
+
+        XCTAssertEqual(issuer.callCount, 0)
+    }
+
     func testRenewalRejectsACookieThatDidNotAdvance() async throws {
         let now = Date()
         let originalBrowser = makeBrowser(
@@ -381,6 +450,23 @@ private final class StubBrowserIntegrityValidator: TwitchBrowserIntegrityValidat
     ) async throws {
         callCount += 1
         if let error { throw error }
+    }
+}
+
+private final class OperatorLogRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String] = []
+
+    func append(_ value: String) {
+        lock.lock()
+        values.append(value)
+        lock.unlock()
+    }
+
+    var messages: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return values
     }
 }
 

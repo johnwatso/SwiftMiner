@@ -69,6 +69,37 @@ final class CampaignSelectLoggingTests: XCTestCase {
 
         XCTAssertEqual(recorder.lines().filter { $0.contains("[CampaignSelect]") }.count, 1)
     }
+
+    /// A campaign the account has already earned in full is finished, not broken. It was
+    /// tallied as `no_eligible_drops`, which read as a data fault in a log review of two
+    /// mined-out priority campaigns.
+    func testFullyClaimedCampaignIsTalliedAsAlreadyClaimed() async {
+        let engine = MinerEngine(clientId: "test")
+        let recorder = LogRecorder()
+        await engine.setLogMessageHandler { message in recorder.append(message) }
+        let earned = Campaign(
+            id: "earned",
+            name: "Earned Drops",
+            game: Game(id: "g-earned", name: "Rust"),
+            status: .active,
+            startDate: Date().addingTimeInterval(-3600),
+            endDate: Date().addingTimeInterval(3600),
+            drops: [Drop(id: "d-earned", name: "Earned", requiredMinutes: 60, isClaimed: true)],
+            isAccountConnected: true
+        )
+
+        let candidates = await engine.candidateCampaigns(
+            from: [earned],
+            priorityGames: ["Rust"],
+            excludedGames: [],
+            strategy: .mineAll
+        )
+
+        XCTAssertTrue(candidates.isEmpty)
+        let summary = recorder.lines().first { $0.contains("[CampaignSelect]") } ?? ""
+        XCTAssertTrue(summary.contains("already_claimed=1"), summary)
+        XCTAssertFalse(summary.contains("no_eligible_drops"), summary)
+    }
 }
 
 /// The engine's log handler is `@Sendable` and called from the actor, so collected lines need
