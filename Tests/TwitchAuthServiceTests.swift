@@ -555,6 +555,26 @@ final class AccountClientIDTests: XCTestCase {
         try await super.tearDown()
     }
 
+    func testLegacyAndroidSignInIsDetectedFromRecordedOrDefaultClient() {
+        let androidDefaultManager = MinerManager(clientId: TwitchClientIDs.android)
+
+        // Saved before the registry existed: the manager's Android default issued it.
+        XCTAssertTrue(androidDefaultManager.usesLegacyAndroidSignIn(accountId: accountId))
+
+        AccountClientRegistry.shared.record(TwitchClientIDs.android, for: accountId)
+        XCTAssertTrue(androidDefaultManager.usesLegacyAndroidSignIn(accountId: accountId))
+
+        AccountClientRegistry.shared.record(TwitchClientIDs.tv, for: accountId)
+        XCTAssertFalse(androidDefaultManager.usesLegacyAndroidSignIn(accountId: accountId))
+
+        AccountClientRegistry.shared.record(TwitchClientIDs.web, for: accountId)
+        XCTAssertFalse(androidDefaultManager.usesLegacyAndroidSignIn(accountId: accountId))
+
+        // A custom default client is not the Android app.
+        AccountClientRegistry.shared.remove(accountId: accountId)
+        XCTAssertFalse(MinerManager(clientId: "custom").usesLegacyAndroidSignIn(accountId: accountId))
+    }
+
     func testSignInRecordsTheClientTwitchSaysIssuedTheToken() async throws {
         MockURLProtocol.requestHandler = { [accountId] request in
             let ok = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!

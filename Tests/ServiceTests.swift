@@ -445,6 +445,36 @@ final class ServiceTests: XCTestCase {
         XCTAssertEqual(MockURLProtocol.lastRequest?.url?.path, "/helix/users")
     }
 
+    func testPublicProfileImageLookupSendsNoCredentials() async throws {
+        await apiClient.updateAccessToken("secret-token")
+        MockURLProtocol.stubResponseData = Data("""
+        {"data":{"user":{"id":"12345","profileImageURL":"https://static-cdn.jtvnw.net/jtv_user_pictures/abc-profile_image-300x300.png"}}}
+        """.utf8)
+
+        let url = try await apiClient.getPublicProfileImageURL(userId: "12345")
+
+        XCTAssertEqual(
+            url?.absoluteString,
+            "https://static-cdn.jtvnw.net/jtv_user_pictures/abc-profile_image-300x300.png"
+        )
+        let request = try XCTUnwrap(MockURLProtocol.lastRequest)
+        XCTAssertEqual(request.url?.host, "gql.twitch.tv")
+        XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+        XCTAssertNil(request.value(forHTTPHeaderField: "Client-Integrity"))
+        let body = try XCTUnwrap(request.httpBody.flatMap {
+            try JSONSerialization.jsonObject(with: $0) as? [String: Any]
+        })
+        XCTAssertEqual((body["variables"] as? [String: Any])?["id"] as? String, "12345")
+    }
+
+    func testPublicProfileImageLookupReturnsNilForUnknownUser() async throws {
+        MockURLProtocol.stubResponseData = Data(#"{"data":{"user":null}}"#.utf8)
+
+        let url = try await apiClient.getPublicProfileImageURL(userId: "999")
+
+        XCTAssertNil(url)
+    }
+
     func testFollowedChannelRankingUsesOnePaginatedLookup() async throws {
         let requestedPaths = StringRequestRecorder()
         MockURLProtocol.requestHandler = { request in

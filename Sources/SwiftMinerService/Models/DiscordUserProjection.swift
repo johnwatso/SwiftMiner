@@ -143,6 +143,10 @@ public struct DiscordUserProjection: Codable, Sendable {
         /// dashboard shows what the app shows. False when the service runs
         /// standalone, which leaves clients on the Twitch-first order.
         public let prefersDiscordProfileImage: Bool
+        /// True when the account's token was issued to Twitch's Android app. Twitch no longer
+        /// accepts that client for new sign-ins, so clients warn before removing such an
+        /// account. False when the service runs standalone, which has no issuing-client record.
+        public let usesLegacyAndroidSignIn: Bool
 
         public init(
             twitchAccountId: String,
@@ -150,7 +154,8 @@ public struct DiscordUserProjection: Codable, Sendable {
             nickname: String? = nil,
             profileImageURL: URL? = nil,
             discordProfileImageURL: URL? = nil,
-            prefersDiscordProfileImage: Bool = false
+            prefersDiscordProfileImage: Bool = false,
+            usesLegacyAndroidSignIn: Bool = false
         ) {
             self.twitchAccountId = twitchAccountId
             self.username = username
@@ -158,6 +163,7 @@ public struct DiscordUserProjection: Codable, Sendable {
             self.profileImageURL = profileImageURL
             self.discordProfileImageURL = discordProfileImageURL
             self.prefersDiscordProfileImage = prefersDiscordProfileImage
+            self.usesLegacyAndroidSignIn = usesLegacyAndroidSignIn
         }
     }
 

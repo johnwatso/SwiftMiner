@@ -109,6 +109,9 @@ public actor DiscordProjectionBuilder {
     /// nicknames are stored with the account in the app, not in SQLite, so a
     /// standalone service simply shows Twitch usernames.
     private let accountNickname: @Sendable (String) async -> String?
+    /// The app supplies whether each account holds an irreplaceable Android-app session.
+    /// Optional like the values above: the issuing client is recorded by the app.
+    private let usesLegacyAndroidSignIn: @Sendable (String) async -> Bool
 
     public init(
         manager: SQLiteManager,
@@ -116,7 +119,8 @@ public actor DiscordProjectionBuilder {
         twitchProfileImageURL: @escaping @Sendable (String) async -> URL? = { _ in nil },
         discordProfileImageURL: @escaping @Sendable (String) async -> URL? = { _ in nil },
         prefersDiscordProfileImage: @escaping @Sendable (String) async -> Bool = { _ in false },
-        accountNickname: @escaping @Sendable (String) async -> String? = { _ in nil }
+        accountNickname: @escaping @Sendable (String) async -> String? = { _ in nil },
+        usesLegacyAndroidSignIn: @escaping @Sendable (String) async -> Bool = { _ in false }
     ) {
         self.manager = manager
         self.stateProvider = stateProvider
@@ -124,6 +128,7 @@ public actor DiscordProjectionBuilder {
         self.discordProfileImageURL = discordProfileImageURL
         self.prefersDiscordProfileImage = prefersDiscordProfileImage
         self.accountNickname = accountNickname
+        self.usesLegacyAndroidSignIn = usesLegacyAndroidSignIn
     }
 
     /// Build a projection for the given Discord user ID.
@@ -260,7 +265,8 @@ public actor DiscordProjectionBuilder {
             nickname: await accountNickname(twitchId),
             profileImageURL: MinerAvatarURL.usable(await twitchProfileImageURL(twitchId)),
             discordProfileImageURL: discordProfileURL,
-            prefersDiscordProfileImage: await prefersDiscordProfileImage(twitchId)
+            prefersDiscordProfileImage: await prefersDiscordProfileImage(twitchId),
+            usesLegacyAndroidSignIn: await usesLegacyAndroidSignIn(twitchId)
         )
         // Issues / DM state are Discord-keyed; only present if the account is linked.
         let issues = ownerDiscordId != nil ? await fetchIssues(discordUserId: ownerDiscordId!) : []
@@ -357,7 +363,8 @@ public actor DiscordProjectionBuilder {
                 nickname: await accountNickname(record.twitchId),
                 profileImageURL: MinerAvatarURL.usable(await twitchProfileImageURL(record.twitchId)),
                 discordProfileImageURL: MinerAvatarURL.secure(await discordProfileImageURL(discordUserId)),
-                prefersDiscordProfileImage: await prefersDiscordProfileImage(record.twitchId)
+                prefersDiscordProfileImage: await prefersDiscordProfileImage(record.twitchId),
+                usesLegacyAndroidSignIn: await usesLegacyAndroidSignIn(record.twitchId)
             )
         } catch {
             return nil

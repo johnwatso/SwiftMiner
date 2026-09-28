@@ -974,6 +974,15 @@ public final class MinerManager {
     /// `nonisolated` so the background seed decode can read it.
     nonisolated private static let campaignSeedMaxAge: TimeInterval = 24 * 60 * 60
 
+    /// Whether this account's token was issued to Twitch's Android app. Twitch stopped
+    /// accepting that client for new sign-ins on 2026-09-18, so such a session cannot be
+    /// recreated: removing the account and adding it back yields a TV-client session that
+    /// cannot read the Drops dashboard. Accounts saved before the client registry existed
+    /// have no entry and were signed in with this manager's (Android) default client.
+    public func usesLegacyAndroidSignIn(accountId: String) -> Bool {
+        (AccountClientRegistry.shared.clientId(for: accountId) ?? clientId) == TwitchClientIDs.android
+    }
+
     /// Remove an account from management
     public func removeAccount(minerId: String) async {
         guard let miner = getMiner(id: minerId) else { return }
@@ -1107,8 +1116,23 @@ public final class MinerManager {
             await setupTask.value
         }
 
+        let apiClient = await engine.getAPIClient()
+
+        // The picture is public, so look it up without the account's credentials first.
+        // Helix `/users` needs a token Helix accepts for that client, which browser Operator
+        // and TV-client sessions do not reliably have.
+        if let accountId = miners.first(where: { $0.id == minerId })?.accountId {
+            do {
+                if let url = try await apiClient.getPublicProfileImageURL(userId: accountId) {
+                    return url
+                }
+            } catch {
+                Logger.engine.debug("Public Twitch profile picture lookup failed for miner \(minerId): \(error)")
+            }
+        }
+
         do {
-            let user = try await engine.getAPIClient().getCurrentUser()
+            let user = try await apiClient.getCurrentUser()
             return user.profileImageUrl
         } catch {
             Logger.engine.debug("Twitch profile picture lookup failed for miner \(minerId): \(error)")

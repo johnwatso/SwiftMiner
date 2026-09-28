@@ -26,7 +26,7 @@
 <body>
   <main>
     <h1>SwiftMiner 1.42.1</h1>
-    <p class="meta">Version 1.42.1 &middot; Build 2026092821</p>
+    <p class="meta">Version 1.42.1 &middot; Build 2026092823</p>
     <p class="intro">SwiftMiner 1.42.1 fixes adding Twitch accounts, which stopped working after a change on Twitch&rsquo;s side, along with updates for copies moved to Applications and several miner start-up glitches. Waiting miners also do less redundant work, and diagnostics now keep a full week of history.</p>
 
     <section>
@@ -39,6 +39,7 @@
         <li>Backing up settings and exporting diagnostics now use the standard macOS save dialog, which opens reliably.</li>
         <li>The web dashboard now reopens as a single window and comes to the front, whether it was closed, minimised or behind another window.</li>
         <li>Skipped Twitch test Drops are now logged once, not on every automatic claim check.</li>
+        <li>Profile pictures now load for every account, including the Operator and accounts signed in through Twitch&rsquo;s TV app. Pictures are read from Twitch&rsquo;s public profile data, so they no longer depend on each account&rsquo;s sign-in.</li>
       </ul>
     </section>
 
@@ -71,6 +72,7 @@
       <ul>
         <li>Claimed rewards take up less room on the Drops shelf. To see which miner earned a reward, use its info button or hover over the card.</li>
         <li>A miner waiting for a campaign that only runs on approved channels shows a small Limited badge on its Overview card.</li>
+        <li>Removing an account in Settings now asks you to confirm first. Accounts that signed in through Twitch&rsquo;s Android app get a stronger warning, in the app and on the web dashboard: Twitch has shut down that sign-in, so once removed they can only come back with the more limited TV app sign-in.</li>
         <li>The web dashboard can show completed Drops for priority games or for all games, and each browser remembers its own choice.</li>
       </ul>
     </section>

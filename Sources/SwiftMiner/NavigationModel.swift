@@ -183,6 +183,11 @@ public final class NavigationModel {
                 await MainActor.run {
                     self?.minerManager.miners.first { $0.accountId == accountId }?.nickname
                 }
+            },
+            usesLegacyAndroidSignIn: { [weak self] accountId in
+                await MainActor.run {
+                    self?.minerManager.usesLegacyAndroidSignIn(accountId: accountId) ?? false
+                }
             }
         )
         // This service starts the device sign-ins Discord invitations hand out, so it uses the

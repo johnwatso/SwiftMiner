@@ -619,7 +619,40 @@ public actor TwitchAPIClient {
 
         return user
     }
-    
+
+    /// Resolves a user's profile picture from Twitch's public GraphQL data.
+    ///
+    /// A profile picture is public, so this deliberately sends no OAuth token and no
+    /// integrity token. It therefore works for every sign-in surface — a browser Operator
+    /// between integrity renewals, TV-client accounts Helix does not serve, and a session
+    /// that has since expired — instead of depending on the account's own credentials.
+    /// Returns `nil` when Twitch does not know the user.
+    public func getPublicProfileImageURL(userId: String) async throws -> URL? {
+        guard !userId.isEmpty, let url = URL(string: gqlUrl) else { return nil }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue(clientId, forHTTPHeaderField: "Client-Id")
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue(clientOrigin, forHTTPHeaderField: "Origin")
+        request.setValue(clientOrigin, forHTTPHeaderField: "Referer")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "query": "query($id: ID!) { user(id: $id) { id profileImageURL(width: 300) } }",
+            "variables": ["id": userId],
+        ])
+
+        let data = try await performMeasuredRequest(request, operationName: "PublicProfileImage")
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let payload = json["data"] as? [String: Any],
+              let user = payload["user"] as? [String: Any],
+              let value = user["profileImageURL"] as? String,
+              !value.isEmpty else {
+            return nil
+        }
+        return URL(string: value)
+    }
+
     /// Get channel information
     public func getChannels(userIds: [String]) async throws -> [Channel] {
         guard !userIds.isEmpty else { return [] }
