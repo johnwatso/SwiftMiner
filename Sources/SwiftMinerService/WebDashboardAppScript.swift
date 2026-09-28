@@ -1450,7 +1450,19 @@ extension WebDashboardAssets {
       </section>`;
     }
 
+    function accountRemovalUsesLegacyAndroidSignIn() {
+      const id = String(accountRemovalAccountId || '');
+      const candidates = [PROJ, ...OPERATOR_MINERS];
+      const match = candidates.find(p => p && p.account && String(p.account.twitchAccountId) === id);
+      return !!(match && match.account.usesLegacyAndroidSignIn);
+    }
+
     function accountRemovalModal() {
+      // Twitch no longer accepts the Android app for new sign-ins, so this session cannot be
+      // recreated; say what re-adding the account would actually give.
+      const legacyWarning = accountRemovalUsesLegacyAndroidSignIn()
+        ? `<div class="savemsg err" role="note" style="margin:0 0 14px"><strong>This cannot be undone.</strong> This account uses Twitch's Android app sign-in, which Twitch has shut down for new sign-ins. Once removed, it cannot be added back this way. Signing in again gives a TV app sign-in, which cannot read the Drops dashboard and only finds campaigns that are live when it looks.</div>`
+        : '';
       return `<div class="modal-backdrop" id="accountremovalmodal">
         <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="accountremovaltitle" tabindex="-1">
           <div class="modal-header">
@@ -1459,6 +1471,7 @@ extension WebDashboardAssets {
               <div class="modal-subtitle">This stops mining, removes this account from SwiftMiner, and revokes its Twitch authorization. It does not delete your Twitch account.</div>
             </div>
           </div>
+          ${legacyWarning}
           <label class="muted" for="removalconfirmation" style="display:block;font-size:13px;margin:0 0 8px">Type <strong style="color:var(--text)">swiftminer</strong> to confirm.</label>
           <input id="removalconfirmation" autocomplete="off" autocapitalize="none" spellcheck="false" style="width:100%;font:15px inherit;font-family:inherit;color:var(--text);padding:11px 13px;border-radius:12px;background:var(--field);border:1px solid var(--field-stroke);outline:none" aria-describedby="removalerror">
           <div class="savemsg err" id="removalerror" role="alert"></div>

@@ -195,6 +195,9 @@ struct AccountSettingsAccountRow: View {
 
     @State private var nickname: String
     @State private var isRemoveHovered = false
+    @State private var isConfirmingRemoval = false
+    /// Resolved when the button is pressed, so the dialog cannot change wording mid-display.
+    @State private var removalIsIrreplaceable = false
     @State private var isRowHovered = false
     @FocusState private var isNicknameFocused: Bool
 
@@ -416,7 +419,10 @@ struct AccountSettingsAccountRow: View {
 
     private var removeButton: some View {
         Button {
-            Task { await navigation.minerManager.removeAccount(minerId: miner.id) }
+            // Android-app sessions cannot be recreated since Twitch stopped accepting that
+            // client for new sign-ins, so their removal carries a stronger warning.
+            removalIsIrreplaceable = navigation.minerManager.usesLegacyAndroidSignIn(accountId: miner.accountId)
+            isConfirmingRemoval = true
         } label: {
             Image(systemName: "trash")
                 .font(.system(size: 12, weight: .medium))
@@ -428,6 +434,28 @@ struct AccountSettingsAccountRow: View {
         .onHover { isRemoveHovered = $0 }
         .help("Remove account")
         .accessibilityLabel("Remove \(miner.username)")
+        .alert(
+            removalIsIrreplaceable
+                ? "Remove \(miner.username) permanently?"
+                : "Remove \(miner.username)?",
+            isPresented: $isConfirmingRemoval
+        ) {
+            Button(
+                removalIsIrreplaceable ? "Remove Permanently" : "Remove Account",
+                role: .destructive
+            ) { removeAccount() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if removalIsIrreplaceable {
+                Text("This account uses Twitch's Android app sign-in, which Twitch has shut down for new sign-ins. Once removed, it cannot be added back this way. Signing in again gives a TV app sign-in, which cannot read the Drops dashboard and only finds campaigns that are live when it looks.")
+            } else {
+                Text("Mining stops and SwiftMiner signs this account out of Twitch. You can add it again later.")
+            }
+        }
+    }
+
+    private func removeAccount() {
+        Task { await navigation.minerManager.removeAccount(minerId: miner.id) }
     }
 
     private func saveNickname() {

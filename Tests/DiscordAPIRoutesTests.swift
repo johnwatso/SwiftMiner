@@ -314,6 +314,21 @@ final class DiscordAPIRoutesTests: XCTestCase {
         XCTAssertEqual(nicknamedByTwitchId?.account?.nickname, "Living Room Mac")
         // The Twitch identity stays alongside it — the dashboard shows both.
         XCTAssertEqual(nicknamedByTwitchId?.account?.username, "linkedminer")
+
+        // A standalone service has no issuing-client record, so it never warns.
+        XCTAssertEqual(twitchProjection.account?.usesLegacyAndroidSignIn, false)
+
+        // With the app supplying it, both projection paths flag an Android-app session
+        // so the dashboard can warn before removing an account that cannot be re-added as-is.
+        let legacyBuilder = DiscordProjectionBuilder(
+            manager: harness.manager,
+            stateProvider: LinkedTwitchProjectionStateProvider(),
+            usesLegacyAndroidSignIn: { $0 == twitchAccountId }
+        )
+        let legacyByDiscordId = await legacyBuilder.buildProjection(discordUserId: discordUserId)
+        let legacyByTwitchId = await legacyBuilder.buildProjection(twitchId: twitchAccountId)
+        XCTAssertEqual(legacyByDiscordId?.account?.usesLegacyAndroidSignIn, true)
+        XCTAssertEqual(legacyByTwitchId?.account?.usesLegacyAndroidSignIn, true)
     }
 
     /// The activation row is what lets an in-flight link survive a service restart. Writing it
