@@ -14,6 +14,12 @@ actor SharedTwitchLookupCache {
         let loadedByCaller: Bool
     }
 
+    struct CampaignCatalogSnapshot: Sendable {
+        let campaigns: [Campaign]
+        let sourceAccountID: String
+        let publishedAt: Date
+    }
+
     private struct CampaignMetadataRefresh {
         let id: UUID
         let task: Task<Campaign, Error>
@@ -21,12 +27,11 @@ actor SharedTwitchLookupCache {
 
     private var campaignMetadataById: [String: Entry<Campaign>] = [:]
     private var campaignMetadataRefreshes: [String: CampaignMetadataRefresh] = [:]
-    private var availableDropsByChannel: [String: Entry<[String]>] = [:]
+    private var campaignCatalog: Entry<CampaignCatalogSnapshot>?
     private var liveChannelsByLookup: [String: Entry<[Channel]>] = [:]
     private var slugCandidatesByLookup: [String: Entry<[String]>] = [:]
 
     private let maxCampaignMetadataEntries = 600
-    private let maxAvailableDropsEntries = 600
     private let maxLiveChannelEntries = 200
     private let maxSlugCandidateEntries = 200
 
@@ -90,13 +95,34 @@ actor SharedTwitchLookupCache {
         campaignMetadataRefreshes.removeAll(keepingCapacity: true)
     }
 
-    func availableDrops(for key: String, now: Date = Date()) -> [String]? {
-        entryValue(from: availableDropsByChannel, key: key, now: now)
+    /// Publishes only campaign-global facts. The scrub happens here, rather than relying on
+    /// every caller to remember it, because this snapshot is deliberately read by other users'
+    /// miners. OAuth, progress, claims, account linkage and per-miner priority never enter it.
+    func storeCampaignCatalog(
+        _ campaigns: [Campaign],
+        sourceAccountID: String,
+        ttl: TimeInterval,
+        now: Date = Date()
+    ) {
+        guard !campaigns.isEmpty else { return }
+        let scrubbed = CampaignMergeEngine.deduplicatedByID(
+            campaigns.map(TwitchAPIClient.sharedCampaignMetadata(from:))
+        )
+        let snapshot = CampaignCatalogSnapshot(
+            campaigns: scrubbed,
+            sourceAccountID: sourceAccountID,
+            publishedAt: now
+        )
+        campaignCatalog = Entry(value: snapshot, expiresAt: now.addingTimeInterval(ttl))
     }
 
-    func storeAvailableDrops(_ campaignIds: [String], key: String, ttl: TimeInterval) {
-        prune(&availableDropsByChannel, maxEntries: maxAvailableDropsEntries)
-        availableDropsByChannel[key] = Entry(value: campaignIds, expiresAt: Date().addingTimeInterval(ttl))
+    func campaignCatalogSnapshot(now: Date = Date()) -> CampaignCatalogSnapshot? {
+        guard let campaignCatalog, campaignCatalog.expiresAt > now else { return nil }
+        return campaignCatalog.value
+    }
+
+    func removeCampaignCatalog() {
+        campaignCatalog = nil
     }
 
     func liveChannels(for key: String, now: Date = Date()) -> [Channel]? {
@@ -171,7 +197,10 @@ public actor TwitchAPIClient {
         TwitchClientIDs.origin(for: clientId)
     }
 
-    private var accountId: String?
+    var accountId: String?
+    /// Only the account explicitly designated as this host's operator may publish the shared
+    /// catalogue. A TV-session operator simply cannot publish; its normal fallback is unchanged.
+    var publishesSharedCampaignCatalog = false
 
     /// Prioritised games searched on live channels when this account cannot read the drops
     /// dashboard, and the last result of that search.
@@ -211,6 +240,10 @@ public actor TwitchAPIClient {
     public func setAccountId(_ accountId: String) {
         self.accountId = accountId
         userAgent = TwitchClientFingerprint.shared.userAgent(for: accountId)
+    }
+
+    public func setSharedCampaignCatalogProvider(_ enabled: Bool) {
+        publishesSharedCampaignCatalog = enabled
     }
 
     /// Cached integrity token and its expiry
@@ -350,6 +383,10 @@ public actor TwitchAPIClient {
     /// reuse it rather than re-fetching what the first account already has — the ordering
     /// link state < details < shared metadata is asserted by CampaignMetadataSharingTests.
     let sharedCampaignMetadataTTL: TimeInterval = 6 * 60 * 60
+    /// The catalogue determines which new campaigns a limited account can see, so it expires
+    /// soon after two normal five-minute refresh cycles. If the operator goes away, consumers
+    /// fall back to their own live-channel discovery rather than trusting stale availability.
+    let sharedCampaignCatalogTTL: TimeInterval = 15 * 60
     let availableDropsCacheTTL: TimeInterval = 60
     let liveChannelsCacheTTL: TimeInterval = 60
     private let slugCandidatesCacheTTL: TimeInterval = 30 * 60

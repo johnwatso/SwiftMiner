@@ -747,7 +747,11 @@ public final class MinerManager {
             // acquisition and PubSub handshake, so the launch cost is the sum of them.
             // Timed per miner to show what that sum is made of.
             let launchStartedAt = Date()
-            for miner in miners {
+            // The operator may supply the complete campaign catalogue for TV-session miners.
+            // Start it first so it gets the earliest chance to publish that map before the
+            // other accounts scan, reducing use of the slower live-channel fallback at launch.
+            let launchOrder = miners.filter(\.isOperator) + miners.filter { !$0.isOperator }
+            for miner in launchOrder {
                 let minerStartedAt = Date()
                 try? await startMiner(
                     minerId: miner.id,
@@ -1050,6 +1054,9 @@ public final class MinerManager {
             for idx in miners.indices {
                 if miners[idx].id != minerId && miners[idx].isOperator {
                     miners[idx].isOperator = false
+                    if let engine = engines[miners[idx].id] {
+                        await engine.setSharedCampaignCatalogProvider(false)
+                    }
                     do {
                         try await tokenStore.updateOperatorStatus(twitchUserId: miners[idx].accountId, isOperator: false)
                     } catch {
@@ -1063,6 +1070,12 @@ public final class MinerManager {
         }
         
         miners[index].isOperator = isOperator
+        if let engine = engines[minerId] {
+            await engine.setSharedCampaignCatalogProvider(isOperator)
+            if isOperator, miners[index].isRunning {
+                await engine.forceRefresh()
+            }
+        }
         do {
             try await tokenStore.updateOperatorStatus(twitchUserId: miners[index].accountId, isOperator: isOperator)
         } catch {
@@ -1338,7 +1351,8 @@ public final class MinerManager {
         self.failoverStreamers = failoverStreamers
         self.currentFailoverStreamers = failoverStreamers
         startAntiStallMonitorIfNeeded()
-        let notRunningMiners = miners.filter { !$0.isRunning }
+        let notRunning = miners.filter { !$0.isRunning }
+        let notRunningMiners = notRunning.filter(\.isOperator) + notRunning.filter { !$0.isOperator }
         let totalToStart = notRunningMiners.count
         
         for (index, miner) in notRunningMiners.enumerated() {

@@ -749,11 +749,18 @@ public actor MinerEngine {
         await authService.setCurrentAccount(account)
         await authService.setAccountId(account.id)
         await apiClient.setAccountId(account.id)
+        await apiClient.setSharedCampaignCatalogProvider(account.isOperator)
         await dropsService.setAccountId(account.id)
         await apiClient.updateAccessToken(account.accessToken)
         await apiClient.setUserLogin(account.username)
         await pubSubClient.updateAccessToken(account.accessToken)
         await watchSessionManager.setUserId(account.id)
+    }
+
+    /// Changes whether this account supplies the host-wide, scrubbed campaign catalogue.
+    /// Authentication and all viewer-specific mining state remain owned by each miner.
+    public func setSharedCampaignCatalogProvider(_ enabled: Bool) async {
+        await apiClient.setSharedCampaignCatalogProvider(enabled)
     }
 
     /// Starts the mining engine
