@@ -26,10 +26,21 @@ public actor SpadeBeaconService {
     /// `setAccountId(_:)` once the authenticated account is known, so all
     /// Spade traffic for a miner shares a fingerprint with its auth/API.
     private var userAgent = TwitchClientFingerprint.randomAndroidUserAgent()
+    private var browserUserAgent: String?
+
+    /// Keeps watch beacons on the same browser fingerprint as the OAuth and GQL session.
+    public func setAuthenticationContext(_ context: TwitchAuthenticationContext?) {
+        guard case .browser(let browser) = context else {
+            browserUserAgent = nil
+            return
+        }
+        browserUserAgent = browser.userAgent
+        userAgent = browser.userAgent
+    }
 
     /// Switches this service's UA to the sticky allocation for `accountId`.
     public func setAccountId(_ accountId: String) {
-        userAgent = TwitchClientFingerprint.shared.userAgent(for: accountId)
+        userAgent = browserUserAgent ?? TwitchClientFingerprint.shared.userAgent(for: accountId)
     }
 
     /// Cache: channel login → spade URL

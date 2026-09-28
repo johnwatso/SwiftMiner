@@ -2,15 +2,21 @@
 
 ## Status
 
-This work is experimental and is not exposed in SwiftMiner's interface yet. The first
-implementation slice defines the credential model, validates the helper payload, and owns
-short-lived one-time handoffs. It deliberately does not advertise a login method until
-server-side renewal and the native helper have passed live end-to-end testing.
+SwiftMiner now exposes the host-local half of this design for a fresh installation: its first
+account signs in on Twitch's website inside an app-owned persistent `WKWebView`, and becomes
+the full-access Operator only after SwiftMiner validates the Twitch identity, campaign
+dashboard, inventory, integrity token and scoped SDK cookie. The mining client reuses the
+captured integrity token and renews it from the SDK seed after expiry.
+
+The cross-platform remote-helper half remains experimental and is not exposed in the WebUI.
+Its implementation slice defines the credential model, validates helper payloads, and owns
+short-lived one-time handoffs, but does not advertise a remote browser login until the native
+helper and public WebUI path have passed live end-to-end testing.
 
 Existing Android-client and TV-client accounts are not migrated or replaced by this work.
 They continue to use the client and token that issued their current session.
 
-## Why a helper is required
+## Why a helper is required for remote browser accounts
 
 Twitch's sign-in and browser SDK state belong to the Twitch origin. A page in SwiftMiner's
 WebUI cannot read that state from an iframe or popup, and Twitch does not allow its login page
@@ -58,12 +64,12 @@ to the host over the public WebUI origin; it is not required to run on the host 
 
 ## Work still required before release
 
-- Implement the host-owned, sandboxed browser renewal worker and its retry/relogin states.
-- Connect the validated import to the account ownership and miner-attachment transaction.
+- Prove the host-local Operator flow through a fresh login, integrity renewal, app restart,
+  progress and claim run; then exercise expiry, outage, revocation and account switching.
+- Add explicit browser-renewal health and relogin recovery states to the native UI.
+- Connect remote helper imports to the account ownership and miner-attachment transaction.
 - Build, sign, and publish native helper binaries for macOS, Windows, and Linux.
 - Add the WebUI start/status/recovery experience and update the security disclosures.
-- Prove one continuous fresh-login, host-renewal, progress, and claim run; then exercise expiry,
-  restart, prolonged outage, revocation, account switching, and multi-day renewal.
 - Complete platform smoke tests and an independent security review before enabling the feature.
 
 ## Prior art

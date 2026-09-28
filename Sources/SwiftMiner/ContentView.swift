@@ -24,6 +24,9 @@ struct ContentView: View {
             AuthRequiredSheet(
                 isPresented: $nav.showAddAccountSheet,
                 reconnectingMinerId: nav.reconnectingMinerId,
+                reconnectingIsOperator: nav.reconnectingMinerId.flatMap {
+                    navigation.minerManager.getMiner(id: $0)?.isOperator
+                } ?? false,
                 existingAccountCount: navigation.minerManager.miners.count
             )
                 .environment(navigation)

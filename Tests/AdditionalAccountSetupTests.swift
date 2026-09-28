@@ -5,10 +5,39 @@ import SwiftMinerService
 
 @MainActor
 final class AdditionalAccountSetupTests: XCTestCase {
-    func testFirstAccountStartsExistingAuthenticationFlow() {
+    func testFirstAccountUsesOperatorBrowserBootstrap() {
+        XCTAssertTrue(AdditionalAccountSetup.requiresOperatorBrowser(
+            existingAccountCount: 0,
+            isReconnecting: false,
+            isReconnectingOperator: false
+        ))
         XCTAssertFalse(AdditionalAccountSetup.shouldPresentChoice(
             existingAccountCount: 0,
             isReconnecting: false
+        ))
+    }
+
+    func testOperatorReconnectUsesBrowserInsteadOfDeviceFlow() {
+        XCTAssertTrue(AdditionalAccountSetup.requiresOperatorBrowser(
+            existingAccountCount: 2,
+            isReconnecting: true,
+            isReconnectingOperator: true
+        ))
+    }
+
+    func testRemoteMinerReconnectKeepsDeviceFlow() {
+        XCTAssertFalse(AdditionalAccountSetup.requiresOperatorBrowser(
+            existingAccountCount: 2,
+            isReconnecting: true,
+            isReconnectingOperator: false
+        ))
+    }
+
+    func testStaleReconnectDoesNotMasqueradeAsFirstAccountSetup() {
+        XCTAssertFalse(AdditionalAccountSetup.requiresOperatorBrowser(
+            existingAccountCount: 0,
+            isReconnecting: true,
+            isReconnectingOperator: false
         ))
     }
 

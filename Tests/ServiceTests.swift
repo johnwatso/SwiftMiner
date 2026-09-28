@@ -29,6 +29,93 @@ final class ServiceTests: XCTestCase {
     
     // MARK: - TwitchAPIClient Tests
 
+    func testBrowserAccountUsesItsCapturedFingerprintAndIntegrityToken() async throws {
+        let context = TwitchAuthenticationContext.browser(.init(
+            clientID: TwitchClientIDs.web,
+            origin: TwitchClientIDs.webOrigin,
+            userAgent: "Browser UA",
+            xDeviceID: "browser-device",
+            deviceID: "header-device",
+            clientSessionID: "session-id",
+            clientVersion: "web-version",
+            acceptLanguage: "en-NZ",
+            integrityToken: "captured-integrity",
+            capturedAt: Date(),
+            expiresAt: Date().addingTimeInterval(600),
+            sdkCookieValue: "sdk-seed",
+            cookieExpiresAt: Date().addingTimeInterval(86_400),
+            generation: 1
+        ))
+        await apiClient.setAuthenticationContext(context)
+        await apiClient.setAccountId("browser-viewer")
+        await apiClient.updateAccessToken("browser-oauth")
+
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertNotEqual(request.url?.path, "/integrity", "A fresh captured token should be reused")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "OAuth browser-oauth")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Client-Id"), TwitchClientIDs.web)
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Client-Integrity"), "captured-integrity")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "Browser UA")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-Device-Id"), "browser-device")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Device-ID"), "header-device")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Client-Session-Id"), "session-id")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Client-Version"), "web-version")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Accept-Language"), "en-NZ")
+            XCTAssertNil(request.value(forHTTPHeaderField: "Cookie"), "The renewal seed must not ride GQL")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"data":{"currentUser":{"dropCampaigns":[]}}}"#.utf8))
+        }
+
+        let campaigns = try await apiClient.fetchDropCampaigns()
+        XCTAssertTrue(campaigns.isEmpty)
+    }
+
+    func testExpiredBrowserIntegrityRenewsWithOnlyScopedSDKCookie() async throws {
+        let context = TwitchAuthenticationContext.browser(.init(
+            clientID: TwitchClientIDs.web,
+            origin: TwitchClientIDs.webOrigin,
+            userAgent: "Renewal Browser UA",
+            xDeviceID: "renewal-device",
+            clientSessionID: "renewal-session",
+            clientVersion: "renewal-version",
+            acceptLanguage: "en-GB",
+            integrityToken: "expired-integrity",
+            capturedAt: Date().addingTimeInterval(-600),
+            expiresAt: Date().addingTimeInterval(-60),
+            sdkCookieValue: "renewal-seed",
+            cookieExpiresAt: Date().addingTimeInterval(86_400),
+            generation: 1
+        ))
+        await apiClient.setAuthenticationContext(context)
+        await apiClient.setAccountId("browser-renewal-viewer")
+        await apiClient.updateAccessToken("browser-oauth")
+
+        let requests = StringRequestRecorder()
+        MockURLProtocol.requestHandler = { request in
+            requests.append(request.url?.path ?? "")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            if request.url?.path == "/integrity" {
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Cookie"), "KP_UIDz-ssn=renewal-seed")
+                XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "Renewal Browser UA")
+                XCTAssertEqual(request.value(forHTTPHeaderField: "X-Device-Id"), "renewal-device")
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Client-Session-Id"), "renewal-session")
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Client-Version"), "renewal-version")
+                return (response, Data(#"{"token":"renewed-integrity","expiration":4102444800000}"#.utf8))
+            }
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Client-Integrity"), "renewed-integrity")
+            XCTAssertNil(request.value(forHTTPHeaderField: "Cookie"))
+            return (response, Data(#"{"data":{"currentUser":{"dropCampaigns":[]}}}"#.utf8))
+        }
+
+        let campaigns = try await apiClient.fetchDropCampaigns()
+        XCTAssertTrue(campaigns.isEmpty)
+        XCTAssertEqual(requests.recordedValues, ["/integrity", "/gql"])
+    }
+
     func testStalePersistedQueryIsFlaggedAsTwitchCompatibilityIssue() async throws {
         MockURLProtocol.stubResponseData = #"{"errors":[{"message":"PersistedQueryNotFound"}]}"#.data(using: .utf8)
 
