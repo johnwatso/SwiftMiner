@@ -133,7 +133,8 @@ public actor KeychainTokenStore: TokenStore {
             refreshToken: refreshToken ?? existing.refreshToken,
             tokenExpiry: expiry,
             scopes: existing.scopes,
-            isOperator: existing.isOperator
+            isOperator: existing.isOperator,
+            authenticationContext: existing.authenticationContext
         )
         accounts[index] = updated
         try writeAll(accounts)
@@ -153,7 +154,8 @@ public actor KeychainTokenStore: TokenStore {
             refreshToken: existing.refreshToken,
             tokenExpiry: existing.tokenExpiry,
             scopes: existing.scopes,
-            isOperator: existing.isOperator
+            isOperator: existing.isOperator,
+            authenticationContext: existing.authenticationContext
         )
         try writeAll(accounts)
     }
@@ -173,7 +175,8 @@ public actor KeychainTokenStore: TokenStore {
                         refreshToken: existing.refreshToken,
                         tokenExpiry: existing.tokenExpiry,
                         scopes: existing.scopes,
-                        isOperator: false
+                        isOperator: false,
+                        authenticationContext: existing.authenticationContext
                     )
                 }
             }
@@ -192,7 +195,8 @@ public actor KeychainTokenStore: TokenStore {
             refreshToken: existing.refreshToken,
             tokenExpiry: existing.tokenExpiry,
             scopes: existing.scopes,
-            isOperator: isOperator
+            isOperator: isOperator,
+            authenticationContext: existing.authenticationContext
         )
         try writeAll(accounts)
     }

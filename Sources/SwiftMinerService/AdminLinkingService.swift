@@ -18,7 +18,7 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
     public func getUnownedAccounts() async -> [Account] {
         do {
             return try await manager.query { db in
-                let sql = "SELECT twitch_id, username, owner_discord_id, access_token, refresh_token, token_expiry, scopes FROM twitch_accounts WHERE owner_discord_id IS NULL;"
+                let sql = "SELECT twitch_id, username, owner_discord_id, access_token, refresh_token, token_expiry, scopes, auth_context_json FROM twitch_accounts WHERE owner_discord_id IS NULL;"
                 var statement: OpaquePointer?
                 guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
                     return []
@@ -45,6 +45,7 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
                     let tokenExpiry = dateFormatter.date(from: expiryString) ?? Date()
                     let scopesString = sqlite3_column_text(statement, 6).map { String(cString: $0) } ?? ""
                     let scopes = scopesString.components(separatedBy: ",")
+                    let authenticationContext = try Self.decodeAuthenticationContext(statement, column: 7)
 
                     accounts.append(Account(
                         id: id,
@@ -53,7 +54,8 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
                         accessToken: accessToken,
                         refreshToken: refreshToken,
                         tokenExpiry: tokenExpiry,
-                        scopes: scopes
+                        scopes: scopes,
+                        authenticationContext: authenticationContext
                     ))
                 }
                 return accounts
@@ -328,7 +330,7 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
     public func getAccounts(for discordId: String) async -> [Account] {
         do {
             return try await manager.query { db in
-                let sql = "SELECT twitch_id, username, owner_discord_id, access_token, refresh_token, token_expiry, scopes FROM twitch_accounts WHERE owner_discord_id = ?;"
+                let sql = "SELECT twitch_id, username, owner_discord_id, access_token, refresh_token, token_expiry, scopes, auth_context_json FROM twitch_accounts WHERE owner_discord_id = ?;"
                 var statement: OpaquePointer?
                 guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
                     return []
@@ -356,6 +358,7 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
                     let tokenExpiry = dateFormatter.date(from: expiryString) ?? Date()
                     let scopesString = sqlite3_column_text(statement, 6).map { String(cString: $0) } ?? ""
                     let scopes = scopesString.components(separatedBy: ",")
+                    let authenticationContext = try Self.decodeAuthenticationContext(statement, column: 7)
 
                     accounts.append(Account(
                         id: id,
@@ -364,7 +367,8 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
                         accessToken: accessToken,
                         refreshToken: refreshToken,
                         tokenExpiry: tokenExpiry,
-                        scopes: scopes
+                        scopes: scopes,
+                        authenticationContext: authenticationContext
                     ))
                 }
                 return accounts
@@ -482,6 +486,24 @@ public actor SQLiteAdminLinkingService: AdminLinkingService {
     nonisolated private func dbError(_ db: OpaquePointer?) -> Error {
         let message = sqlite3_errmsg(db).map { String(cString: $0) } ?? "Unknown SQLite error"
         return NSError(domain: "SQLiteAdminLinkingService", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+    }
+
+    private static func decodeAuthenticationContext(
+        _ statement: OpaquePointer?,
+        column: Int32
+    ) throws -> TwitchAuthenticationContext? {
+        guard let value = sqlite3_column_text(statement, column).map({ String(cString: $0) }) else {
+            return nil
+        }
+        do {
+            return try JSONDecoder().decode(TwitchAuthenticationContext.self, from: Data(value.utf8))
+        } catch {
+            throw NSError(
+                domain: "SQLiteAdminLinkingService",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "The stored Twitch authentication context is invalid."]
+            )
+        }
     }
 }
 

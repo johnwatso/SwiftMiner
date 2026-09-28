@@ -84,6 +84,9 @@ public enum TwitchClientIDs {
     public static let webOrigin = "https://www.twitch.tv"
     public static let tvOrigin = "https://android.tv.twitch.tv"
 
+    /// Twitch's first-party web client used by complete browser session handoffs.
+    public static let web = "kimne78kx3ncx6brgo4mv6wki5h1ko"
+
     /// Twitch's Android app — TwitchDropsMiner's `ANDROID_APP`. Every account added before
     /// September 2026 holds a token issued to it, and its tokens can still read the drops
     /// dashboard without an integrity token. Twitch stopped accepting it for new device-code
@@ -114,13 +117,12 @@ public enum TwitchClientIDs {
     }
 }
 
-/// Remembers which Twitch client each account's token was issued to.
+/// Compatibility index of which Twitch client each account's token was issued to.
 ///
 /// A token only works with the client ID that issued it, and SwiftMiner now signs accounts in
-/// with more than one client. The mapping lives beside the account rather than on `Account`:
-/// accounts are rebuilt field by field across several token stores, and a dropped field would
-/// silently send a TV token with the Android client ID. Accounts with no entry predate the
-/// registry and were all issued to `TwitchClientIDs.android`. Client IDs are public, so this is
+/// with more than one client. New records carry this in `Account.authenticationContext`; this
+/// defaults-backed map remains the fallback for accounts saved before that field existed and for
+/// request components that currently know only an account ID. Client IDs are public, so this is
 /// ordinary defaults data, not a secret.
 public final class AccountClientRegistry: @unchecked Sendable {
     public static let shared = AccountClientRegistry(

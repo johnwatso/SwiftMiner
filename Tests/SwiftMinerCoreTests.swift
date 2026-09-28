@@ -186,7 +186,8 @@ final class SwiftMinerCoreTests: XCTestCase {
             accessToken: "access",
             refreshToken: "refresh",
             tokenExpiry: Date().addingTimeInterval(3600),
-            scopes: []
+            scopes: [],
+            authenticationContext: .device(clientID: "round-trip-client")
         )
 
         try await store.save(account: account)
@@ -197,6 +198,7 @@ final class SwiftMinerCoreTests: XCTestCase {
         XCTAssertEqual(loaded.displayName, "Drop Runner")
         XCTAssertEqual(loaded.ownerDiscordId, account.ownerDiscordId)
         XCTAssertEqual(loaded.scopes, [])
+        XCTAssertEqual(loaded.authenticationContext, account.authenticationContext)
 
         try await store.updateTokenMaterial(
             twitchUserId: account.id,
@@ -212,12 +214,49 @@ final class SwiftMinerCoreTests: XCTestCase {
         XCTAssertEqual(refreshed.accessToken, "new-access")
         XCTAssertEqual(refreshed.refreshToken, "refresh")
         XCTAssertEqual(refreshed.scopes, [])
+        XCTAssertEqual(refreshed.authenticationContext, account.authenticationContext)
 
         try await store.updateNickname(twitchUserId: account.id, nickname: "Boss Miner")
         let renamedAccount = try await store.loadAccount(twitchUserId: account.id)
         let renamed = try XCTUnwrap(renamedAccount)
         XCTAssertEqual(renamed.nickname, "Boss Miner")
         XCTAssertEqual(renamed.accessToken, "new-access")
+        XCTAssertEqual(renamed.authenticationContext, account.authenticationContext)
+    }
+
+    func testSQLiteTokenStoreRejectsMalformedAuthenticationContext() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftMinerAuthContextCorruption-\(UUID().uuidString).sqlite")
+        let manager = SQLiteManager(databaseURL: databaseURL)
+        try await manager.open()
+        addTeardownBlock {
+            await manager.close()
+            try? FileManager.default.removeItem(at: databaseURL)
+        }
+
+        let store = SQLiteTokenStore(manager: manager)
+        try await store.save(account: Account(
+            id: "corrupt-context",
+            username: "miner",
+            accessToken: "access",
+            refreshToken: "refresh",
+            tokenExpiry: Date().addingTimeInterval(3600),
+            scopes: []
+        ))
+        try await manager.execute("""
+        UPDATE twitch_accounts
+        SET auth_context_json = '{"kind":"browser","browser":{"integrityToken":"DO_NOT_LEAK"}}'
+        WHERE twitch_id = 'corrupt-context';
+        """)
+
+        do {
+            _ = try await store.loadAccount(twitchUserId: "corrupt-context")
+            XCTFail("A malformed non-NULL authentication context must fail closed")
+        } catch {
+            XCTAssertEqual((error as NSError).domain, "SQLiteTokenStore")
+            XCTAssertEqual((error as NSError).code, 4)
+            XCTAssertFalse(error.localizedDescription.contains("DO_NOT_LEAK"))
+        }
     }
 
     func testSQLiteTokenStoreOperatorExclusivity() async throws {
@@ -310,7 +349,8 @@ actor TestTokenStore: TokenStore {
             refreshToken: refreshToken ?? existing.refreshToken,
             tokenExpiry: expiry,
             scopes: existing.scopes,
-            isOperator: existing.isOperator
+            isOperator: existing.isOperator,
+            authenticationContext: existing.authenticationContext
         )
     }
 
@@ -325,7 +365,8 @@ actor TestTokenStore: TokenStore {
             refreshToken: existing.refreshToken,
             tokenExpiry: existing.tokenExpiry,
             scopes: existing.scopes,
-            isOperator: existing.isOperator
+            isOperator: existing.isOperator,
+            authenticationContext: existing.authenticationContext
         )
     }
 
@@ -342,7 +383,8 @@ actor TestTokenStore: TokenStore {
                         refreshToken: acc.refreshToken,
                         tokenExpiry: acc.tokenExpiry,
                         scopes: acc.scopes,
-                        isOperator: false
+                        isOperator: false,
+                        authenticationContext: acc.authenticationContext
                     )
                 }
             }
@@ -357,7 +399,8 @@ actor TestTokenStore: TokenStore {
             refreshToken: existing.refreshToken,
             tokenExpiry: existing.tokenExpiry,
             scopes: existing.scopes,
-            isOperator: isOperator
+            isOperator: isOperator,
+            authenticationContext: existing.authenticationContext
         )
     }
 

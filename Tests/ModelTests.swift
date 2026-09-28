@@ -47,6 +47,76 @@ final class ModelTests: XCTestCase {
         XCTAssertNil(decoded.nickname)
         XCTAssertNil(decoded.ownerDiscordId)
         XCTAssertFalse(decoded.isOperator)
+        XCTAssertNil(decoded.authenticationContext)
+    }
+
+    func testAccountAuthenticationContextsRoundTrip() throws {
+        let capturedAt = Date(timeIntervalSince1970: 1_790_000_000)
+        let browser = TwitchAuthenticationContext.Browser(
+            clientID: "browser-client",
+            origin: "https://www.twitch.tv",
+            userAgent: "Mozilla/5.0",
+            xDeviceID: "x-device",
+            deviceID: "device",
+            clientSessionID: "session",
+            clientVersion: "1.2.3",
+            acceptLanguage: "en-NZ",
+            integrityToken: "integrity",
+            capturedAt: capturedAt,
+            expiresAt: capturedAt.addingTimeInterval(600),
+            sdkCookieValue: "sdk-cookie",
+            cookieExpiresAt: capturedAt.addingTimeInterval(86_400),
+            generation: 2
+        )
+        let contexts: [TwitchAuthenticationContext] = [
+            .device(clientID: "device-client"),
+            .browser(browser)
+        ]
+
+        for context in contexts {
+            let encoded = try JSONEncoder().encode(context)
+            let decoded = try JSONDecoder().decode(TwitchAuthenticationContext.self, from: encoded)
+            XCTAssertEqual(decoded, context)
+            XCTAssertEqual(decoded.clientID, context.clientID)
+        }
+    }
+
+    func testInMemoryTokenUpdatesPreserveBrowserAuthenticationContext() async throws {
+        let capturedAt = Date(timeIntervalSince1970: 1_790_000_000)
+        let context = TwitchAuthenticationContext.browser(.init(
+            clientID: "browser-client",
+            origin: "https://www.twitch.tv",
+            userAgent: "Mozilla/5.0",
+            xDeviceID: "x-device",
+            integrityToken: "integrity",
+            capturedAt: capturedAt,
+            expiresAt: capturedAt.addingTimeInterval(600),
+            sdkCookieValue: "sdk-cookie",
+            cookieExpiresAt: capturedAt.addingTimeInterval(86_400),
+            generation: 1
+        ))
+        let account = Account(
+            id: "browser-account",
+            username: "browser-user",
+            accessToken: "access",
+            refreshToken: "refresh",
+            tokenExpiry: capturedAt.addingTimeInterval(3600),
+            scopes: [],
+            authenticationContext: context
+        )
+        let store = InMemoryTokenStore(accounts: [account])
+
+        await store.updateTokenMaterial(
+            twitchUserId: account.id,
+            accessToken: "new-access",
+            refreshToken: nil,
+            expiry: capturedAt.addingTimeInterval(7200)
+        )
+        await store.updateNickname(twitchUserId: account.id, nickname: "Remote Miner")
+        await store.updateOperatorStatus(twitchUserId: account.id, isOperator: true)
+
+        let updated = await store.loadAccount(twitchUserId: account.id)
+        XCTAssertEqual(updated?.authenticationContext, context)
     }
 
     func testGamePreferenceDecodesMinimalPayload() throws {

@@ -493,7 +493,8 @@ final class TwitchAuthServiceTests: XCTestCase {
             refreshToken: "old_refresh",
             tokenExpiry: Date().addingTimeInterval(-60),
             scopes: ["user:read:email"],
-            isOperator: true
+            isOperator: true,
+            authenticationContext: .device(clientID: "stored-client")
         ))
         let service = TwitchAuthService(clientId: "test_client_id", tokenStore: store)
 
@@ -509,6 +510,7 @@ final class TwitchAuthServiceTests: XCTestCase {
         XCTAssertTrue(merged.isOperator)
         XCTAssertEqual(merged.accessToken, "new_token")
         XCTAssertEqual(merged.refreshToken, "new_refresh")
+        XCTAssertEqual(merged.authenticationContext, .device(clientID: "stored-client"))
     }
 
     /// A first-time sign-in has nothing stored to merge with.
@@ -623,6 +625,71 @@ final class AccountClientIDTests: XCTestCase {
 
         let query = URLComponents(url: try XCTUnwrap(MockURLProtocol.lastRequest?.url), resolvingAgainstBaseURL: false)?.queryItems
         XCTAssertEqual(query?.first { $0.name == "client_id" }?.value, TwitchClientIDs.tv)
+    }
+
+    func testEmbeddedAuthenticationContextOverridesLegacyClientRegistry() async throws {
+        let embeddedClientID = "embedded-browser-client"
+        let store = TestTokenStore()
+        try await store.save(account: Account(
+            id: accountId,
+            username: "miner",
+            accessToken: "browser-token",
+            refreshToken: "",
+            tokenExpiry: Date().addingTimeInterval(3600),
+            scopes: [],
+            authenticationContext: .device(clientID: embeddedClientID)
+        ))
+        AccountClientRegistry.shared.record(TwitchClientIDs.tv, for: accountId)
+        MockURLProtocol.requestHandler = { request in
+            (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data())
+        }
+        let service = TwitchAuthService(
+            clientId: TwitchClientIDs.android,
+            tokenStore: store,
+            urlSession: mockSession
+        )
+
+        try await service.revokeAccess(for: accountId)
+
+        let query = URLComponents(
+            url: try XCTUnwrap(MockURLProtocol.lastRequest?.url),
+            resolvingAgainstBaseURL: false
+        )?.queryItems
+        XCTAssertEqual(query?.first { $0.name == "client_id" }?.value, embeddedClientID)
+    }
+
+    func testSuccessfulRefreshMigratesLegacyClientIntoAccountContext() async throws {
+        let store = TestTokenStore()
+        let legacy = Account(
+            id: accountId,
+            username: "miner",
+            accessToken: "expired-token",
+            refreshToken: "refresh",
+            tokenExpiry: Date().addingTimeInterval(-60),
+            scopes: []
+        )
+        try await store.save(account: legacy)
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (
+                response,
+                Data(#"{"access_token":"fresh","refresh_token":"fresh-refresh","expires_in":3600,"scope":[],"token_type":"bearer"}"#.utf8)
+            )
+        }
+        let service = TwitchAuthService(
+            clientId: TwitchClientIDs.tv,
+            tokenStore: store,
+            urlSession: mockSession
+        )
+        await service.setCurrentAccount(legacy)
+
+        _ = try await service.forceRefreshToken()
+
+        let saved = try await store.loadAccount(twitchUserId: accountId)
+        XCTAssertEqual(saved?.authenticationContext, .device(clientID: TwitchClientIDs.tv))
+        XCTAssertEqual(AccountClientRegistry.shared.clientId(for: accountId), TwitchClientIDs.tv)
     }
 
     func testAccountsWithoutARecordedClientAreTreatedAsAndroid() {
