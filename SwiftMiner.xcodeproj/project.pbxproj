@@ -178,6 +178,7 @@
 		98A5DB69CAB4A73BBB92BF68 /* RemoteBrowserLoginCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 042CD313857E487268A74ABB /* RemoteBrowserLoginCoordinator.swift */; };
 		98F1B98DFDC37F20414C8566 /* CampaignFeedViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B1614DF3D16D0C1A3162DD6 /* CampaignFeedViews.swift */; };
 		99134A1F3D64818B0029DDED /* LegacyAccountMigrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F6B0366B64D312D5EC9AC30 /* LegacyAccountMigrator.swift */; };
+		993E009D8152BEF03E38FB14 /* TwitchWebSessionProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58A36134773E80941D41EB83 /* TwitchWebSessionProbe.swift */; };
 		9A56D5BC8DA86C2FF6B9DA2D /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F0E31A0069A6303E581C6D77 /* AppIntents.framework */; };
 		9B97196242668766BCFC7874 /* MinerEngine+Claiming.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3CC200940FA5E68DFAC2AB /* MinerEngine+Claiming.swift */; };
 		9C21DC3640F81C3F3D5884D4 /* MinerEngine+MiningLoop.swift in Sources */ = {isa = PBXBuildFile; fileRef = B116F1DA3E52E53FFC04111E /* MinerEngine+MiningLoop.swift */; };
@@ -496,6 +497,7 @@
 		573073692F55774FD9E03776 /* CampaignTabRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignTabRoutingTests.swift; sourceTree = "<group>"; };
 		573283C16E2BE14FF4AB880C /* KeychainTokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainTokenStore.swift; sourceTree = "<group>"; };
 		57FA1EDC268748340DA9F991 /* web-logo-light.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "web-logo-light.png"; sourceTree = "<group>"; };
+		58A36134773E80941D41EB83 /* TwitchWebSessionProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwitchWebSessionProbe.swift; sourceTree = "<group>"; };
 		58CE4A1460AC0FDF90CDCAA5 /* MinerGameState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinerGameState.swift; sourceTree = "<group>"; };
 		59CFDCF743F4E429D038B035 /* InventoryBenefitPreservationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InventoryBenefitPreservationTests.swift; sourceTree = "<group>"; };
 		5A79F35AB0C08E6F2BE9A648 /* LiquidGlass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlass.swift; sourceTree = "<group>"; };
@@ -923,6 +925,7 @@
 				AD3B416F9FDC5DC4764D6E9C /* SwiftMinerInvitation.swift */,
 				BD3A3FA3D2C53873D6817D19 /* TwitchAvatarStore.swift */,
 				368CD1F54C243641154FAD3E /* TwitchCompatibilityRecovery.swift */,
+				58A36134773E80941D41EB83 /* TwitchWebSessionProbe.swift */,
 				B867787CA22A6074C1C312B7 /* UnattendedHealthModel.swift */,
 				F86CAAFB40BE4E27C33FD6E3 /* UpToDateUserDriver.swift */,
 				B94A5A973E3B708093027C66 /* DebugAvatars */,
@@ -1656,6 +1659,7 @@
 				683F3FCC5F8DAE7327552AA4 /* SwiftMinerInvitation.swift in Sources */,
 				812443DB837ACE81CF97CCB8 /* TwitchAvatarStore.swift in Sources */,
 				E073C8BD3BBE3D5320421FC2 /* TwitchCompatibilityRecovery.swift in Sources */,
+				993E009D8152BEF03E38FB14 /* TwitchWebSessionProbe.swift in Sources */,
 				D5A6926B7FE2FD8EDEC43F28 /* UnattendedHealthModel.swift in Sources */,
 				B781D6B4860AC7E854163FD1 /* UpToDateUserDriver.swift in Sources */,
 			);
