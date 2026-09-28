@@ -6,13 +6,17 @@ struct OperatorSessionRenewalSchedule {
     static let cookieLeadTime: TimeInterval = 10 * 60
     static let maximumCheckInterval: TimeInterval = 5 * 60
 
+    /// Renews ahead of the integrity token's expiry, and ahead of the SDK cookie's expiry
+    /// while renewing might still extend it. Twitch often leaves the cookie's expiry fixed; a
+    /// generation captured inside the cookie's lead window has already tried, so chasing that
+    /// deadline again would re-run WebKit every check until the cookie lapsed.
     static func renewalDate(
         for browser: TwitchAuthenticationContext.Browser
     ) -> Date {
-        min(
-            browser.expiresAt.addingTimeInterval(-integrityLeadTime),
-            browser.cookieExpiresAt.addingTimeInterval(-cookieLeadTime)
-        )
+        let integrityDeadline = browser.expiresAt.addingTimeInterval(-integrityLeadTime)
+        let cookieDeadline = browser.cookieExpiresAt.addingTimeInterval(-cookieLeadTime)
+        guard cookieDeadline > browser.capturedAt else { return integrityDeadline }
+        return min(integrityDeadline, cookieDeadline)
     }
 
     static func nextCheckDelay(
@@ -38,15 +42,15 @@ final class OperatorSessionRenewalCoordinator {
 
     enum RenewalError: LocalizedError {
         case replayedIntegrity
-        case staleSDKCookie
+        case expiredSDKCookie
         case invalidGeneration
 
         var errorDescription: String? {
             switch self {
             case .replayedIntegrity:
                 return "Twitch returned an existing or non-advancing integrity token"
-            case .staleSDKCookie:
-                return "Twitch did not advance the browser renewal cookie"
+            case .expiredSDKCookie:
+                return "The Operator's Twitch browser session has expired. Choose Reconnect Twitch on the Operator and sign in again"
             case .invalidGeneration:
                 return "The browser session generation can no longer be incremented"
             }
@@ -168,11 +172,16 @@ final class OperatorSessionRenewalCoordinator {
             )
             throw RenewalError.replayedIntegrity
         }
-        guard issuance.cookieExpiresAt > max(browser.cookieExpiresAt, issuance.expiresAt) else {
+        // Twitch commonly returns the same SDK cookie with the same expiry. That is a normal
+        // renewal, not a stale one: requiring the expiry to advance discarded every working
+        // renewal and left the Operator unable to read the Drops dashboard for hours. The
+        // validator below still proves the new integrity token against Twitch. Only a cookie
+        // that can no longer seed the next renewal is refused.
+        guard issuance.cookieExpiresAt > now.addingTimeInterval(60) else {
             Logger.auth.warning(
-                "Rejected Operator cookie renewal: previous expiry=\(browser.cookieExpiresAt), new expiry=\(issuance.cookieExpiresAt), integrity expiry=\(issuance.expiresAt)"
+                "Rejected Operator cookie renewal: cookie expiry=\(issuance.cookieExpiresAt)"
             )
-            throw RenewalError.staleSDKCookie
+            throw RenewalError.expiredSDKCookie
         }
 
         // A structurally plausible SDK response is not enough. Prove that Twitch accepts the
@@ -225,6 +234,11 @@ final class OperatorSessionRenewalCoordinator {
         if let miner = minerManager.miners.first(where: { $0.accountId == latest.id }),
            let engine = minerManager.getEngine(minerId: miner.id) {
             await engine.setAccount(updatedAccount)
+            // A miner blocked by the rejected token would otherwise wait for its next
+            // scheduled scan, minutes away, before noticing the session works again.
+            if miner.status == .error || miner.workerState == .failed {
+                await engine.forceRefresh()
+            }
         }
         Logger.auth.info(
             "Rotated Operator browser integrity seed to generation \(renewedBrowser.generation); next integrity expiry is \(renewedBrowser.expiresAt)"

@@ -39,7 +39,7 @@
         <li>Backing up settings and exporting diagnostics now use the standard macOS save dialog, which opens reliably.</li>
         <li>The web dashboard now reopens as a single window and comes to the front, whether it was closed, minimised or behind another window.</li>
         <li>Skipped Twitch test Drops are now logged once, not on every automatic claim check.</li>
-        <li>When Twitch rejects the Operator&rsquo;s browser security check, SwiftMiner now renews it straight away and says so in the Activity Log, instead of reporting that Twitch changed a query and suggesting an update via Safari. Previously the Operator could go hours without reading the Drops campaign list.</li>
+        <li>The Operator&rsquo;s browser sign-in now keeps renewing its Twitch security check. Renewals that Twitch had in fact accepted were being thrown away, so the Operator could go hours without reading the Drops campaign list. When Twitch does reject the check, SwiftMiner renews it straight away and the miner explains what is happening, with a Reconnect Twitch button if it doesn&rsquo;t clear by itself, instead of reporting that Twitch changed a query.</li>
         <li>Profile pictures now load for every account, including the Operator and accounts signed in through Twitch&rsquo;s TV app. Pictures are read from Twitch&rsquo;s public profile data, so they no longer depend on each account&rsquo;s sign-in.</li>
       </ul>
     </section>

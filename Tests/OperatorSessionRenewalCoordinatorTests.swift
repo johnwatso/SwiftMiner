@@ -171,7 +171,10 @@ final class OperatorSessionRenewalCoordinatorTests: XCTestCase {
         XCTAssertEqual(issuer.callCount, 0)
     }
 
-    func testRenewalRejectsACookieThatDidNotAdvance() async throws {
+    /// Twitch commonly re-issues the SDK cookie with the same expiry. Requiring it to advance
+    /// discarded every working renewal (live log, 2026-09-29: "Twitch did not advance the
+    /// browser renewal cookie"), leaving the Operator unable to read the Drops dashboard.
+    func testRenewalAcceptsACookieWhoseExpiryDidNotMove() async throws {
         let now = Date()
         let originalBrowser = makeBrowser(
             now: now,
@@ -179,24 +182,57 @@ final class OperatorSessionRenewalCoordinatorTests: XCTestCase {
             cookieExpiry: now.addingTimeInterval(7_200)
         )
         let account = makeAccount(browser: originalBrowser)
-        let staleIssuance = TwitchBrowserIntegrityIssuance(
+        let issuance = TwitchBrowserIntegrityIssuance(
             token: "new-integrity",
             expiresAt: now.addingTimeInterval(3_600),
-            sdkCookieValue: "unchanged-cookie",
+            sdkCookieValue: originalBrowser.sdkCookieValue,
             cookieExpiresAt: originalBrowser.cookieExpiresAt
         )
         let store = InMemoryTokenStore(accounts: [account])
         let manager = MinerManager(clientId: "test", tokenStore: store)
         let coordinator = OperatorSessionRenewalCoordinator(
             minerManager: manager,
-            issuer: StubBrowserIntegrityIssuer(issuance: staleIssuance),
+            issuer: StubBrowserIntegrityIssuer(issuance: issuance),
+            validator: StubBrowserIntegrityValidator()
+        )
+
+        let outcome = try await coordinator.renewNowIfNeeded(now: now, force: true)
+
+        XCTAssertEqual(outcome, .renewed(generation: 2))
+        let stored = await store.loadAccount(twitchUserId: account.id)
+        guard case .browser(let browser) = stored?.authenticationContext else {
+            return XCTFail("Expected browser context")
+        }
+        XCTAssertEqual(browser.integrityToken, "new-integrity")
+        XCTAssertEqual(browser.cookieExpiresAt, originalBrowser.cookieExpiresAt)
+    }
+
+    func testRenewalRefusesACookieThatHasExpired() async throws {
+        let now = Date()
+        let originalBrowser = makeBrowser(
+            now: now,
+            integrityExpiry: now.addingTimeInterval(600),
+            cookieExpiry: now.addingTimeInterval(7_200)
+        )
+        let account = makeAccount(browser: originalBrowser)
+        let expiredCookie = TwitchBrowserIntegrityIssuance(
+            token: "new-integrity",
+            expiresAt: now.addingTimeInterval(3_600),
+            sdkCookieValue: "expired-cookie",
+            cookieExpiresAt: now.addingTimeInterval(-60)
+        )
+        let store = InMemoryTokenStore(accounts: [account])
+        let manager = MinerManager(clientId: "test", tokenStore: store)
+        let coordinator = OperatorSessionRenewalCoordinator(
+            minerManager: manager,
+            issuer: StubBrowserIntegrityIssuer(issuance: expiredCookie),
             validator: StubBrowserIntegrityValidator()
         )
 
         do {
             _ = try await coordinator.renewNowIfNeeded(now: now, force: true)
-            XCTFail("Expected the stale cookie to be rejected")
-        } catch OperatorSessionRenewalCoordinator.RenewalError.staleSDKCookie {
+            XCTFail("Expected the expired cookie to be refused")
+        } catch OperatorSessionRenewalCoordinator.RenewalError.expiredSDKCookie {
             // Expected.
         }
 
@@ -205,7 +241,29 @@ final class OperatorSessionRenewalCoordinatorTests: XCTestCase {
             return XCTFail("Expected browser context")
         }
         XCTAssertEqual(browser.generation, 1)
-        XCTAssertEqual(browser.integrityToken, originalBrowser.integrityToken)
+    }
+
+    /// Once a renewal inside the cookie's lead window has left its expiry where it was, the
+    /// schedule must stop chasing that deadline or WebKit would re-run on every check.
+    func testScheduleStopsChasingACookieThatRenewalDidNotExtend() {
+        let now = Date()
+        let integrityExpiry = now.addingTimeInterval(3_600)
+        let browser = TwitchAuthenticationContext.Browser(
+            clientID: TwitchClientIDs.web,
+            origin: TwitchClientIDs.webOrigin,
+            userAgent: "Browser UA",
+            integrityToken: "token",
+            capturedAt: now,
+            expiresAt: integrityExpiry,
+            sdkCookieValue: "cookie",
+            cookieExpiresAt: now.addingTimeInterval(5 * 60),
+            generation: 3
+        )
+
+        XCTAssertEqual(
+            OperatorSessionRenewalSchedule.renewalDate(for: browser),
+            integrityExpiry.addingTimeInterval(-OperatorSessionRenewalSchedule.integrityLeadTime)
+        )
     }
 
     func testRenewalRejectsAReplayedIntegrityToken() async throws {

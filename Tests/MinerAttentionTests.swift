@@ -65,6 +65,22 @@ final class MinerAttentionTests: XCTestCase {
         XCTAssertEqual(attention?.action, .restart)
     }
 
+    /// A rejected integrity token used to fall through to "The mining worker stopped —
+    /// Restart this miner", which cannot help: the restart reuses the same session.
+    func testRejectedSecurityCheckOffersReconnectNotRestart() {
+        let miner = makeMiner(status: .error, workerState: .failed)
+        let error = EventEntry(
+            message: "Error: \(TwitchMinerError.integrityRejected(operation: "ViewerDropsDashboard").localizedDescription)",
+            level: .error,
+            minerId: miner.id
+        )
+
+        let attention = MinerAttentionIssue.resolve(miner: miner, events: [error])
+
+        XCTAssertEqual(attention?.title, "Twitch needs to re-check this sign-in")
+        XCTAssertEqual(attention?.action, .reconnect)
+    }
+
     func testHealthyMinerHasNoAttentionPanel() {
         XCTAssertNil(MinerAttentionIssue.resolve(miner: makeMiner(), events: []))
     }
