@@ -183,7 +183,9 @@ public actor TwitchAPIClient {
     /// The client this account's token was issued to. Resolved per request so re-signing an
     /// account in with a different client takes effect without rebuilding its engine.
     var clientId: String {
-        accountId.flatMap { AccountClientRegistry.shared.clientId(for: $0) } ?? defaultClientId
+        authenticationContext?.clientID
+            ?? accountId.flatMap { AccountClientRegistry.shared.clientId(for: $0) }
+            ?? defaultClientId
     }
 
     /// Whether this account's token can read the drops dashboard. TV-issued tokens cannot, so
@@ -234,12 +236,37 @@ public actor TwitchAPIClient {
     /// from the shared pool once `setAccountId(_:)` is called.
     private var userAgent = TwitchClientFingerprint.randomAndroidUserAgent()
 
+    /// The first-party surface that issued the current account's token. Browser sessions carry
+    /// more than a client ID: protected requests must keep the browser's user agent, device
+    /// identity and integrity context together or Twitch sees a synthetic mixture of clients.
+    private var authenticationContext: TwitchAuthenticationContext?
+
     /// Switches this client's UA to the sticky allocation for `accountId` so
     /// auth/api/spade traffic for the same miner share a fingerprint and
     /// concurrent miners spread across the pool.
     public func setAccountId(_ accountId: String) {
         self.accountId = accountId
-        userAgent = TwitchClientFingerprint.shared.userAgent(for: accountId)
+        if case .browser(let browser) = authenticationContext {
+            userAgent = browser.userAgent
+        } else {
+            userAgent = TwitchClientFingerprint.shared.userAgent(for: accountId)
+        }
+    }
+
+    /// Applies the credential's complete first-party fingerprint before any authenticated
+    /// request is sent. A fresh browser context also seeds the short-lived integrity cache;
+    /// once that token expires, ``getIntegrityToken()`` renews it with the scoped SDK cookie.
+    public func setAuthenticationContext(_ context: TwitchAuthenticationContext?) {
+        authenticationContext = context
+        integrityToken = nil
+        integrityTokenExpiry = .distantPast
+
+        guard case .browser(let browser) = context else { return }
+        userAgent = browser.userAgent
+        if browser.expiresAt > Date() {
+            integrityToken = browser.integrityToken
+            integrityTokenExpiry = browser.expiresAt
+        }
     }
 
     public func setSharedCampaignCatalogProvider(_ enabled: Bool) {
@@ -1604,6 +1631,7 @@ public actor TwitchAPIClient {
         urlRequest.setValue("en-US", forHTTPHeaderField: "Accept-Language")
         urlRequest.setValue(clientOrigin, forHTTPHeaderField: "Origin")
         urlRequest.setValue(clientOrigin, forHTTPHeaderField: "Referer")
+        applyBrowserHeaders(to: &urlRequest)
 
         // Twitch requires integrity token for dropCampaigns and other protected fields
         if let integrity = try? await getIntegrityToken() {
@@ -1747,6 +1775,7 @@ public actor TwitchAPIClient {
         urlRequest.setValue("en-US", forHTTPHeaderField: "Accept-Language")
         urlRequest.setValue(clientOrigin, forHTTPHeaderField: "Origin")
         urlRequest.setValue(clientOrigin, forHTTPHeaderField: "Referer")
+        applyBrowserHeaders(to: &urlRequest)
 
         if let integrity = try? await getIntegrityToken() {
             urlRequest.setValue(integrity, forHTTPHeaderField: "Client-Integrity")
@@ -1852,6 +1881,7 @@ public actor TwitchAPIClient {
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue(clientOrigin, forHTTPHeaderField: "Origin")
         request.setValue(clientOrigin, forHTTPHeaderField: "Referer")
+        applyBrowserHeaders(to: &request, includeSDKCookie: true)
 
         let startedAt = Date()
         let data: Data
@@ -1908,6 +1938,36 @@ public actor TwitchAPIClient {
             succeeded: true
         )
         return token
+    }
+
+    /// Adds only the allow-listed browser identity fields captured with this OAuth token.
+    /// The SDK cookie is a renewal seed and must never ride ordinary GQL requests.
+    private func applyBrowserHeaders(
+        to request: inout URLRequest,
+        includeSDKCookie: Bool = false
+    ) {
+        guard case .browser(let browser) = authenticationContext else { return }
+
+        request.setValue(browser.userAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue(browser.acceptLanguage ?? "en-US", forHTTPHeaderField: "Accept-Language")
+        if let value = browser.xDeviceID, !value.isEmpty {
+            request.setValue(value, forHTTPHeaderField: "X-Device-Id")
+        }
+        if let value = browser.deviceID, !value.isEmpty {
+            request.setValue(value, forHTTPHeaderField: "Device-ID")
+        }
+        if let value = browser.clientSessionID, !value.isEmpty {
+            request.setValue(value, forHTTPHeaderField: "Client-Session-Id")
+        }
+        if let value = browser.clientVersion, !value.isEmpty {
+            request.setValue(value, forHTTPHeaderField: "Client-Version")
+        }
+        if includeSDKCookie {
+            request.setValue(
+                "\(RemoteBrowserSessionBundle.sdkCookieName)=\(browser.sdkCookieValue)",
+                forHTTPHeaderField: "Cookie"
+            )
+        }
     }
 
     // MARK: - Trace helpers

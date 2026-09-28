@@ -102,6 +102,11 @@ private var sessionCounter: UInt64 = 0
 /// The authenticated user ID — required for the Spade beacon payload
 public var userId: String = ""
 
+/// Applies the account's complete first-party identity before the first watch request.
+public func setAuthenticationContext(_ context: TwitchAuthenticationContext?) async {
+    await spadeBeacon.setAuthenticationContext(context)
+}
+
 /// Set the user ID (actor-isolated setter for cross-actor use). Also
 /// switches the Spade beacon to the sticky-per-account UA so this miner's
 /// watch traffic shares a fingerprint with its auth/API requests.

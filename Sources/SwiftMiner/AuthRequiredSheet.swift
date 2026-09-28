@@ -3,6 +3,14 @@ import SwiftMinerCore
 import SwiftMinerService
 
 enum AdditionalAccountSetup {
+    static func requiresOperatorBrowser(
+        existingAccountCount: Int,
+        isReconnecting: Bool,
+        isReconnectingOperator: Bool
+    ) -> Bool {
+        isReconnecting ? isReconnectingOperator : existingAccountCount == 0
+    }
+
     static func shouldPresentChoice(existingAccountCount: Int, isReconnecting: Bool) -> Bool {
         existingAccountCount > 0 && !isReconnecting
     }
@@ -24,6 +32,8 @@ enum AdditionalAccountSetup {
 }
 
 private enum AccountAddSheetStage: Equatable {
+    case operatorOverview
+    case operatorAuthentication
     case choice
     case localOverview
     case friendOverview
@@ -48,11 +58,13 @@ private enum InvitationDeliveryRoute: Equatable {
 struct AuthRequiredSheet: View {
     @Binding var isPresented: Bool
     let reconnectingMinerId: String?
+    let reconnectingIsOperator: Bool
     @Environment(NavigationModel.self) private var navigation
     @Environment(\.openURL) private var openURL
 
     @State private var stage: AccountAddSheetStage
     @State private var loginService = MinerLoginService()
+    @State private var browserLoginService = OperatorBrowserLoginService()
     @State private var successDismissTask: Task<Void, Never>?
     @State private var copiedCode = false
     @State private var swiftBotInvitation: SwiftMinerInvitation?
@@ -68,19 +80,41 @@ struct AuthRequiredSheet: View {
 
     private var settings: Settings { .shared }
 
-    private let sheetWidth: CGFloat = 520
+    private var sheetWidth: CGFloat {
+        stage == .operatorAuthentication ? 960 : 520
+    }
 
     init(
         isPresented: Binding<Bool>,
         reconnectingMinerId: String?,
+        reconnectingIsOperator: Bool,
         existingAccountCount: Int
     ) {
         _isPresented = isPresented
         self.reconnectingMinerId = reconnectingMinerId
-        _stage = State(initialValue: AdditionalAccountSetup.shouldPresentChoice(
+        self.reconnectingIsOperator = reconnectingIsOperator
+        let initialStage: AccountAddSheetStage
+        if reconnectingMinerId != nil,
+           AdditionalAccountSetup.requiresOperatorBrowser(
+               existingAccountCount: existingAccountCount,
+               isReconnecting: true,
+               isReconnectingOperator: reconnectingIsOperator
+           ) {
+            // An operator must reconnect through the browser so its full Drops
+            // catalogue is not silently replaced by a limited TV/device token.
+            initialStage = .operatorAuthentication
+        } else if reconnectingMinerId != nil {
+            initialStage = .authentication
+        } else if AdditionalAccountSetup.requiresOperatorBrowser(
             existingAccountCount: existingAccountCount,
-            isReconnecting: reconnectingMinerId != nil
-        ) ? .choice : .authentication)
+            isReconnecting: false,
+            isReconnectingOperator: false
+        ) {
+            initialStage = .operatorOverview
+        } else {
+            initialStage = .choice
+        }
+        _stage = State(initialValue: initialStage)
     }
 
     var body: some View {
@@ -112,10 +146,17 @@ struct AuthRequiredSheet: View {
                 presentSwiftBotPickerIfReady()
             }
         }
+        .onChange(of: browserLoginService.state) { _, newState in
+            if case .succeeded(let account) = newState {
+                handleBrowserSuccess(account: account)
+                loadConnectedAvatar(for: account)
+            }
+        }
         .onDisappear {
             successDismissTask?.cancel()
             successDismissTask = nil
             loginService.cancel()
+            browserLoginService.cancel()
         }
     }
 
@@ -160,6 +201,8 @@ struct AuthRequiredSheet: View {
             return reconnectingMinerId == nil ? "Account Connected" : "Twitch Reconnected"
         }
         switch stage {
+        case .operatorOverview: return "Set Up SwiftMiner"
+        case .operatorAuthentication: return "Connect Operator Account"
         case .choice: return "Add Account"
         case .localOverview: return "On This Mac"
         case .friendOverview: return "Invite Someone"
@@ -174,6 +217,8 @@ struct AuthRequiredSheet: View {
     private var headerSymbol: String {
         if isSuccessState { return "checkmark.circle.fill" }
         switch stage {
+        case .operatorOverview: return "person.crop.circle.badge.checkmark"
+        case .operatorAuthentication: return "safari"
         case .choice: return "person.crop.circle.badge.plus"
         case .localOverview: return "desktopcomputer"
         case .friendOverview: return "person.badge.plus"
@@ -189,6 +234,10 @@ struct AuthRequiredSheet: View {
                 : "Credentials have been refreshed and mining will resume."
         }
         switch stage {
+        case .operatorOverview:
+            return "Connect the account that will keep the complete Drops catalogue available for every miner."
+        case .operatorAuthentication:
+            return "Sign in on Twitch itself, then let SwiftMiner verify the campaign dashboard and inventory before saving anything."
         case .choice:
             return "Choose how to connect the next Twitch account."
         case .localOverview:
@@ -222,6 +271,10 @@ struct AuthRequiredSheet: View {
     @ViewBuilder
     private var contentArea: some View {
         switch stage {
+        case .operatorOverview:
+            operatorSetupOverview
+        case .operatorAuthentication:
+            operatorAuthenticationContent
         case .choice:
             addMinerChoice
         case .localOverview:
@@ -233,6 +286,67 @@ struct AuthRequiredSheet: View {
         case .authentication:
             authenticationContent
         }
+    }
+
+    // MARK: - First account · full-access operator
+
+    private var operatorSetupOverview: some View {
+        stepList(
+            steps: [
+                ("Sign in on Twitch", "The Twitch website opens inside a browser owned by SwiftMiner. Your password and two-factor prompts go directly to Twitch."),
+                ("Verify the full session", "SwiftMiner checks the campaign dashboard and inventory before it saves the account."),
+                ("Add remote miners normally", "Friends can still use the WebUI or SwiftBot device-code flow. Their progress, inventory and claims remain their own.")
+            ],
+            note: "This first account becomes the Operator. Its complete campaign catalogue helps newer TV-session miners discover every available campaign."
+        )
+    }
+
+    @ViewBuilder
+    private var operatorAuthenticationContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            OperatorBrowserWebView(webView: browserLoginService.webView)
+                .frame(height: 560)
+                .clipShape(RoundedRectangle(cornerRadius: TahoeMetrics.card, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: TahoeMetrics.card, style: .continuous)
+                        .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
+                }
+
+            switch browserLoginService.state {
+            case .idle, .signingIn:
+                HStack(spacing: 10) {
+                    Text("Finish signing in above, then connect the account.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Twitch Drops") { browserLoginService.load() }
+                    Button("Connect This Account") { browserLoginService.connect() }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
+                }
+            case .verifying:
+                inlineProgress("Verifying the Twitch identity, campaign dashboard and inventory…")
+            case .succeeded(let account):
+                connectedSummary(username: account.username)
+            case .failed(let message):
+                VStack(alignment: .leading, spacing: 10) {
+                    Label(message, systemImage: "exclamationmark.triangle.fill")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack {
+                        Button("Try Again") { browserLoginService.retry() }
+                            .buttonStyle(.borderedProminent)
+                        Button("Sign In to a Different Account", role: .destructive) {
+                            Task { await browserLoginService.clearSession() }
+                        }
+                    }
+                }
+                .padding(12)
+                .tahoeCard(tint: .orange.opacity(0.05))
+            }
+        }
+        .onAppear { browserLoginService.start() }
     }
 
     // MARK: - Screen 1 · Add Miner
@@ -736,6 +850,17 @@ struct AuthRequiredSheet: View {
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
 
+            case .primaryOnly(let title, let action):
+                Button("Cancel") {
+                    browserLoginService.cancel()
+                    isPresented = false
+                }
+                .keyboardShortcut(.cancelAction)
+                Spacer()
+                Button(title, action: action)
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+
             case .cancelOnly:
                 Spacer()
                 Button("Cancel") {
@@ -751,12 +876,20 @@ struct AuthRequiredSheet: View {
     private enum FooterLayout {
         case success
         case overview(back: AccountAddSheetStage, continueTitle: String, action: () -> Void)
+        case primaryOnly(title: String, action: () -> Void)
         case cancelOnly
     }
 
     private var footerLayout: FooterLayout {
         if isSuccessState { return .success }
         switch stage {
+        case .operatorOverview:
+            return .primaryOnly(title: "Connect Operator") {
+                stage = .operatorAuthentication
+                browserLoginService.start()
+            }
+        case .operatorAuthentication:
+            return .cancelOnly
         case .localOverview:
             return .overview(back: .choice, continueTitle: "Continue") {
                 stage = .authentication
@@ -775,6 +908,7 @@ struct AuthRequiredSheet: View {
 
     private var isSuccessState: Bool {
         if case .succeeded = loginService.state { return true }
+        if case .succeeded = browserLoginService.state { return true }
         return false
     }
 
@@ -865,6 +999,88 @@ struct AuthRequiredSheet: View {
 
     // MARK: - Handlers
 
+    private func handleBrowserSuccess(account: Account) {
+        successDismissTask?.cancel()
+
+        Task {
+            do {
+                let savedAccount: Account
+                if let reconnectingMinerId {
+                    guard let miner = navigation.minerManager.getMiner(id: reconnectingMinerId) else {
+                        throw TwitchMinerError.sessionNotStarted
+                    }
+                    guard miner.accountId == account.id else {
+                        throw MinerManager.AccountError.reauthenticationAccountMismatch(
+                            expectedUsername: miner.displayName,
+                            actualUsername: account.displayName
+                        )
+                    }
+
+                    let existing = try await navigation.minerManager.tokenStore.loadAccount(
+                        twitchUserId: account.id
+                    )
+                    savedAccount = Account(
+                        id: account.id,
+                        username: account.username,
+                        nickname: existing?.nickname ?? miner.nickname,
+                        ownerDiscordId: existing?.ownerDiscordId ?? miner.ownerDiscordId,
+                        accessToken: account.accessToken,
+                        refreshToken: account.refreshToken,
+                        tokenExpiry: account.tokenExpiry,
+                        scopes: account.scopes,
+                        isOperator: existing?.isOperator ?? miner.isOperator,
+                        authenticationContext: account.authenticationContext
+                    )
+                } else {
+                    guard !navigation.minerManager.miners.contains(where: { $0.accountId == account.id }) else {
+                        throw MinerManager.AccountError.duplicateAccount(username: account.displayName)
+                    }
+                    savedAccount = account
+                }
+
+                // Browser login differs from device login: the validator deliberately does not
+                // persist anything until both protected Drops queries have succeeded. Save the
+                // complete OAuth + browser context first, then make it visible to the manager.
+                try await navigation.minerManager.tokenStore.save(account: savedAccount)
+                if let clientID = savedAccount.authenticationContext?.clientID {
+                    AccountClientRegistry.shared.record(clientID, for: savedAccount.id)
+                }
+
+                navigation.minerManager.updateClientId(Settings.shared.resolvedClientId)
+                let minerId: String
+                if let reconnectingMinerId {
+                    try await navigation.minerManager.replaceAuthentication(
+                        for: reconnectingMinerId,
+                        with: savedAccount
+                    )
+                    minerId = reconnectingMinerId
+                } else {
+                    minerId = try navigation.minerManager.addAccount(savedAccount)
+                }
+                let settings = Settings.shared
+                // Account creation is complete once the verified credential is durable and the
+                // miner exists. A transient first-start failure is handled by the normal miner
+                // recovery UI; it must not turn a successfully saved login into a duplicate
+                // retry prompt.
+                try? await navigation.minerManager.startMiner(
+                    minerId: minerId,
+                    priorityGames: settings.priorityGames(forAccountId: savedAccount.id),
+                    excludedGames: settings.excludedGames(forAccountId: savedAccount.id),
+                    strategy: settings.miningStrategy,
+                    enableBadgesEmotes: settings.enableBadgesEmotes,
+                    showClaimNotifications: settings.showClaimNotifications && settings.allowsOperatorNotifications(),
+                    avoidDuplicateStreams: settings.avoidDuplicateStreams,
+                    antiStallRecoveryEnabled: settings.antiStallRecoveryEnabled,
+                    prioritiseFollowedStreamers: settings.prioritiseFollowedStreamers,
+                    failoverStreamers: settings.gameFailoverStreamers
+                )
+                scheduleSuccessDismissal()
+            } catch {
+                browserLoginService.fail(message: error.localizedDescription)
+            }
+        }
+    }
+
     private func handleSuccess(account: Account) {
         successDismissTask?.cancel()
 
@@ -948,6 +1164,7 @@ struct AuthRequiredSheet: View {
     AuthRequiredSheet(
         isPresented: .constant(true),
         reconnectingMinerId: nil,
+        reconnectingIsOperator: false,
         existingAccountCount: 1
     )
         .environment(NavigationModel(clientId: "preview"))

@@ -110,6 +110,36 @@ final class SpadeBeaconServiceTests: XCTestCase {
         XCTAssertNotNil(Data(base64Encoded: b64), "Value after 'data=' must be valid base64")
     }
 
+    func testBrowserAccountKeepsItsUserAgentForWatchBeacon() async throws {
+        stubFallbackFlow()
+        let browserUserAgent = "Mozilla/5.0 SwiftMiner-Browser-Session"
+        let context = TwitchAuthenticationContext.browser(.init(
+            clientID: TwitchClientIDs.web,
+            origin: TwitchClientIDs.webOrigin,
+            userAgent: browserUserAgent,
+            integrityToken: "integrity",
+            capturedAt: Date(),
+            expiresAt: Date().addingTimeInterval(300),
+            sdkCookieValue: "sdk-cookie",
+            cookieExpiresAt: Date().addingTimeInterval(3_600),
+            generation: 1
+        ))
+
+        await service.setAuthenticationContext(context)
+        await service.setAccountId("browser-account")
+        try await service.sendBeacon(
+            channelLogin: "test",
+            channelId: "1",
+            broadcastId: "2",
+            userId: "3"
+        )
+
+        XCTAssertEqual(
+            beaconPOST().value(forHTTPHeaderField: "User-Agent"),
+            browserUserAgent
+        )
+    }
+
     func testPayloadEventIsMinuteWatched() async throws {
         stubFallbackFlow()
         try await service.sendBeacon(channelLogin: "shroud", channelId: "99", broadcastId: "b1", userId: "42")

@@ -746,14 +746,19 @@ public actor MinerEngine {
     /// This bypasses the keychain reload in start() and avoids the isTokenValid check.
     public func setAccount(_ account: Account) async {
         self.currentAccount = account
+        if let clientID = account.authenticationContext?.clientID {
+            AccountClientRegistry.shared.record(clientID, for: account.id)
+        }
         await authService.setCurrentAccount(account)
         await authService.setAccountId(account.id)
+        await apiClient.setAuthenticationContext(account.authenticationContext)
         await apiClient.setAccountId(account.id)
         await apiClient.setSharedCampaignCatalogProvider(account.isOperator)
         await dropsService.setAccountId(account.id)
         await apiClient.updateAccessToken(account.accessToken)
         await apiClient.setUserLogin(account.username)
         await pubSubClient.updateAccessToken(account.accessToken)
+        await watchSessionManager.setAuthenticationContext(account.authenticationContext)
         await watchSessionManager.setUserId(account.id)
     }
 

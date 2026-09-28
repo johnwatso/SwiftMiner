@@ -18,10 +18,11 @@ public actor TwitchAuthService {
     /// random pick (device-code flow has no account yet); swapped to a
     /// sticky-per-account UA once `setAccountId(_:)` is called.
     private var userAgent = TwitchClientFingerprint.randomAndroidUserAgent()
+    private var browserUserAgent: String?
 
     /// Switches this service's UA to the sticky allocation for `accountId`.
     public func setAccountId(_ accountId: String) {
-        userAgent = TwitchClientFingerprint.shared.userAgent(for: accountId)
+        userAgent = browserUserAgent ?? TwitchClientFingerprint.shared.userAgent(for: accountId)
     }
 
     /// Generate a random 32-char lowercase hex string (matches Twitch's "unique_id" cookie format).
@@ -524,6 +525,15 @@ public actor TwitchAuthService {
     /// Directly set the current account (used when account is already known from a fresh auth flow).
     public func setCurrentAccount(_ account: Account) {
         self.currentAccount = account
+        if case .browser(let browser) = account.authenticationContext {
+            browserUserAgent = browser.userAgent
+            userAgent = browser.userAgent
+        } else {
+            browserUserAgent = nil
+        }
+        if let clientID = account.authenticationContext?.clientID {
+            AccountClientRegistry.shared.record(clientID, for: account.id)
+        }
     }
 
     public func loadSavedAccount() async throws -> Account? {
