@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SwiftMiner 1.42.1 - Release Notes</title>
-  <meta name="description" content="Release notes for SwiftMiner 1.42.1: adding Twitch accounts works again, update and relaunch fixes, steadier waiting miners, and a week of diagnostics.">
-  <link rel="canonical" href="https://swiftminer.app/release-notes/1.42.1.html">
+  <title>SwiftMiner 1.43 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.43: new Twitch sign-ins after Twitch's September change, a full-access Operator account, update and relaunch fixes, steadier waiting miners, and a week of diagnostics.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.43.html">
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
@@ -25,9 +25,9 @@
 </head>
 <body>
   <main>
-    <h1>SwiftMiner 1.42.1</h1>
-    <p class="meta">Version 1.42.1 &middot; Build 2026092910</p>
-    <p class="intro">SwiftMiner 1.42.1 fixes adding Twitch accounts, which stopped working after a change on Twitch&rsquo;s side, along with updates for copies moved to Applications and several miner start-up glitches. Waiting miners also do less redundant work, and diagnostics now keep a full week of history.</p>
+    <h1>SwiftMiner 1.43</h1>
+    <p class="meta">Version 1.43 &middot; Build 2026092911</p>
+    <p class="intro">SwiftMiner 1.43 lets you add Twitch accounts again after Twitch shut down the sign-in SwiftMiner relied on. Your first account now signs in on Twitch&rsquo;s own website inside SwiftMiner and supplies the full Drops campaign list; later accounts sign in through Twitch&rsquo;s TV app. It also fixes updates for copies moved to Applications and several start-up glitches, makes waiting miners do less redundant work, and keeps a full week of diagnostics.</p>
 
     <section>
       <h2>&#128029; Bug fixes</h2>
@@ -36,21 +36,28 @@
         <li>Copies moved with the &ldquo;Move to Applications&rdquo; prompt can update again, instead of failing every update check with &ldquo;SwiftMiner can&rsquo;t be updated if it&rsquo;s running from the location it was downloaded to&rdquo;.</li>
         <li>Opening SwiftMiner while it is already running no longer restarts active miners or wrongly shows them as blocked. Repeated start requests from SwiftBot or the web dashboard are now ignored too.</li>
         <li>A campaign paused for making no progress now stays paused for its full 30 minutes, instead of being picked again straight away as a fallback for the same game.</li>
+        <li>Profile pictures now load for every account, including those signed in through the browser or Twitch&rsquo;s TV app. Pictures are read from Twitch&rsquo;s public profile data, so they no longer depend on each account&rsquo;s sign-in.</li>
         <li>Backing up settings and exporting diagnostics now use the standard macOS save dialog, which opens reliably.</li>
         <li>The web dashboard now reopens as a single window and comes to the front, whether it was closed, minimised or behind another window.</li>
         <li>Skipped Twitch test Drops are now logged once, not on every automatic claim check.</li>
-        <li>The Operator&rsquo;s browser sign-in now keeps renewing its Twitch security check. Renewals that Twitch had in fact accepted were being thrown away, so the Operator could go hours without reading the Drops campaign list. When Twitch does reject the check, SwiftMiner renews it straight away and the miner explains what is happening, with a Reconnect Twitch button if it doesn&rsquo;t clear by itself, instead of reporting that Twitch changed a query.</li>
-        <li>Profile pictures now load for every account, including the Operator and accounts signed in through Twitch&rsquo;s TV app. Pictures are read from Twitch&rsquo;s public profile data, so they no longer depend on each account&rsquo;s sign-in.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>&#128273; Signing in after Twitch&rsquo;s change</h2>
+      <ul>
+        <li>A fresh installation connects its first Twitch account through Twitch&rsquo;s own website, inside a browser that belongs to SwiftMiner. Your password and two-factor prompts go straight to Twitch, and SwiftMiner checks the complete campaign dashboard and inventory before saving the account as the Operator.</li>
+        <li>SwiftMiner keeps the Operator&rsquo;s Twitch security check renewed in the background. If Twitch rejects it, SwiftMiner renews it straight away and the miner explains what is happening, with a Reconnect Twitch button if it doesn&rsquo;t clear by itself.</li>
+        <li>The Operator shares the full campaign list with accounts added after it. Every miner still uses its own Twitch session for channel eligibility, inventory, progress and claims, and searches live channels itself when the Operator is unavailable.</li>
+        <li>Accounts added after the first, including friends joining through the web dashboard or SwiftBot, sign in through Twitch&rsquo;s TV app. They search for campaigns across every game with live Drops streams, checking your priority games most thoroughly, and mine your priority games plus any game Twitch already shows as linked to the account.</li>
+        <li>Existing accounts keep their original Twitch sign-in exactly as it is. Removing one now asks you to confirm first, with a stronger warning for accounts on Twitch&rsquo;s retired Android sign-in: once removed, they can only come back with the more limited TV-app sign-in.</li>
+        <li>New TV-app sign-ins use one consistent Twitch identity from the activation screen onward, and a failed Keychain save cannot disturb a miner&rsquo;s working token.</li>
       </ul>
     </section>
 
     <section>
       <h2>&#9881;&#65039; Steadier mining</h2>
       <ul>
-        <li>A fresh installation now connects its first Twitch account through Twitch&rsquo;s own website inside SwiftMiner and verifies the complete campaign dashboard and inventory before saving it as the Operator. SwiftMiner rotates the Operator&rsquo;s protected browser session before it expires, while remote miners continue joining through the WebUI or SwiftBot activation flow without installing a browser extension.</li>
-        <li>The account marked as Operator can now safely supply the full campaign catalogue to newer TV-app sign-ins. Every miner still uses its own Twitch session for channel eligibility, inventory, progress and claims, and falls back to live-channel discovery when the operator is unavailable.</li>
-        <li>Newly added accounts sign in through Twitch&rsquo;s TV app and search for campaigns across every game with live Drops streams, checking your priority games most thoroughly. Like other accounts, they mine your priority games, plus any game Twitch already shows as linked to the account.</li>
-        <li>Existing miners keep their original Twitch sign-in exactly as it is. New TV-app sign-ins now use one consistent Twitch identity from the activation screen onward, and a failed Keychain save cannot disturb a miner&rsquo;s working token.</li>
         <li>A temporary failure while checking live Drops channels keeps the last known campaign list and retries sooner, instead of making campaigns disappear. Changing priority games also cancels any older search still running in the background.</li>
         <li>A miner&rsquo;s card shows the drop it is actually earning, not a subscription-only reward that some campaigns list first.</li>
         <li>A waiting miner only wakes up when an approved channel goes live with the campaign it is waiting for, not when that channel streams unrelated Drops.</li>
@@ -64,6 +71,7 @@
       <ul>
         <li>Diagnostic logs are now split into one file per day, and SwiftMiner keeps the last seven. An export includes the whole week.</li>
         <li>Export Diagnostic Logs starts in the Desktop folder. A progress card stays on screen while a large report is gathered and redacted, and the finished file is shown in Finder.</li>
+        <li>The Activity Log names campaigns you have already earned in full, so a miner with nothing left to mine no longer looks like it is failing.</li>
         <li>Long sessions with several miners use less CPU to trim the Activity Log.</li>
       </ul>
     </section>
@@ -73,7 +81,6 @@
       <ul>
         <li>Claimed rewards take up less room on the Drops shelf. To see which miner earned a reward, use its info button or hover over the card.</li>
         <li>A miner waiting for a campaign that only runs on approved channels shows a small Limited badge on its Overview card.</li>
-        <li>Removing an account in Settings now asks you to confirm first. Accounts that signed in through Twitch&rsquo;s Android app get a stronger warning, in the app and on the web dashboard: Twitch has shut down that sign-in, so once removed they can only come back with the more limited TV app sign-in.</li>
         <li>The web dashboard can show completed Drops for priority games or for all games, and each browser remembers its own choice.</li>
       </ul>
     </section>
