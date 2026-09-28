@@ -23,6 +23,7 @@ final class OperatorBrowserLoginService {
 
     private static let dataStoreID = UUID(uuidString: "BC84D78C-5850-4C22-A462-0C52AD91F395")!
     private static let webClientID = TwitchClientIDs.web
+    private static let integritySDKURL = "https://k.twitchcdn.net/149e9513-01fa-4fb0-aad4-566afd725d1b/2d206a39-8ed7-437e-a3be-862e0f06eea3/p.js"
 
     private(set) var state: State = .idle
     let webView: WKWebView
@@ -160,14 +161,21 @@ final class OperatorBrowserLoginService {
             deviceID: deviceID
         )
 
-        // The SDK cookie is normally written by the integrity request, so refresh the store
-        // after that request rather than trusting the snapshot taken before it.
+        // WebKit can publish an HTTP-only cross-site cookie to WKHTTPCookieStore a moment
+        // after the JavaScript fetch has completed. Give that handoff a brief chance to settle.
+        try? await Task.sleep(for: .milliseconds(500))
         cookies = await dataStore.httpCookieStore.allCookies()
         guard let sdkCookie = cookies.first(where: {
             $0.name == RemoteBrowserSessionBundle.sdkCookieName
                 && $0.domain.hasSuffix("twitchcdn.net")
                 && !$0.value.isEmpty
         }) else {
+            let observedCookies = Set(cookies.map { "\($0.name)@\($0.domain)" })
+                .sorted()
+                .joined(separator: ", ")
+            Logger.auth.warning(
+                "Operator SDK bootstrap completed without its renewal cookie; observed cookie names/domains: \(observedCookies)"
+            )
             throw LoginError.missingSDKCookie
         }
 
@@ -254,15 +262,109 @@ final class OperatorBrowserLoginService {
         oauthToken: String,
         deviceID: String
     ) async throws -> (token: String, expiresAt: Date) {
-        let result = try await pageFetch(
-            url: "https://gql.twitch.tv/integrity",
-            body: nil,
-            oauthToken: oauthToken,
-            deviceID: deviceID,
-            integrityToken: nil
+        // WebKit blocks third-party cookies even inside an app-owned WKWebView. Run the
+        // official integrity SDK in a private helper view whose first-party origin matches
+        // the SDK cookie, while sharing the same owned website data store. The visible
+        // signed-in Twitch page and its credentials never leave SwiftMiner.
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = dataStore
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        let integrityWebView = WKWebView(frame: .zero, configuration: configuration)
+        guard let sdkOrigin = URL(string: "https://k.twitchcdn.net/") else {
+            throw LoginError.pageUnavailable
+        }
+        integrityWebView.load(URLRequest(url: sdkOrigin))
+        await waitForPageLoad(integrityWebView)
+
+        let script = """
+        const headers = {
+          'Client-Id': clientId,
+          'Authorization': 'OAuth ' + authToken,
+          'X-Device-Id': deviceId
+        };
+
+        return await new Promise(resolve => {
+          let settled = false;
+          let issued = false;
+          let fallback;
+          const deadline = setTimeout(
+            () => finish({ failure: 'sdk_timeout' }),
+            90000
+          );
+          const finish = value => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(deadline);
+            if (fallback) clearTimeout(fallback);
+            resolve(value);
+          };
+          const issue = async () => {
+            if (issued || settled) return;
+            issued = true;
+            const controller = new AbortController();
+            const fetchDeadline = setTimeout(() => controller.abort(), 30000);
+            try {
+              const response = await window.fetch('https://gql.twitch.tv/integrity', {
+                method: 'POST',
+                headers,
+                body: null,
+                credentials: 'omit',
+                mode: 'cors',
+                signal: controller.signal
+              });
+              finish({ status: response.status, body: await response.text() });
+            } catch (_) {
+              finish({ failure: 'issuance_fetch' });
+            } finally {
+              clearTimeout(fetchDeadline);
+            }
+          };
+          const configure = () => {
+            try {
+              window.KPSDK.configure([{
+                protocol: 'https:',
+                method: 'POST',
+                domain: 'gql.twitch.tv',
+                path: '/integrity'
+              }]);
+              return true;
+            } catch (_) {
+              finish({ failure: 'sdk_configure' });
+              return false;
+            }
+          };
+
+          document.addEventListener('kpsdk-ready', issue, { once: true });
+          if (window.KPSDK) {
+            // Twitch may already have loaded the SDK before Connect was pressed. In that
+            // case its ready event has also passed, so configure it and issue shortly after.
+            if (configure()) fallback = setTimeout(issue, 250);
+            return;
+          }
+
+          document.addEventListener('kpsdk-load', configure, { once: true });
+          const sdkScript = document.createElement('script');
+          sdkScript.onerror = () => finish({ failure: 'sdk_script' });
+          sdkScript.src = sdkURL;
+          (document.body || document.documentElement).appendChild(sdkScript);
+        });
+        """
+        let raw = try await integrityWebView.callAsyncJavaScript(
+            script,
+            arguments: [
+                "clientId": Self.webClientID,
+                "authToken": oauthToken,
+                "deviceId": deviceID,
+                "sdkURL": Self.integritySDKURL,
+            ],
+            in: nil,
+            contentWorld: .page
         )
-        guard result.status == 200 || result.status == 429,
-              let json = try? JSONSerialization.jsonObject(with: result.data) as? [String: Any],
+        guard let result = raw as? [String: Any],
+              let status = result["status"] as? Int,
+              status == 200 || status == 429,
+              let body = result["body"] as? String,
+              let json = try? JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any],
               let token = json["token"] as? String,
               !token.isEmpty else {
             throw LoginError.integrityUnavailable
@@ -312,48 +414,14 @@ final class OperatorBrowserLoginService {
         return data
     }
 
-    private func pageFetch(
-        url: String,
-        body: String?,
-        oauthToken: String,
-        deviceID: String,
-        integrityToken: String?
-    ) async throws -> (status: Int, data: Data) {
-        let script = """
-        const headers = { 'Client-Id': clientId, 'Authorization': 'OAuth ' + authToken };
-        if (deviceId) headers['X-Device-Id'] = deviceId;
-        if (integrity) headers['Client-Integrity'] = integrity;
-        const init = { method: 'POST', headers };
-        if (body) { init.body = body; headers['Content-Type'] = 'application/json; charset=UTF-8'; }
-        const response = await fetch(url, init);
-        return JSON.stringify({ status: response.status, body: await response.text() });
-        """
-        let raw = try await webView.callAsyncJavaScript(
-            script,
-            arguments: [
-                "url": url,
-                "body": body ?? "",
-                "clientId": Self.webClientID,
-                "authToken": oauthToken,
-                "deviceId": deviceID,
-                "integrity": integrityToken ?? "",
-            ],
-            in: nil,
-            contentWorld: .page
-        )
-        guard let text = raw as? String,
-              let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
-              let status = object["status"] as? Int,
-              let body = object["body"] as? String else {
-            throw LoginError.pageUnavailable
-        }
-        return (status, Data(body.utf8))
-    }
-
-    private func waitForPageLoad(timeout: TimeInterval = 20) async {
+    private func waitForPageLoad(
+        _ targetWebView: WKWebView? = nil,
+        timeout: TimeInterval = 20
+    ) async {
+        let targetWebView = targetWebView ?? webView
         let deadline = Date().addingTimeInterval(timeout)
         try? await Task.sleep(for: .milliseconds(300))
-        while webView.isLoading, Date() < deadline {
+        while targetWebView.isLoading, Date() < deadline {
             try? await Task.sleep(for: .milliseconds(250))
         }
         try? await Task.sleep(for: .seconds(2))
