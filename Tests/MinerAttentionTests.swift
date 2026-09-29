@@ -81,6 +81,25 @@ final class MinerAttentionTests: XCTestCase {
         XCTAssertEqual(attention?.action, .reconnect)
     }
 
+    /// Reconnecting would replace an Android sign-in Twitch no longer issues.
+    func testRejectedSecurityCheckNeverOffersReconnectForAnAndroidSignIn() {
+        let miner = makeMiner(status: .error, workerState: .failed)
+        let error = EventEntry(
+            message: "Error: \(TwitchMinerError.integrityRejected(operation: "Inventory").localizedDescription)",
+            level: .error,
+            minerId: miner.id
+        )
+
+        let attention = MinerAttentionIssue.resolve(
+            miner: miner,
+            events: [error],
+            usesLegacyAndroidSignIn: true
+        )
+
+        XCTAssertEqual(attention?.title, "Twitch needs to re-check this sign-in")
+        XCTAssertNotEqual(attention?.action, .reconnect)
+    }
+
     func testHealthyMinerHasNoAttentionPanel() {
         XCTAssertNil(MinerAttentionIssue.resolve(miner: makeMiner(), events: []))
     }

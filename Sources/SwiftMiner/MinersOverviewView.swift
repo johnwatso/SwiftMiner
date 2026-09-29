@@ -195,7 +195,11 @@ struct MinersOverviewView: View {
                         minerContextMenu(for: miner)
                     }
 
-                    if let attention = MinerAttentionIssue.resolve(miner: miner, events: navigation.events) {
+                    if let attention = MinerAttentionIssue.resolve(
+                        miner: miner,
+                        events: navigation.events,
+                        usesLegacyAndroidSignIn: navigation.minerManager.usesLegacyAndroidSignIn(accountId: miner.accountId)
+                    ) {
                         minerAttentionSection(for: miner, attention: attention)
                     }
 

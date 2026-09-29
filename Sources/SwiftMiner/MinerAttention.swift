@@ -276,9 +276,13 @@ struct MinerAttentionIssue: Equatable {
         )
     }
 
+    /// `usesLegacyAndroidSignIn` withholds Reconnect where it would replace a working Android
+    /// session, which Twitch no longer issues. A miner that Twitch has already signed out
+    /// (`needsAuth`) keeps it: that session is gone either way.
     static func resolve(
         miner: MinerManager.ManagedMiner,
-        events: [EventEntry]
+        events: [EventEntry],
+        usesLegacyAndroidSignIn: Bool = false
     ) -> MinerAttentionIssue? {
 #if DEBUG
         if let attention = miner.debugAttention {
@@ -332,6 +336,14 @@ struct MinerAttentionIssue: Equatable {
                 // Twitch refused the browser session's integrity proof. Restarting cannot
                 // help — the same session is reused — so name what can: the automatic
                 // renewal, and signing in again when that renewal cannot recover it.
+                if usesLegacyAndroidSignIn {
+                    return MinerAttentionIssue(
+                        title: "Twitch needs to re-check this sign-in",
+                        detail: "Twitch rejected a security check for this account, so SwiftMiner couldn't read the Drops campaign list this time.",
+                        recommendation: "SwiftMiner retries automatically. Don't reconnect this account: it uses Twitch's Android sign-in, which Twitch no longer offers, and reconnecting would replace it with a more limited one.",
+                        action: .restart
+                    )
+                }
                 return MinerAttentionIssue(
                     title: "Twitch needs to re-check this sign-in",
                     detail: "Twitch stopped accepting the security check for this account's browser sign-in, so SwiftMiner can't read the Drops campaign list. It is renewing the check automatically, which usually takes under a minute.",

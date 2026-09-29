@@ -21,6 +21,9 @@ public enum TwitchMinerError: LocalizedError {
     /// is a session problem that renewing the integrity token repairs, and must never be
     /// treated as a retired persisted query.
     case integrityRejected(operation: String)
+    /// A re-sign-in would have replaced a still-working token from Twitch's retired Android
+    /// client, which cannot be issued again. The existing token was kept.
+    case legacySignInProtected(username: String)
     case claimFailed(String)
     case keychainError(String)
     case rateLimited(retryAfter: TimeInterval)
@@ -62,6 +65,8 @@ public enum TwitchMinerError: LocalizedError {
             // "Twitch rejected this account's security check" is what `MinerAttention`
             // recognises; keep it stable.
             return "Twitch rejected this account's security check for \(operation). SwiftMiner is renewing it automatically. If this miner stays blocked for more than a few minutes, choose Reconnect Twitch and sign in on the Twitch page again."
+        case .legacySignInProtected(let username):
+            return "\(username) is still signed in with Twitch's Android app, which Twitch no longer offers. SwiftMiner kept that sign-in instead of replacing it with a more limited one. Nothing needs to be done."
         case .claimFailed(let message):
             return "Claim failed: \(message)"
         case .keychainError(let message):

@@ -606,6 +606,12 @@ final class AccountClientIDTests: XCTestCase {
         MockURLProtocol.requestHandler = { [accountId] request in
             let ok = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
             if request.url?.path == "/oauth2/validate" {
+                // The old Android token is already revoked, so replacing it is allowed and the
+                // save is what fails here.
+                if request.value(forHTTPHeaderField: "Authorization") == "OAuth android-token" {
+                    let rejected = HTTPURLResponse(url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!
+                    return (rejected, Data())
+                }
                 let body = #"{"client_id":"\#(TwitchClientIDs.tv)","login":"miner","scopes":[],"user_id":"\#(accountId)","expires_in":3600}"#
                 return (ok, Data(body.utf8))
             }
@@ -626,6 +632,66 @@ final class AccountClientIDTests: XCTestCase {
 
         let stored = try await store.loadAccount(twitchUserId: accountId)
         XCTAssertEqual(stored?.accessToken, "android-token")
+    }
+
+    /// Twitch no longer issues Android-client tokens, so a re-sign-in through any path (the
+    /// Reconnect sheet, SwiftBot, the web dashboard) must not overwrite one that still works.
+    func testReSignInKeepsAWorkingAndroidToken() async throws {
+        let store = TestTokenStore()
+        // Saved before issuing clients were recorded: no context and no registry entry.
+        try await store.save(account: Account(
+            id: accountId, username: "miner", accessToken: "android-token", refreshToken: "",
+            tokenExpiry: Date().addingTimeInterval(3600), scopes: []
+        ))
+        MockURLProtocol.requestHandler = { [accountId] request in
+            let ok = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            if request.url?.path == "/oauth2/validate" {
+                let client = request.value(forHTTPHeaderField: "Authorization") == "OAuth android-token"
+                    ? TwitchClientIDs.android : TwitchClientIDs.tv
+                let body = #"{"client_id":"\#(client)","login":"miner","scopes":[],"user_id":"\#(accountId)","expires_in":0}"#
+                return (ok, Data(body.utf8))
+            }
+            return (ok, Data(#"{"access_token":"tv-token","refresh_token":"tv-refresh","expires_in":3600,"scope":[],"token_type":"bearer"}"#.utf8))
+        }
+        let service = TwitchAuthService(clientId: TwitchClientIDs.tv, tokenStore: store, urlSession: mockSession)
+
+        do {
+            _ = try await service.pollForToken(deviceCode: "device-code", interval: 0)
+            XCTFail("Expected the working Android sign-in to be protected")
+        } catch TwitchMinerError.legacySignInProtected(let username) {
+            XCTAssertEqual(username, "miner")
+        }
+
+        let stored = try await store.loadAccount(twitchUserId: accountId)
+        XCTAssertEqual(stored?.accessToken, "android-token")
+        XCTAssertNil(AccountClientRegistry.shared.clientId(for: accountId))
+    }
+
+    /// Once Twitch has revoked the Android token there is nothing left to protect, and the
+    /// account must be able to sign in again.
+    func testReSignInReplacesARevokedAndroidToken() async throws {
+        let store = TestTokenStore()
+        try await store.save(account: Account(
+            id: accountId, username: "miner", accessToken: "android-token", refreshToken: "",
+            tokenExpiry: Date().addingTimeInterval(3600), scopes: []
+        ))
+        MockURLProtocol.requestHandler = { [accountId] request in
+            let ok = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            if request.url?.path == "/oauth2/validate" {
+                if request.value(forHTTPHeaderField: "Authorization") == "OAuth android-token" {
+                    return (HTTPURLResponse(url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!, Data())
+                }
+                let body = #"{"client_id":"\#(TwitchClientIDs.tv)","login":"miner","scopes":[],"user_id":"\#(accountId)","expires_in":3600}"#
+                return (ok, Data(body.utf8))
+            }
+            return (ok, Data(#"{"access_token":"tv-token","refresh_token":"tv-refresh","expires_in":3600,"scope":[],"token_type":"bearer"}"#.utf8))
+        }
+        let service = TwitchAuthService(clientId: TwitchClientIDs.tv, tokenStore: store, urlSession: mockSession)
+
+        let account = try await service.pollForToken(deviceCode: "device-code", interval: 0)
+
+        XCTAssertEqual(account.accessToken, "tv-token")
+        XCTAssertEqual(AccountClientRegistry.shared.clientId(for: accountId), TwitchClientIDs.tv)
     }
 
     func testRevocationPresentsTheAccountsIssuingClient() async throws {
