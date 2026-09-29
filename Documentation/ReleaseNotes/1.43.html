@@ -26,7 +26,7 @@
 <body>
   <main>
     <h1>SwiftMiner 1.43</h1>
-    <p class="meta">Version 1.43 &middot; Build 2026092911</p>
+    <p class="meta">Version 1.43 &middot; Build 2026092914</p>
     <p class="intro">SwiftMiner 1.43 lets you add Twitch accounts again after Twitch shut down the sign-in SwiftMiner relied on. Your first account now signs in on Twitch&rsquo;s own website inside SwiftMiner and supplies the full Drops campaign list; later accounts sign in through Twitch&rsquo;s TV app. It also fixes updates for copies moved to Applications and several start-up glitches, makes waiting miners do less redundant work, and keeps a full week of diagnostics.</p>
 
     <section>
@@ -50,7 +50,7 @@
         <li>SwiftMiner keeps the Operator&rsquo;s Twitch security check renewed in the background. If Twitch rejects it, SwiftMiner renews it straight away and the miner explains what is happening, with a Reconnect Twitch button if it doesn&rsquo;t clear by itself.</li>
         <li>The Operator shares the full campaign list with accounts added after it. Every miner still uses its own Twitch session for channel eligibility, inventory, progress and claims, and searches live channels itself when the Operator is unavailable.</li>
         <li>Accounts added after the first, including friends joining through the web dashboard or SwiftBot, sign in through Twitch&rsquo;s TV app. They search for campaigns across every game with live Drops streams, checking your priority games most thoroughly, and mine your priority games plus any game Twitch already shows as linked to the account.</li>
-        <li>Existing accounts keep their original Twitch sign-in exactly as it is. Removing one now asks you to confirm first, with a stronger warning for accounts on Twitch&rsquo;s retired Android sign-in: once removed, they can only come back with the more limited TV-app sign-in.</li>
+        <li>Existing accounts keep their original Twitch sign-in exactly as it is. Removing one now asks you to confirm first, with a stronger warning for accounts on Twitch&rsquo;s retired Android sign-in: once removed, they can only come back with the more limited TV-app sign-in. Signing an Android account in again &mdash; from SwiftMiner, SwiftBot or the web dashboard &mdash; keeps its Android sign-in while Twitch still accepts it, and is only allowed to replace it once Twitch has signed the account out.</li>
         <li>New TV-app sign-ins use one consistent Twitch identity from the activation screen onward, and a failed Keychain save cannot disturb a miner&rsquo;s working token.</li>
       </ul>
     </section>

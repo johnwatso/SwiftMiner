@@ -163,6 +163,14 @@ public actor TwitchAuthService {
             do {
                 let issued = try await requestToken(deviceCode: deviceCode)
                 Logger.auth.info("Token received! User: \(issued.account.username)")
+                // Every re-sign-in path — the app's Reconnect sheet, a SwiftBot invitation, the
+                // web dashboard — lands here, so this is where an irreplaceable Android session
+                // is protected from being overwritten by a new client's token.
+                if issued.clientId != TwitchClientIDs.android,
+                   await legacyAndroidSignInIsStillWorking(forUserId: issued.account.id) {
+                    Logger.auth.warning("Kept \(issued.account.username)'s working Android sign-in instead of replacing it")
+                    throw TwitchMinerError.legacySignInProtected(username: issued.account.username)
+                }
                 let account = await mergingStoredIdentity(into: issued.account)
                 try await tokenStore.save(account: account)
                 // Only switch the account's client after its matching token is durable. If the
@@ -490,6 +498,36 @@ public actor TwitchAuthService {
             isOperator: existing.isOperator,
             authenticationContext: account.authenticationContext ?? existing.authenticationContext
         )
+    }
+
+    // MARK: - Legacy Android sign-ins
+
+    /// Whether this user already holds a working token issued to Twitch's Android app.
+    ///
+    /// Twitch stopped accepting the Android client for new sign-ins on 2026-09-18, so such a
+    /// session cannot be recreated: replacing it yields a TV or browser session that cannot
+    /// read the Drops dashboard on its own. It may be replaced only once Twitch has rejected
+    /// its token. Android tokens carry no expiry (`expires_in` is 0), so a rejection means the
+    /// session was revoked, not that it lapsed. Anything short of that proof — including
+    /// Twitch being unreachable — keeps it. The token is only inspected, never refreshed here:
+    /// spending its refresh grant would strand the running miner on a used one.
+    public func legacyAndroidSignInIsStillWorking(forUserId userId: String) async -> Bool {
+        guard let existing = try? await tokenStore.loadAccount(twitchUserId: userId) else {
+            return false
+        }
+        // Records saved before issuing clients were tracked were all Android sign-ins.
+        let issuedTo = existing.authenticationContext?.clientID
+            ?? AccountClientRegistry.shared.clientId(for: existing.id)
+            ?? TwitchClientIDs.android
+        guard issuedTo == TwitchClientIDs.android else { return false }
+
+        var request = URLRequest(url: validateURL)
+        request.setValue("OAuth \(existing.accessToken)", forHTTPHeaderField: "Authorization")
+        guard let (_, response) = try? await urlSession.data(for: request),
+              let status = (response as? HTTPURLResponse)?.statusCode else {
+            return true
+        }
+        return status != 401
     }
 
     // MARK: - Token Validation

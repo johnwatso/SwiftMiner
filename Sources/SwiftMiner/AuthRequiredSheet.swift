@@ -1015,6 +1015,15 @@ struct AuthRequiredSheet: View {
                             actualUsername: account.displayName
                         )
                     }
+                    // Reconnecting an Operator goes through the browser, which would replace a
+                    // still-working Android token that Twitch can no longer issue.
+                    let authService = TwitchAuthService(
+                        clientId: Settings.shared.resolvedSignInClientId,
+                        tokenStore: navigation.minerManager.tokenStore
+                    )
+                    if await authService.legacyAndroidSignInIsStillWorking(forUserId: account.id) {
+                        throw TwitchMinerError.legacySignInProtected(username: account.displayName)
+                    }
 
                     let existing = try await navigation.minerManager.tokenStore.loadAccount(
                         twitchUserId: account.id
