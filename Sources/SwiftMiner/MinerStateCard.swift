@@ -1336,7 +1336,13 @@ struct MinerActivitySnapshot {
             return waitingItem(
                 id: "idle-\(miner.id)",
                 title: "Up to Date",
-                subtitle: "Nothing is available to mine for this account.",
+                subtitle: hasEarnedEveryPriorityCampaign(
+                    miner.allCampaigns,
+                    priorityGames: priorityGames,
+                    includesBadgeAndEmoteCampaigns: includesBadgeAndEmoteCampaigns
+                )
+                    ? "Everything available for your priority games is already earned."
+                    : "Nothing is available to mine for this account.",
                 symbol: "calendar.badge.checkmark",
                 accent: .green
             )
@@ -1382,6 +1388,30 @@ struct MinerActivitySnapshot {
             symbol: symbol,
             accent: accent
         )
+    }
+
+    /// Whether this account has earned every reward it could earn by watching from the live
+    /// campaigns for its priority games. An idle miner in that state is finished, not stuck,
+    /// and saying so spares a look through the Activity Log. Subscription-only rewards cannot
+    /// be earned by watching, so they neither count against it nor make a campaign count, and
+    /// badge-only campaigns are skipped when the account is set not to mine them.
+    static func hasEarnedEveryPriorityCampaign(
+        _ campaigns: [Campaign],
+        priorityGames: [String],
+        includesBadgeAndEmoteCampaigns: Bool = true
+    ) -> Bool {
+        let priorityKeys = Set(priorityGames.map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        })
+        let watchable = campaigns.filter { campaign in
+            campaign.isTimeActive
+                && priorityKeys.contains(campaign.gameName.lowercased())
+                && campaign.drops.contains { !$0.isSubscriptionRequired }
+                && (includesBadgeAndEmoteCampaigns || !campaign.hasOnlyBadgesOrEmotes)
+        }
+        return !watchable.isEmpty && watchable.allSatisfy { campaign in
+            campaign.drops.filter { !$0.isSubscriptionRequired }.allSatisfy(\.isClaimed)
+        }
     }
 
     private static func upToDateItem(id: String, subtitle: String) -> MinerActivityItem {

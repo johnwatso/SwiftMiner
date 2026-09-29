@@ -368,10 +368,6 @@ extension OverviewView {
             .joined()
     }
 
-    func startLinkAccountFlow(for miner: MinerManager.ManagedMiner) {
-        navigation.reconnectTwitchAccount(for: miner.id)
-    }
-
     private func makePreferredGameItem(
         _ preference: GamePreference,
         artwork: OverviewArtworkResolver.ArtworkIndex,

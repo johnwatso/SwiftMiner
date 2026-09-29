@@ -338,6 +338,54 @@ final class MinerActivitySnapshotTests: XCTestCase {
         )
     }
 
+    /// An idle miner that has earned every watchable reward for its priority games is
+    /// finished, and the card says so instead of the generic "nothing available".
+    func testEarnedEverythingOnlyWhenEveryPriorityCampaignIsClaimed() {
+        let earned = makeCampaign(
+            id: "earned",
+            gameName: "Overwatch",
+            isAccountConnected: false,
+            drops: [
+                Drop(id: "a", name: "Spray", requiredMinutes: 60, isClaimed: true),
+                // Subscription-only rewards cannot be earned by watching and do not count.
+                Drop(id: "b", name: "Sub reward", requiredMinutes: 0, requiredSubs: 1)
+            ]
+        )
+        let unearned = makeCampaign(id: "open", gameName: "Apex Legends", isAccountConnected: false)
+        let otherGame = makeCampaign(id: "other", gameName: "Rust", isAccountConnected: false)
+        let priority = ["Overwatch", "Apex Legends"]
+
+        XCTAssertTrue(MinerActivitySnapshot.hasEarnedEveryPriorityCampaign(
+            [earned, otherGame], priorityGames: priority
+        ))
+        XCTAssertFalse(MinerActivitySnapshot.hasEarnedEveryPriorityCampaign(
+            [earned, unearned], priorityGames: priority
+        ))
+        // No live priority campaign at all is "nothing available", not "all earned".
+        XCTAssertFalse(MinerActivitySnapshot.hasEarnedEveryPriorityCampaign(
+            [otherGame], priorityGames: priority
+        ))
+
+        // A badge-only campaign the account is set not to mine does not hold the message back.
+        let badgeOnly = makeCampaign(
+            id: "badge",
+            gameName: "Apex Legends",
+            isAccountConnected: false,
+            drops: [Drop(
+                id: "badge-drop",
+                name: "Badge",
+                requiredMinutes: 30,
+                reward: Reward(id: "badge-reward", type: .badge, name: "Badge", description: "")
+            )]
+        )
+        XCTAssertTrue(MinerActivitySnapshot.hasEarnedEveryPriorityCampaign(
+            [earned, badgeOnly], priorityGames: priority, includesBadgeAndEmoteCampaigns: false
+        ))
+        XCTAssertFalse(MinerActivitySnapshot.hasEarnedEveryPriorityCampaign(
+            [earned, badgeOnly], priorityGames: priority, includesBadgeAndEmoteCampaigns: true
+        ))
+    }
+
     private func makeCampaign(
         id: String,
         gameId: String = "game-1",
