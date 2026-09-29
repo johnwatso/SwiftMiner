@@ -181,17 +181,17 @@
             margin: 20px auto 28px;
             max-width: 560px;
             padding: 16px 20px;
-            border: 1px solid rgba(245, 158, 11, 0.5);
+            border: 1px solid rgba(16, 185, 129, 0.45);
             border-radius: 16px;
-            background: rgba(245, 158, 11, 0.12);
+            background: rgba(16, 185, 129, 0.10);
             color: var(--muted);
             font-size: 14px;
             text-align: left;
         }
-        .notice strong { display: block; margin-bottom: 4px; color: #fbbf24; }
+        .notice strong { display: block; margin-bottom: 4px; color: #34d399; }
         @media (prefers-color-scheme: light) {
             .notice { color: #475569; }
-            .notice strong { color: #b45309; }
+            .notice strong { color: #047857; }
         }
         .steps {
             display: grid;
@@ -309,10 +309,10 @@
                 <span>Finding the latest SwiftMiner release…</span>
             </p>
 
-            <!-- Temporary notice: Twitch blocked device-code sign-in (Sept 2026). Remove once the login fix ships. -->
+            <!-- Follow-up to the Sept 2026 Twitch sign-in change. Safe to remove once 1.43 has been out a while. -->
             <div class="notice" role="note">
-                <strong>New logins are currently broken</strong>
-                Twitch changed its sign-in system, so connecting a new account (step 3 below) will fail right now. Accounts already signed in should keep working, so don't sign out of or remove them. We're working on a fix and it will arrive as an automatic update.
+                <strong>Adding Twitch accounts works again in SwiftMiner 1.43</strong>
+                A Twitch sign-in change in September 2026 stopped earlier versions from adding accounts (step 3 below). Version 1.43 and later connect accounts normally.
             </div>
 
             <ol class="steps" aria-label="Installation steps">

@@ -27,8 +27,8 @@
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License">
 </p>
 
-> [!WARNING]
-> **New Twitch logins are currently broken.** Since around 18 September 2026, Twitch has been rejecting the sign-in method SwiftMiner uses, so adding a new account or re-adding an existing one will fail. Accounts that are already signed in should keep working, so **don't sign out of or remove them** for now. We're working on a fix and will ship it as an update.
+> [!NOTE]
+> **Adding Twitch accounts works again in SwiftMiner 1.43.** A Twitch sign-in change in September 2026 stopped earlier versions from adding or re-adding accounts. Update to 1.43 or later to connect accounts again. Accounts that were already signed in keep working as before.
 
 <p align="center">
   <picture>
