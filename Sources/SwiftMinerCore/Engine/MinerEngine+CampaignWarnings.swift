@@ -142,6 +142,27 @@ extension MinerEngine {
         return "Campaigns: \(totalCampaigns) total, \(candidates.count) account-eligible\(suffix)"
     }
 
+    /// How often the "Repaired N other campaign(s)" summary may repeat. Twitch omits the same
+    /// fields for dozens of campaigns on nearly every refresh, so two miners wrote the line
+    /// ~470 times a day saying the same thing. The per-campaign line for the campaign being
+    /// worked is unaffected.
+    static let otherCampaignRepairLogInterval: TimeInterval = 60 * 60
+
+    /// A jump this large is a change worth seeing at once: Twitch answering noticeably worse.
+    static let otherCampaignRepairLogJump = 10
+
+    static func shouldLogOtherCampaignRepairs(
+        count: Int,
+        lastLoggedAt: Date?,
+        lastLoggedCount: Int,
+        now: Date
+    ) -> Bool {
+        guard count > 0 else { return false }
+        guard let lastLoggedAt else { return true }
+        return now.timeIntervalSince(lastLoggedAt) >= otherCampaignRepairLogInterval
+            || count >= lastLoggedCount + otherCampaignRepairLogJump
+    }
+
     /// Describes a campaign the miner was actively working that has just stopped being a
     /// candidate, in terms of the fields that decide candidacy.
     ///

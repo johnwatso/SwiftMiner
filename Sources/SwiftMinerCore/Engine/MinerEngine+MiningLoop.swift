@@ -120,8 +120,15 @@ extension MinerEngine {
                     }
                     let workedRepairCount = previouslyMinedCampaignId.flatMap { repairs[$0] } == nil ? 0 : 1
                     let others = repairs.count - workedRepairCount
-                    if others > 0 {
+                    if Self.shouldLogOtherCampaignRepairs(
+                        count: others,
+                        lastLoggedAt: lastOtherRepairLogAt,
+                        lastLoggedCount: lastLoggedOtherRepairCount,
+                        now: Date()
+                    ) {
                         log("Repaired \(others) other campaign(s) that came back missing fields Twitch had sent before.")
+                        lastOtherRepairLogAt = Date()
+                        lastLoggedOtherRepairCount = others
                     }
                     if refreshDiagnostics.rejectedShells > 0 {
                         log("Warning: ignored \(refreshDiagnostics.rejectedShells) campaign(s) Twitch listed with an unusable window.")

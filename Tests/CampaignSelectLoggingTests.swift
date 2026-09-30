@@ -102,6 +102,32 @@ final class CampaignSelectLoggingTests: XCTestCase {
     }
 }
 
+/// Twitch omits the same fields on most refreshes, so the repair summary is written once an
+/// hour rather than every cycle — but a sudden jump still shows at once.
+final class OtherCampaignRepairLoggingTests: XCTestCase {
+    func testRepairSummaryIsThrottledButJumpsShowImmediately() {
+        let start = Date(timeIntervalSince1970: 1_000_000)
+
+        XCTAssertTrue(MinerEngine.shouldLogOtherCampaignRepairs(
+            count: 38, lastLoggedAt: nil, lastLoggedCount: 0, now: start
+        ))
+        // The usual cycle-to-cycle wobble stays quiet within the hour.
+        XCTAssertFalse(MinerEngine.shouldLogOtherCampaignRepairs(
+            count: 41, lastLoggedAt: start, lastLoggedCount: 38, now: start.addingTimeInterval(300)
+        ))
+        XCTAssertTrue(MinerEngine.shouldLogOtherCampaignRepairs(
+            count: 39, lastLoggedAt: start, lastLoggedCount: 38, now: start.addingTimeInterval(3_600)
+        ))
+        // Twitch suddenly dropping fields for many more campaigns is reported at once.
+        XCTAssertTrue(MinerEngine.shouldLogOtherCampaignRepairs(
+            count: 48, lastLoggedAt: start, lastLoggedCount: 38, now: start.addingTimeInterval(300)
+        ))
+        XCTAssertFalse(MinerEngine.shouldLogOtherCampaignRepairs(
+            count: 0, lastLoggedAt: nil, lastLoggedCount: 0, now: start
+        ))
+    }
+}
+
 /// The engine's log handler is `@Sendable` and called from the actor, so collected lines need
 /// their own synchronisation.
 private final class LogRecorder: @unchecked Sendable {
