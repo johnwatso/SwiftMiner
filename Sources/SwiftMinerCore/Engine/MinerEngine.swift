@@ -226,6 +226,11 @@ public actor MinerEngine {
     /// Only ever non-empty for an account signed in with Twitch's TV client, which cannot ask.
     /// Refreshed after every campaign fetch; see `TwitchAPIClient.campaignIDsAwaitingLinkState`.
     var campaignsAwaitingLinkState: Set<String> = []
+    /// When the "Repaired N other campaign(s)" summary was last written, and the count it
+    /// carried. Twitch drops the same fields on most refreshes, so the summary is throttled.
+    var lastOtherRepairLogAt: Date?
+    var lastLoggedOtherRepairCount = 0
+
     /// After this many back-to-back stall windows with no verified progress and
     /// no external claim (and no failover streamer to try), a campaign is
     /// treated as non-earning and put on cooldown.
