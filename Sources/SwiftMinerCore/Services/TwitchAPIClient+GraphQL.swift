@@ -1003,6 +1003,7 @@ extension TwitchAPIClient {
         includingAllGames: Bool
     ) async throws -> (campaigns: [Campaign], channelCount: Int, failedRequestCount: Int) {
         var channelIds: [String] = []
+        var unresolvedChannelLogins: [String: String] = [:]
         var seenChannels = Set<String>()
         var coveredGames = Set<String>()
         var answeredRequests = 0
@@ -1048,6 +1049,9 @@ extension TwitchAPIClient {
                 for channel in channels.prefix(Self.maxDiscoveryChannelsPerPrioritisedGame)
                     where seenChannels.insert(channel.id).inserted {
                     channelIds.append(channel.id)
+                    if channel.id == channel.login {
+                        unresolvedChannelLogins[channel.id] = channel.login
+                    }
                 }
             case .failure(let error):
                 failedRequestCount += 1
@@ -1070,7 +1074,10 @@ extension TwitchAPIClient {
             }
         }
 
-        let channelResult = try await fetchCampaignsForDiscovery(channelIds: channelIds)
+        let channelResult = try await fetchCampaignsForDiscovery(
+            channelIds: channelIds,
+            unresolvedChannelLogins: unresolvedChannelLogins
+        )
 
         // Nothing answered at all: surface the failure so the caller retries rather than
         // concluding that no campaigns exist.
@@ -1090,7 +1097,8 @@ extension TwitchAPIClient {
     /// they carry. If every detail request fails, propagate that failure instead of caching an
     /// empty campaign list as a successful discovery result.
     func fetchCampaignsForDiscovery(
-        channelIds: [String]
+        channelIds: [String],
+        unresolvedChannelLogins: [String: String] = [:]
     ) async throws -> (campaigns: [Campaign], failedChannelCount: Int) {
         let queue = channelIds
         let results: [Result<[Campaign], Error>] = await withTaskGroup(
@@ -1103,7 +1111,13 @@ extension TwitchAPIClient {
                 next += 1
                 group.addTask {
                     do {
-                        return .success(try await self.fetchAvailableDropCampaigns(channelId: channelId))
+                        let resolvedId: String
+                        if let login = unresolvedChannelLogins[channelId] {
+                            resolvedId = try await self.getChannel(login: login).id
+                        } else {
+                            resolvedId = channelId
+                        }
+                        return .success(try await self.fetchAvailableDropCampaigns(channelId: resolvedId))
                     } catch {
                         return .failure(error)
                     }
@@ -1116,7 +1130,13 @@ extension TwitchAPIClient {
                     next += 1
                     group.addTask {
                         do {
-                            return .success(try await self.fetchAvailableDropCampaigns(channelId: channelId))
+                            let resolvedId: String
+                            if let login = unresolvedChannelLogins[channelId] {
+                                resolvedId = try await self.getChannel(login: login).id
+                            } else {
+                                resolvedId = channelId
+                            }
+                            return .success(try await self.fetchAvailableDropCampaigns(channelId: resolvedId))
                         } catch {
                             return .failure(error)
                         }

@@ -758,6 +758,18 @@ final class ServiceTests: XCTestCase {
         }
     }
 
+    func testGetGameSlugUsesCanonicalSlugFromCurrentDirectoryResponse() async throws {
+        // Twitch's display name derives to "overwatch", but its live directory is
+        // "overwatch-2". The slug must also win when a name field is present.
+        MockURLProtocol.stubResponseData = Data(
+            #"{"data":{"game":{"id":"515025","slug":"overwatch-2","name":"Overwatch","__typename":"Game"}}}"#.utf8
+        )
+
+        let slug = try await apiClient.getGameSlug(name: "Overwatch")
+
+        XCTAssertEqual(slug, "overwatch-2")
+    }
+
     func testFindLiveChannelsUsesCanonicalCategorySearchWhenDropsNameDiffersFromDirectoryName() async throws {
         let redirectNames = StringRequestRecorder()
         let directorySlugs = StringRequestRecorder()
@@ -1714,6 +1726,32 @@ final class ServiceTests: XCTestCase {
         XCTAssertEqual(first, ["campaign-a", "campaign-b"])
         XCTAssertEqual(second, ["campaign-a", "campaign-b"])
         XCTAssertEqual(operations.recordedValues.filter { $0 == "DropsHighlightService_AvailableDrops" }.count, 1)
+    }
+
+    func testCampaignDiscoveryResolvesDirectoryLoginBeforeCheckingDrops() async throws {
+        let channelIDs = StringRequestRecorder()
+        MockURLProtocol.requestHandler = { request in
+            let ok = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            if request.url?.path == "/integrity" {
+                return (ok, Data(#"{"token":"integrity-token","expiration":4102444800000}"#.utf8))
+            }
+            if request.url?.path == "/helix/users" {
+                XCTAssertEqual(request.url?.query, "login=discovery_streamer")
+                return (ok, Data(#"{"data":[{"id":"471317143","login":"discovery_streamer","display_name":"Discovery Streamer","type":"","broadcaster_type":"","description":"","profile_image_url":"https://example.com/img.png","offline_image_url":"","view_count":100,"created_at":"2020-01-01T00:00:00Z"}]}"#.utf8))
+            }
+            let body = try JSONSerialization.jsonObject(with: request.httpBody!) as! [String: Any]
+            let variables = body["variables"] as! [String: Any]
+            channelIDs.append(variables["channelID"] as? String ?? "")
+            return (ok, Data(#"{"data":{"channel":{"viewerDropCampaigns":[]}}}"#.utf8))
+        }
+
+        let result = try await apiClient.fetchCampaignsForDiscovery(
+            channelIds: ["discovery_streamer"],
+            unresolvedChannelLogins: ["discovery_streamer": "discovery_streamer"]
+        )
+
+        XCTAssertEqual(channelIDs.recordedValues, ["471317143"])
+        XCTAssertEqual(result.failedChannelCount, 0)
     }
 
     func testCampaignDiscoveryRejectsAnAllChannelFailure() async throws {

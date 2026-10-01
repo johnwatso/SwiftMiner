@@ -1171,6 +1171,11 @@ public actor TwitchAPIClient {
 
         if let responseData = json?["data"] as? [String: Any],
            let redirect = responseData["game"] as? [String: Any] {
+            // Current responses expose the canonical category URL as `slug`.
+            // Keep the older response fields as fallbacks for existing sessions.
+            if let slug = redirect["slug"] as? String, !slug.isEmpty {
+                return slug
+            }
             if let slug = redirect["name"] as? String, !slug.isEmpty {
                 return slug
             }
