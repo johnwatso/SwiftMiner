@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SwiftMiner 1.44 - Release Notes</title>
-  <meta name="description" content="Release notes for SwiftMiner 1.44: restored Twitch sign-in, reliable campaign discovery, update and relaunch fixes, clearer mining status, and a week of diagnostics.">
+  <meta name="description" content="Release notes for SwiftMiner 1.44: a redesigned login for new users following Twitch’s sign-in change, Operator accounts, and improved Drops discovery.">
   <link rel="canonical" href="https://swiftminer.app/release-notes/1.44.html">
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
@@ -27,55 +27,48 @@
   <main>
     <h1>SwiftMiner 1.44</h1>
     <p class="meta">Version 1.44 &middot; Released 2 October 2026</p>
-    <p class="intro">SwiftMiner 1.44 restores adding Twitch accounts after Twitch’s sign-in change, improves campaign discovery for additional accounts, and fixes updates for copies moved to Applications. It also makes mining and relaunching more reliable, explains when every available reward has been earned, and keeps a full week of diagnostics. These notes cover the changes since 1.42, the previous published release.</p>
+    <p class="intro">SwiftMiner 1.44 introduces a redesigned login experience for new users after Twitch retired the sign-in method SwiftMiner previously relied on. Getting started now uses Twitch’s own website inside SwiftMiner, with your first account becoming the Operator that helps discover Drops campaigns for your other accounts.</p>
 
     <section>
-      <h2>🔑 Twitch sign-in works again</h2>
+      <h2>🔑 Why we redesigned login</h2>
       <ul>
-        <li>New installations connect their first account through Twitch’s own website inside SwiftMiner. Password and two-factor prompts go directly to Twitch; SwiftMiner checks campaign and inventory access before saving the account as the Operator.</li>
-        <li>The Operator shares the full campaign catalogue with additional accounts and renews Twitch’s security check in the background. If renewal needs attention, the miner explains the problem and offers Reconnect Twitch.</li>
-        <li>Additional accounts, including friends joining through SwiftBot or the web dashboard, sign in through Twitch’s TV app. Each miner uses its own account for eligibility, inventory, progress and claims, and can search live channels when the Operator is unavailable.</li>
-        <li>Existing accounts keep their working sign-in. Reconnecting an account on Twitch’s retired Android sign-in preserves that session while Twitch still accepts it; removing an account now asks for confirmation and warns when its original sign-in cannot be restored.</li>
+        <li>Twitch’s change stopped new users from connecting accounts through SwiftMiner’s previous Android sign-in method. This release rebuilds the setup flow so new users can get started again, and new accounts and invitations can connect.</li>
+        <li>For a fresh installation, your first account signs in on Twitch’s own website in a browser inside SwiftMiner. You complete Twitch’s normal login and any two-factor prompts there; your password goes directly to Twitch.</li>
+        <li>Before finishing setup, SwiftMiner checks that the account can access the Drops campaign dashboard and inventory, then saves it as your Operator account.</li>
       </ul>
     </section>
 
     <section>
-      <h2>🐝 More reliable campaign discovery and mining</h2>
+      <h2>🐝 How additional accounts work now</h2>
       <ul>
-        <li>TV-app accounts search games with live Drops streams, check priority games first, and mine priority games plus games Twitch already shows as linked to the account.</li>
-        <li>Campaign discovery uses Twitch’s correct live category URL and resolves streamer names to channel IDs before checking Drops. This fixes missed campaigns that could leave one miner showing “Up to Date” while another was already mining the same campaign.</li>
-        <li>A temporary channel-search failure preserves the last known campaign list and retries sooner. Changing priority games cancels outdated searches.</li>
-        <li>Campaigns paused for making no progress stay paused for the full 30 minutes. Waiting miners keep their channel-update connection and wake for the campaign they need, while automatic reward checks run every two minutes. Manual claims still check immediately.</li>
+        <li>Your Operator supplies the full Drops campaign catalogue to your other miners. SwiftMiner renews its Twitch security check in the background and explains when the account needs attention, with a Reconnect Twitch button if needed.</li>
+        <li>Additional accounts, including friends joining through SwiftBot or the web dashboard, connect through Twitch’s TV-app activation flow. Each account still earns and claims its own rewards using its own Twitch session.</li>
+        <li>TV-app accounts can search live Drops streams when the Operator is unavailable. They check priority games first and mine your priority games plus games Twitch already shows as linked to the account.</li>
+        <li>This release also fixes campaign discovery for these new sign-ins. SwiftMiner now uses the correct live category URLs and resolves streamer names before checking Drops, preventing missed campaigns that could leave a miner incorrectly showing “Up to Date”.</li>
       </ul>
     </section>
 
     <section>
-      <h2>🛠 Updates, relaunching and account display</h2>
+      <h2>✅ What existing users need to know</h2>
       <ul>
-        <li>Copies moved using “Move to Applications” can update again without the downloaded-location error.</li>
-        <li>Opening SwiftMiner while it is already running no longer restarts active miners or wrongly marks them as blocked. Repeated start requests from SwiftBot and the web dashboard are also ignored.</li>
-        <li>Profile pictures load for browser and TV-app accounts. Miner cards show the reward actually being earned and clearly say when all available rewards for priority games are complete.</li>
-        <li>Claimed rewards take up less room on the Drops shelf, and miners waiting for approved channels show a Limited badge. The web dashboard remembers each browser’s choice of completed Drops for priority games or all games and reopens as a single window.</li>
+        <li>Accounts already connected to SwiftMiner keep their working sign-in and do not need to log in again just because of this redesign.</li>
+        <li>Reconnecting an account that uses Twitch’s retired Android sign-in preserves its original session while Twitch still accepts it. Removing an account asks for confirmation and warns when that original sign-in cannot be restored.</li>
+        <li>Profile pictures now load for accounts connected through the browser or TV-app flow, too.</li>
       </ul>
     </section>
 
     <section>
-      <h2>📋 Clearer diagnostics and reliable exports</h2>
+      <h2>🛠 Other improvements in 1.44</h2>
       <ul>
-        <li>Diagnostic logs are kept in daily files for the last seven days, and exports include the full week. Exporting starts on the Desktop, shows progress while the report is gathered and redacted, and reveals the finished file in Finder.</li>
-        <li>Settings backups and diagnostic exports use the standard macOS save dialog, which opens reliably.</li>
-        <li>The Activity Log names fully earned campaigns and uses less CPU during long sessions. Repeated campaign-repair summaries appear at most hourly unless the count changes substantially, and skipped Twitch test Drops are logged once.</li>
+        <li>Copies moved using “Move to Applications” can update again. Opening an already running SwiftMiner, or repeating a start request from SwiftBot or the web dashboard, no longer restarts active miners or wrongly marks them as blocked.</li>
+        <li>Campaign discovery keeps the last known list after a temporary search failure and cancels outdated searches when priorities change. Campaigns paused for no progress stay paused for 30 minutes, and waiting miners keep their channel-update connection and wake for the campaign they need.</li>
+        <li>Miner cards show the reward actually being earned and explain when all available rewards for priority games are complete. Claimed rewards take up less space, approved-channel campaigns have a Limited badge, and the web dashboard remembers each browser’s completed-Drops filter.</li>
+        <li>Diagnostic exports include seven days of logs, show progress and reveal the finished report in Finder. Settings backups and exports use a reliable macOS save dialog, and repetitive log messages are reduced.</li>
+        <li>The web dashboard reopens as a single window. The Help Center has current guides and redirects for old links, plus an expanded account of SwiftMiner’s history.</li>
       </ul>
     </section>
 
-    <section>
-      <h2>📚 Updated help</h2>
-      <ul>
-        <li>The Help Center has a smaller set of current guides, with redirects for old article links.</li>
-        <li>The About guide covers SwiftMiner’s history from its early automation scripts to the native Mac app and credits the projects that helped along the way.</li>
-      </ul>
-    </section>
-
+    <p class="meta">Also includes mining, interface and diagnostics improvements since 1.42, the previous published release.</p>
     <p class="meta"><a href="./index.html">All release notes</a></p>
   </main>
 </body>
