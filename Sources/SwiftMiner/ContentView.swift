@@ -20,7 +20,9 @@ struct ContentView: View {
         .frame(minWidth: 800, minHeight: 600)
         .diagnosticExportPresenter()
         .swiftMinerAppearance(style: settings.appearanceStyle)
-        .sheet(isPresented: $nav.showAddAccountSheet) {
+        .sheet(isPresented: $nav.showAddAccountSheet, onDismiss: {
+            navigation.reconnectingMinerId = nil
+        }) {
             AuthRequiredSheet(
                 isPresented: $nav.showAddAccountSheet,
                 reconnectingMinerId: nav.reconnectingMinerId,
@@ -29,10 +31,8 @@ struct ContentView: View {
                 } ?? false,
                 existingAccountCount: navigation.minerManager.miners.count
             )
+                .id(nav.reconnectingMinerId)
                 .environment(navigation)
-                .onDisappear {
-                    navigation.reconnectingMinerId = nil
-                }
         }
         .onAppear {
             navigation.columnVisibility = .all

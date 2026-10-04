@@ -11,6 +11,39 @@ enum AdditionalAccountSetup {
         isReconnecting ? isReconnectingOperator : existingAccountCount == 0
     }
 
+    static func initialStage(
+        existingAccountCount: Int,
+        isReconnecting: Bool,
+        isReconnectingOperator: Bool,
+        isLocalAddition: Bool = false
+    ) -> AccountAddSheetStage {
+        if isLocalAddition && !isReconnecting { return .browserAuthentication }
+        if requiresOperatorBrowser(
+            existingAccountCount: existingAccountCount,
+            isReconnecting: isReconnecting,
+            isReconnectingOperator: isReconnectingOperator
+        ) {
+            return isReconnecting ? .browserAuthentication : .operatorOverview
+        }
+        return isReconnecting ? .authentication : .choice
+    }
+
+    /// Browser access does not grant the Operator role to additional local accounts.
+    static func accountForLocalAddition(_ account: Account, existingAccountCount: Int) -> Account {
+        Account(
+            id: account.id,
+            username: account.username,
+            nickname: account.nickname,
+            ownerDiscordId: account.ownerDiscordId,
+            accessToken: account.accessToken,
+            refreshToken: account.refreshToken,
+            tokenExpiry: account.tokenExpiry,
+            scopes: account.scopes,
+            isOperator: existingAccountCount == 0,
+            authenticationContext: account.authenticationContext
+        )
+    }
+
     static func shouldPresentChoice(existingAccountCount: Int, isReconnecting: Bool) -> Bool {
         existingAccountCount > 0 && !isReconnecting
     }
@@ -31,9 +64,9 @@ enum AdditionalAccountSetup {
     }
 }
 
-private enum AccountAddSheetStage: Equatable {
+enum AccountAddSheetStage: Equatable {
     case operatorOverview
-    case operatorAuthentication
+    case browserAuthentication
     case choice
     case localOverview
     case friendOverview
@@ -46,7 +79,7 @@ private enum InvitationDeliveryRoute: Equatable {
     case swiftBot
 }
 
-/// Sheet for adding a new Twitch account via device-code OAuth.
+/// Sheet for local browser sign-in and remote device-code invitations.
 ///
 /// Presented from `ContentView` at the `NavigationSplitView` level so that
 /// macOS List selection never interferes with sheet presentation.
@@ -81,7 +114,7 @@ struct AuthRequiredSheet: View {
     private var settings: Settings { .shared }
 
     private var sheetWidth: CGFloat {
-        stage == .operatorAuthentication ? 960 : 520
+        stage == .browserAuthentication ? 960 : 520
     }
 
     init(
@@ -93,27 +126,11 @@ struct AuthRequiredSheet: View {
         _isPresented = isPresented
         self.reconnectingMinerId = reconnectingMinerId
         self.reconnectingIsOperator = reconnectingIsOperator
-        let initialStage: AccountAddSheetStage
-        if reconnectingMinerId != nil,
-           AdditionalAccountSetup.requiresOperatorBrowser(
-               existingAccountCount: existingAccountCount,
-               isReconnecting: true,
-               isReconnectingOperator: reconnectingIsOperator
-           ) {
-            // An operator must reconnect through the browser so its full Drops
-            // catalogue is not silently replaced by a limited TV/device token.
-            initialStage = .operatorAuthentication
-        } else if reconnectingMinerId != nil {
-            initialStage = .authentication
-        } else if AdditionalAccountSetup.requiresOperatorBrowser(
+        let initialStage = AdditionalAccountSetup.initialStage(
             existingAccountCount: existingAccountCount,
-            isReconnecting: false,
-            isReconnectingOperator: false
-        ) {
-            initialStage = .operatorOverview
-        } else {
-            initialStage = .choice
-        }
+            isReconnecting: reconnectingMinerId != nil,
+            isReconnectingOperator: reconnectingIsOperator
+        )
         _stage = State(initialValue: initialStage)
     }
 
@@ -136,6 +153,15 @@ struct AuthRequiredSheet: View {
         .fixedSize(horizontal: false, vertical: true)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: stage)
         .onAppear {
+            // SwiftUI may retain the sheet's State from an earlier account flow.
+            // Resolve reconnection from the current miner before starting any request.
+            if reconnectingMinerId != nil {
+                stage = AdditionalAccountSetup.initialStage(
+                    existingAccountCount: navigation.minerManager.miners.count,
+                    isReconnecting: true,
+                    isReconnectingOperator: reconnectingIsOperator
+                )
+            }
             startDeviceAuthIfNeeded()
         }
         .onChange(of: loginService.state) { _, newState in
@@ -202,7 +228,10 @@ struct AuthRequiredSheet: View {
         }
         switch stage {
         case .operatorOverview: return "Set Up SwiftMiner"
-        case .operatorAuthentication: return "Connect Operator Account"
+        case .browserAuthentication:
+            return reconnectingMinerId == nil
+                ? (navigation.minerManager.miners.isEmpty ? "Connect Operator Account" : "Connect Twitch")
+                : "Reconnect Twitch"
         case .choice: return "Add Account"
         case .localOverview: return "On This Mac"
         case .friendOverview: return "Invite Someone"
@@ -218,7 +247,7 @@ struct AuthRequiredSheet: View {
         if isSuccessState { return "checkmark.circle.fill" }
         switch stage {
         case .operatorOverview: return "person.crop.circle.badge.checkmark"
-        case .operatorAuthentication: return "safari"
+        case .browserAuthentication: return "safari"
         case .choice: return "person.crop.circle.badge.plus"
         case .localOverview: return "desktopcomputer"
         case .friendOverview: return "person.badge.plus"
@@ -236,7 +265,7 @@ struct AuthRequiredSheet: View {
         switch stage {
         case .operatorOverview:
             return "Connect the account that will keep the complete Drops catalogue available for every miner."
-        case .operatorAuthentication:
+        case .browserAuthentication:
             return "Sign in on Twitch itself, then let SwiftMiner verify the campaign dashboard and inventory before saving anything."
         case .choice:
             return "Choose how to connect the next Twitch account."
@@ -273,8 +302,8 @@ struct AuthRequiredSheet: View {
         switch stage {
         case .operatorOverview:
             operatorSetupOverview
-        case .operatorAuthentication:
-            operatorAuthenticationContent
+        case .browserAuthentication:
+            browserAuthenticationContent
         case .choice:
             addMinerChoice
         case .localOverview:
@@ -302,7 +331,7 @@ struct AuthRequiredSheet: View {
     }
 
     @ViewBuilder
-    private var operatorAuthenticationContent: some View {
+    private var browserAuthenticationContent: some View {
         VStack(alignment: .leading, spacing: 12) {
             OperatorBrowserWebView(webView: browserLoginService.webView)
                 .frame(height: 560)
@@ -315,14 +344,11 @@ struct AuthRequiredSheet: View {
             switch browserLoginService.state {
             case .idle, .signingIn:
                 HStack(spacing: 10) {
-                    Text("Finish signing in above, then connect the account.")
+                    Text("Sign in above. SwiftMiner will detect your login automatically.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button("Twitch Drops") { browserLoginService.load() }
-                    Button("Connect This Account") { browserLoginService.connect() }
-                        .buttonStyle(.borderedProminent)
-                        .keyboardShortcut(.defaultAction)
                 }
             case .verifying:
                 inlineProgress("Verifying the Twitch identity, campaign dashboard and inventory…")
@@ -408,11 +434,11 @@ struct AuthRequiredSheet: View {
     private var localSetupOverview: some View {
         return stepList(
             steps: [
-                ("Check the Twitch account", "Your browser may already be signed in — switch accounts there first if needed."),
-                ("Approve SwiftMiner", "Twitch shows a short activation code and asks you to confirm access."),
+                ("Sign in on Twitch", "Twitch’s login page opens inside SwiftMiner in a separate browser session for the new account."),
+                ("Verify the session", "SwiftMiner detects your login automatically and checks the campaign dashboard and inventory."),
                 ("Mining starts here", "The new account gets its own miner and its own priorities.")
             ],
-            note: "SwiftMiner never asks you to type a Twitch password into the app."
+            note: "Your password and two-factor prompts go directly to Twitch. The existing Operator stays selected."
         )
     }
 
@@ -885,15 +911,22 @@ struct AuthRequiredSheet: View {
         switch stage {
         case .operatorOverview:
             return .primaryOnly(title: "Connect Operator") {
-                stage = .operatorAuthentication
+                stage = .browserAuthentication
                 browserLoginService.start()
             }
-        case .operatorAuthentication:
+        case .browserAuthentication:
             return .cancelOnly
         case .localOverview:
             return .overview(back: .choice, continueTitle: "Continue") {
-                stage = .authentication
-                startDeviceAuthIfNeeded()
+                // Keep the Operator’s saved browser session separate from additional logins.
+                browserLoginService = OperatorBrowserLoginService(dataStore: .nonPersistent())
+                stage = AdditionalAccountSetup.initialStage(
+                    existingAccountCount: navigation.minerManager.miners.count,
+                    isReconnecting: false,
+                    isReconnectingOperator: false,
+                    isLocalAddition: true
+                )
+                browserLoginService.start()
             }
         case .friendOverview:
             return .overview(back: .choice, continueTitle: "Create Invitation") {
@@ -1044,7 +1077,10 @@ struct AuthRequiredSheet: View {
                     guard !navigation.minerManager.miners.contains(where: { $0.accountId == account.id }) else {
                         throw MinerManager.AccountError.duplicateAccount(username: account.displayName)
                     }
-                    savedAccount = account
+                    savedAccount = AdditionalAccountSetup.accountForLocalAddition(
+                        account,
+                        existingAccountCount: navigation.minerManager.miners.count
+                    )
                 }
 
                 // Browser login differs from device login: the validator deliberately does not

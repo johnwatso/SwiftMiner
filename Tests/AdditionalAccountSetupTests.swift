@@ -1,6 +1,7 @@
 import AppKit
 import XCTest
 import SwiftMinerService
+import SwiftMinerCore
 @testable import SwiftMiner
 
 @MainActor
@@ -17,12 +18,70 @@ final class AdditionalAccountSetupTests: XCTestCase {
         ))
     }
 
+    func testLocalAdditionAlwaysUsesBrowser() {
+        for count in [0, 1, 5] {
+            XCTAssertEqual(AdditionalAccountSetup.initialStage(
+                existingAccountCount: count,
+                isReconnecting: false,
+                isReconnectingOperator: false,
+                isLocalAddition: true
+            ), .browserAuthentication)
+        }
+    }
+
+    func testLocalBrowserAdditionPreservesOperatorRoleAndSession() {
+        let context = TwitchAuthenticationContext.browser(.init(
+            clientID: "test-client", origin: "https://www.twitch.tv", userAgent: "test-browser",
+            integrityToken: "integrity", capturedAt: Date(timeIntervalSince1970: 100),
+            expiresAt: .distantFuture, sdkCookieValue: "sdk-cookie",
+            cookieExpiresAt: .distantFuture, generation: 1
+        ))
+        let account = Account(
+            id: "123", username: "local", nickname: "Nickname", ownerDiscordId: "discord",
+            accessToken: "token", refreshToken: "refresh", tokenExpiry: .distantFuture,
+            scopes: ["test-scope"], isOperator: true, authenticationContext: context
+        )
+        XCTAssertTrue(AdditionalAccountSetup.accountForLocalAddition(account, existingAccountCount: 0).isOperator)
+        for count in [1, 5] {
+            let saved = AdditionalAccountSetup.accountForLocalAddition(account, existingAccountCount: count)
+            XCTAssertFalse(saved.isOperator)
+            XCTAssertEqual(saved.id, account.id)
+            XCTAssertEqual(saved.nickname, account.nickname)
+            XCTAssertEqual(saved.ownerDiscordId, account.ownerDiscordId)
+            XCTAssertEqual(saved.accessToken, account.accessToken)
+            XCTAssertEqual(saved.refreshToken, account.refreshToken)
+            XCTAssertEqual(saved.tokenExpiry, account.tokenExpiry)
+            XCTAssertEqual(saved.scopes, account.scopes)
+            XCTAssertEqual(saved.authenticationContext, account.authenticationContext)
+        }
+    }
+
     func testOperatorReconnectUsesBrowserInsteadOfDeviceFlow() {
         XCTAssertTrue(AdditionalAccountSetup.requiresOperatorBrowser(
             existingAccountCount: 2,
             isReconnecting: true,
             isReconnectingOperator: true
         ))
+    }
+
+    func testOperatorReconnectStartsInBrowserStage() {
+        for count in [0, 2] {
+            XCTAssertEqual(AdditionalAccountSetup.initialStage(
+                existingAccountCount: count,
+                isReconnecting: true,
+                isReconnectingOperator: true
+            ), .browserAuthentication)
+        }
+    }
+
+    func testNonOperatorReconnectStartsInDeviceStage() {
+        for count in [0, 2] {
+            XCTAssertEqual(AdditionalAccountSetup.initialStage(
+                existingAccountCount: count,
+                isReconnecting: true,
+                isReconnectingOperator: false
+            ), .authentication)
+        }
     }
 
     func testRemoteMinerReconnectKeepsDeviceFlow() {

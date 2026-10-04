@@ -203,6 +203,7 @@
 		A50480F7C943859C51D72D36 /* SwiftMinerSafariExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 894A78B4B2FF12D535819191 /* SwiftMinerSafariExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A59C41A3071F5DAF49E6BC83 /* MinerSchedulingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 395BAF086C00772CB356A508 /* MinerSchedulingTests.swift */; };
 		A7CE5EA5F16E661813E73E96 /* EarningLedgerStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40FBB48E5544E325179C696C /* EarningLedgerStoreTests.swift */; };
+		A870680C4B5C5324B1443CE5 /* OperatorBrowserLoginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F4AF10ED2579F89DFEA9E0F /* OperatorBrowserLoginTests.swift */; };
 		A941450A3597CA0F57E71A20 /* content.js in Resources */ = {isa = PBXBuildFile; fileRef = 25C0587923B2FA394E848DF7 /* content.js */; };
 		A99DA21D645821C4EFA9D53A /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 2B1CADAC413BEE9A9D77EF7D /* Sparkle */; };
 		AA421486DE7DD26B85BCB4A4 /* NavigationProjectionStateProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7559E3ABB6B9BA9EDAFCA012 /* NavigationProjectionStateProvider.swift */; };
@@ -543,6 +544,7 @@
 		7D36AD669AFD2B0D62398C28 /* CampaignDropRetentionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampaignDropRetentionTests.swift; sourceTree = "<group>"; };
 		7D3A71B013A7CD5372F5BF6F /* AccountLinkDeliveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountLinkDeliveryTests.swift; sourceTree = "<group>"; };
 		7D575B68B3F4BC9BD40DAD39 /* NetworkGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkGuardTests.swift; sourceTree = "<group>"; };
+		7F4AF10ED2579F89DFEA9E0F /* OperatorBrowserLoginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OperatorBrowserLoginTests.swift; sourceTree = "<group>"; };
 		82BF51F236A3CA9B372DC12D /* DropsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropsService.swift; sourceTree = "<group>"; };
 		8427EF0E6F978B1E0CC98CD0 /* OperatorSessionRenewalCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OperatorSessionRenewalCoordinator.swift; sourceTree = "<group>"; };
 		849FAA0B3EF0FF79097EC216 /* AboutMetadataTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutMetadataTests.swift; sourceTree = "<group>"; };
@@ -1137,6 +1139,7 @@
 				7D575B68B3F4BC9BD40DAD39 /* NetworkGuardTests.swift */,
 				512C3988013AEF59E9617A61 /* NotificationServiceTests.swift */,
 				536BFD79D0811ECC8F4D2E74 /* OnboardingPresentationTests.swift */,
+				7F4AF10ED2579F89DFEA9E0F /* OperatorBrowserLoginTests.swift */,
 				DF8F4E8EBEE83CC7787AD0B4 /* OperatorSessionRenewalCoordinatorTests.swift */,
 				E485E21B35676BE29836C470 /* OverviewArtworkTests.swift */,
 				EBA1A5E3A980893167B1EA34 /* PersistenceFailureDiagnosticsTests.swift */,
@@ -1756,6 +1759,7 @@
 				064EB439ADCF0287B83056CA /* NetworkGuardTests.swift in Sources */,
 				A46C78368503613F92B006BB /* NotificationServiceTests.swift in Sources */,
 				C44D10873DE5586E6A87FA67 /* OnboardingPresentationTests.swift in Sources */,
+				A870680C4B5C5324B1443CE5 /* OperatorBrowserLoginTests.swift in Sources */,
 				7B9562DECD8C5632637EBC9B /* OperatorSessionRenewalCoordinatorTests.swift in Sources */,
 				721F3898D5426CC269E95FED /* OverviewArtworkTests.swift in Sources */,
 				41A4CB73212B2C9965D23563 /* PersistenceFailureDiagnosticsTests.swift in Sources */,
@@ -1882,7 +1886,7 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/SwiftMinerSafariExtension/SwiftMinerSafariExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026100213;
+				CURRENT_PROJECT_VERSION = 2026100414;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Sources/SwiftMinerSafariExtension/Info.plist;
@@ -1892,7 +1896,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.44;
+				MARKETING_VERSION = 1.44.1;
 				OTHER_LDFLAGS = (
 					"-framework",
 					SafariServices,
@@ -1914,7 +1918,7 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/SwiftMiner/SwiftMinerRelease.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026100213;
+				CURRENT_PROJECT_VERSION = 2026100414;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				EXCLUDED_SOURCE_FILE_NAMES = (
@@ -1929,7 +1933,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.44;
+				MARKETING_VERSION = 1.44.1;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -2044,7 +2048,7 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/SwiftMinerSafariExtension/SwiftMinerSafariExtensionDebug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026100213;
+				CURRENT_PROJECT_VERSION = 2026100414;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Sources/SwiftMinerSafariExtension/Info.plist;
@@ -2054,7 +2058,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.44;
+				MARKETING_VERSION = 1.44.1;
 				OTHER_LDFLAGS = (
 					"-framework",
 					SafariServices,
@@ -2115,7 +2119,7 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/SwiftMiner/SwiftMiner.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2026100213;
+				CURRENT_PROJECT_VERSION = 2026100414;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Sources/SwiftMiner/Info.plist;
@@ -2126,7 +2130,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.44;
+				MARKETING_VERSION = 1.44.1;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",

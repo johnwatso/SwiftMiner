@@ -5,11 +5,11 @@ import SwiftMinerCore
 import SwiftUI
 import WebKit
 
-/// Owns the first-account Twitch browser session used to bootstrap a full-access operator.
+/// Owns a local Twitch browser session and verifies full-access authentication.
 ///
 /// The website data store belongs to SwiftMiner rather than Safari. Twitch receives the
 /// password and two-factor prompts directly; SwiftMiner reads only the resulting Twitch
-/// session material after the person explicitly chooses Connect This Account.
+/// session material once Twitch finishes signing in, then verifies it before saving.
 @MainActor
 @Observable
 final class OperatorBrowserLoginService {
@@ -29,13 +29,21 @@ final class OperatorBrowserLoginService {
     private let dataStore: WKWebsiteDataStore
     private let integrityIssuer: TwitchBrowserIntegrityIssuer
     private var verificationTask: Task<Void, Never>?
+    private var cookieObserver: OperatorLoginCookieObserver?
+    private var observationID: UUID?
+    private var lastAttemptedToken: String?
+    private let validateAccount: (@MainActor () async throws -> Account)?
 
-    init() {
-        let integrityIssuer = TwitchBrowserIntegrityIssuer()
+    init(
+        dataStore: WKWebsiteDataStore? = nil,
+        validateAccount: (@MainActor () async throws -> Account)? = nil
+    ) {
+        self.validateAccount = validateAccount
+        let integrityIssuer = TwitchBrowserIntegrityIssuer(dataStore: dataStore)
         self.integrityIssuer = integrityIssuer
-        dataStore = integrityIssuer.dataStore
+        self.dataStore = integrityIssuer.dataStore
         let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = dataStore
+        configuration.websiteDataStore = self.dataStore
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         webView = WKWebView(frame: .zero, configuration: configuration)
     }
@@ -43,7 +51,7 @@ final class OperatorBrowserLoginService {
     func start() {
         guard state == .idle || isFailed else { return }
         state = .signingIn
-        guard webView.url == nil else { return }
+        observeSignIn()
         load(path: "/login")
     }
 
@@ -54,13 +62,20 @@ final class OperatorBrowserLoginService {
 
     func connect() {
         guard state != .verifying else { return }
+        if case .succeeded = state { return }
         verificationTask?.cancel()
         state = .verifying
         verificationTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let account = try await buildValidatedAccount()
+                let account: Account
+                if let validateAccount {
+                    account = try await validateAccount()
+                } else {
+                    account = try await buildValidatedAccount()
+                }
                 guard !Task.isCancelled else { return }
+                stopObservingSignIn()
                 state = .succeeded(account)
             } catch {
                 guard !Task.isCancelled else { return }
@@ -74,12 +89,16 @@ final class OperatorBrowserLoginService {
         verificationTask?.cancel()
         verificationTask = nil
         state = .signingIn
-        load()
+        observeSignIn()
+        // Recheck an existing session once, without looping on a failed token.
+        load(path: "/login")
     }
 
     func cancel() {
+        stopObservingSignIn()
         verificationTask?.cancel()
         verificationTask = nil
+        if state == .signingIn || state == .verifying { state = .idle }
     }
 
     func clearSession() async {
@@ -89,6 +108,7 @@ final class OperatorBrowserLoginService {
             modifiedSince: .distantPast
         )
         state = .signingIn
+        observeSignIn()
         load(path: "/login")
     }
 
@@ -100,6 +120,51 @@ final class OperatorBrowserLoginService {
     private var isFailed: Bool {
         if case .failed = state { return true }
         return false
+    }
+
+    // Cookie changes catch sign-in even when Twitch updates its page without navigating.
+    private func observeSignIn() {
+        stopObservingSignIn()
+        lastAttemptedToken = nil
+        let id = UUID()
+        observationID = id
+        let observer = OperatorLoginCookieObserver { [weak self] in
+            self?.checkForSignIn(observationID: id)
+        }
+        cookieObserver = observer
+        dataStore.httpCookieStore.add(observer)
+        checkForSignIn(observationID: id)
+    }
+
+    private func stopObservingSignIn() {
+        observationID = nil
+        if let cookieObserver {
+            dataStore.httpCookieStore.remove(cookieObserver)
+        }
+        cookieObserver = nil
+    }
+
+    private func checkForSignIn(observationID id: UUID) {
+        Task { [weak self] in
+            guard let self else { return }
+            let cookies = await dataStore.httpCookieStore.allCookies()
+            guard observationID == id,
+                  state == .signingIn || isFailed,
+                  let cookie = Self.authenticationCookie(in: cookies),
+                  cookie.value != lastAttemptedToken else { return }
+            lastAttemptedToken = cookie.value
+            connect()
+        }
+    }
+
+    static func authenticationCookie(in cookies: [HTTPCookie]) -> HTTPCookie? {
+        cookies.first {
+            let domain = $0.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            return $0.name == "auth-token"
+                && (domain == "twitch.tv" || domain.hasSuffix(".twitch.tv"))
+                && !$0.value.isEmpty
+                && ($0.expiresDate.map { $0 > Date() } ?? true)
+        }
     }
 
     // MARK: - Validation
@@ -134,20 +199,19 @@ final class OperatorBrowserLoginService {
 
     private func buildValidatedAccount() async throws -> Account {
         let cookies = await dataStore.httpCookieStore.allCookies()
-        guard let authCookie = cookies.first(where: {
-            $0.name == "auth-token" && $0.domain.hasSuffix("twitch.tv") && !$0.value.isEmpty
-        }) else {
+        guard let authCookie = Self.authenticationCookie(in: cookies) else {
             throw LoginError.notSignedIn
         }
 
         if webView.url?.host() != "www.twitch.tv" || webView.url?.path().hasPrefix("/login") == true {
             load()
         }
-        await waitForPageLoad()
+        try await waitForPageLoad()
 
         let userAgent = try await browserString("navigator.userAgent")
         let acceptLanguage = try? await browserString("navigator.language")
-        let deviceID = cookies.first(where: {
+        let sessionCookies = await dataStore.httpCookieStore.allCookies()
+        let deviceID = sessionCookies.first(where: {
             $0.name == "unique_id" && $0.domain.hasSuffix("twitch.tv")
         })?.value
         guard let deviceID, !deviceID.isEmpty else {
@@ -276,19 +340,19 @@ final class OperatorBrowserLoginService {
         return data
     }
 
-    private func waitForPageLoad(timeout: TimeInterval = 20) async {
+    private func waitForPageLoad(timeout: TimeInterval = 20) async throws {
         let deadline = Date().addingTimeInterval(timeout)
-        try? await Task.sleep(for: .milliseconds(300))
+        try await Task.sleep(for: .milliseconds(300))
         while webView.isLoading, Date() < deadline {
-            try? await Task.sleep(for: .milliseconds(250))
+            try await Task.sleep(for: .milliseconds(250))
         }
-        try? await Task.sleep(for: .seconds(2))
+        try await Task.sleep(for: .seconds(2))
     }
 
     private static func friendlyMessage(for error: Error) -> String {
         switch error {
         case LoginError.notSignedIn:
-            return "Sign in to Twitch in the window above, then choose Connect This Account."
+            return "Sign in to Twitch in the window above. SwiftMiner will detect your login automatically."
         case LoginError.missingDeviceIdentity:
             return "Twitch did not finish creating this browser session. Reload Twitch and try again."
         case LoginError.missingSDKCookie:
@@ -323,4 +387,17 @@ struct OperatorBrowserWebView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WKWebView { webView }
     func updateNSView(_ nsView: WKWebView, context: Context) {}
+}
+
+/// Delivers cookie changes on the main actor without retaining the login service.
+private final class OperatorLoginCookieObserver: NSObject, WKHTTPCookieStoreObserver {
+    private let onChange: @MainActor @Sendable () -> Void
+
+    init(onChange: @escaping @MainActor @Sendable () -> Void) {
+        self.onChange = onChange
+    }
+
+    nonisolated func cookiesDidChange(in cookieStore: WKHTTPCookieStore) {
+        Task { @MainActor [onChange] in onChange() }
+    }
 }
