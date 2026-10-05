@@ -465,6 +465,73 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(ordered.count, 76)
     }
 
+    func testRestrictedVerificationBatchSpendsEverySlotOnApprovedChannels() {
+        let channels = (0..<100).map {
+            Channel(id: "\($0)", login: "channel\($0)", displayName: "Channel \($0)")
+        }
+        let campaign = selectionCampaign(id: "restricted", channels: Array(channels.suffix(65)), restricted: true)
+        let eligible = MinerEngine.channelsEligibleForCandidates(channels, candidates: [campaign])
+        var offset = 0
+        var visited = Set<String>()
+        for _ in 0..<4 {
+            let batch = MinerEngine.rotatingVerificationBatch(from: eligible, limit: 50, offset: offset)
+            XCTAssertEqual(batch.channels.count, 50)
+            XCTAssertTrue(batch.channels.allSatisfy { Int($0.id)! >= 35 })
+            visited.formUnion(batch.channels.map(\.id))
+            offset = batch.nextOffset
+        }
+        XCTAssertEqual(visited, Set(campaign.channels.map(\.id)))
+    }
+
+    func testDirectoryFilteringKeepsBroadAndUnresolvedCandidates() {
+        let channel = Channel(id: "unlisted", login: "unlisted", displayName: "Unlisted")
+        let approved = Channel(id: "approved", login: "official", displayName: "Official")
+        let restricted = selectionCampaign(id: "restricted", channels: [approved], restricted: true)
+        XCTAssertTrue(MinerEngine.channelsEligibleForCandidates([channel], candidates: [restricted]).isEmpty)
+        for broad in [
+            selectionCampaign(id: "open", channels: [], restricted: false),
+            selectionCampaign(id: "unresolved", channels: [], restricted: true)
+        ] {
+            XCTAssertEqual(
+                MinerEngine.channelsEligibleForCandidates([channel], candidates: [restricted, broad]).map(\.id),
+                [channel.id]
+            )
+        }
+    }
+
+    func testApprovedFallbackExcludesAlreadyCheckedChannelAliasesBeforeBatching() {
+        let checked = Channel(id: "123", login: " Official ", displayName: "Official")
+        let unchecked = Channel(id: "456", login: "other", displayName: "Other")
+        let campaign = selectionCampaign(id: "restricted", channels: [checked, unchecked], restricted: true)
+        let remaining = MinerEngine.channelsEligibleForCandidates(
+            campaign.channels, candidates: [campaign], excludingIdentities: ["official"]
+        )
+        XCTAssertEqual(remaining.map(\.id), ["456"])
+        XCTAssertEqual(MinerEngine.rotatingVerificationBatch(from: remaining, limit: 1, offset: 0).channels.map(\.id), ["456"])
+    }
+
+    func testRestrictedWaitDoesNotWakeForCampaignOnAnotherApprovedChannel() {
+        let first = Channel(id: "first", login: "first", displayName: "First")
+        let second = Channel(id: "second", login: "second", displayName: "Second")
+        let campaigns = [
+            selectionCampaign(id: "a", channels: [first], restricted: true),
+            selectionCampaign(id: "b", channels: [second], restricted: true)
+        ]
+        let eligibleIDs = Set(MinerEngine.campaignsEligible(on: first, candidates: campaigns).map(\.id))
+        XCTAssertFalse(MinerEngine.shouldWakeForRestrictedCampaign(waitingCampaignIDs: eligibleIDs, activeCampaignIDs: ["b"]))
+        XCTAssertTrue(MinerEngine.shouldWakeForRestrictedCampaign(waitingCampaignIDs: eligibleIDs, activeCampaignIDs: ["a"]))
+    }
+
+    private func selectionCampaign(id: String, channels: [Channel], restricted: Bool) -> Campaign {
+        let now = Date()
+        return Campaign(
+            id: id, name: id, game: Game(id: "game", name: "Game"), status: .active,
+            startDate: now.addingTimeInterval(-60), endDate: now.addingTimeInterval(3600),
+            drops: [Drop(id: "drop-\(id)", name: "Drop", requiredMinutes: 30)],
+            channels: channels, isAccountConnected: true, allowIsEnabled: restricted
+        )
+    }
+
     func testRotatingVerificationBatchEventuallyCoversDirectoryOverflow() {
         let channels = (0..<100).map { index in
             Channel(id: "\(index)", login: "channel\(index)", displayName: "Channel \(index)")

@@ -512,8 +512,13 @@ extension MinerEngine {
         // below the verification cap.
         let nowTick = runtimeClock.nowNanoseconds()
         unverifiedChannelCooldownUntil = unverifiedChannelCooldownUntil.filter { $0.value > nowTick }
+        let eligibleDirectoryChannels = Self.channelsEligibleForCandidates(sortedChannels, candidates: candidates)
+        let skippedByACL = sortedChannels.count - eligibleDirectoryChannels.count
+        if skippedByACL > 0 {
+            log("[ChannelSelect]   Skipping \(skippedByACL) directory channel(s) outside every candidate's approved-channel list")
+        }
         let orderedChannels = Self.prioritizingKnownApprovedChannels(
-            sortedChannels,
+            eligibleDirectoryChannels,
             campaigns: candidates
         )
         let verificationLimit = Self.adaptiveChannelVerificationLimit(
@@ -643,7 +648,7 @@ extension MinerEngine {
         for candidate in candidates where candidate.hasKnownChannelRestrictions {
             let alreadyMatched = verifiedMatches.contains { $0.campaign.id == candidate.id }
             if alreadyMatched && !avoidDuplicateStreams { continue }
-            let probed = await liveACLChannels(for: candidate)
+            let probed = await liveACLChannels(for: candidate, excludingIdentities: attemptedChannelIdentities)
             for ch in probed {
                 let channel = await resolveChannelIdIfNeeded(ch)
                 let cooldownKey = Self.unverifiedChannelKey(campaignId: candidate.id, channel: channel)
@@ -703,9 +708,7 @@ extension MinerEngine {
                 : "approvedNoMatchEvidence=[\(approvedNoMatchEvidence.joined(separator: "; "))]",
             verificationErrorCount > 0 ? "errors=\(verificationErrorCount)" : nil
         ].compactMap { $0 }.joined(separator: ", ")
-        if verifiedChannelCount > 0 || aclProbeCount > 0 || verificationErrorCount > 0 {
-            log("[ChannelSelect]   Verification summary: \(verificationSummary)")
-        }
+        log("[ChannelSelect]   Verification summary: \(verificationSummary)")
 
         if let best = await bestVerifiedCampaignMatch(candidates: candidates, matches: verifiedMatches, relationshipRanks: relationshipRanks) {
             log("[ChannelSelect]   Selected \(best.campaign.name) on \(best.channel.displayName)")
@@ -817,6 +820,25 @@ extension MinerEngine {
         }
 
         return min(liveChannelCount, 16)
+    }
+
+    /// Apply known restrictions before filling a bounded batch. Unrelated streams must not
+    /// consume its slots; an unrestricted or unresolved candidate still permits verification.
+    internal static func channelsEligibleForCandidates(
+        _ channels: [Channel],
+        candidates: [Campaign],
+        excludingIdentities: Set<String> = []
+    ) -> [Channel] {
+        channels.filter { channel in
+            excludingIdentities.isDisjoint(with: identityKeys(for: channel))
+                && !campaignsEligible(on: channel, candidates: candidates).isEmpty
+        }
+    }
+
+    internal static func campaignsEligible(on channel: Channel, candidates: [Campaign]) -> [Campaign] {
+        candidates.filter {
+            !$0.hasKnownChannelRestrictions || channelMatchesCampaignACL(channel, campaign: $0)
+        }
     }
 
     /// Stable-partitions directory results so known approved channels are always considered
@@ -1114,7 +1136,6 @@ extension MinerEngine {
     /// as a new go-live event made the outer mining loop refetch campaigns and inventory every
     /// minute. Confirm the channel-scoped campaign list here and only wake for mineable work.
     func anyApprovedChannelEligible(in candidates: [Campaign]) async -> Bool {
-        let waitingCampaignIDs = Set(candidates.map(\.id))
         var checkedChannelIDs = Set<String>()
 
         for candidate in candidates where candidate.hasKnownChannelRestrictions {
@@ -1129,7 +1150,7 @@ extension MinerEngine {
                 do {
                     let activeCampaignIDs = Set(try await fetchAvailableDrops(for: channel))
                     if Self.shouldWakeForRestrictedCampaign(
-                        waitingCampaignIDs: waitingCampaignIDs,
+                        waitingCampaignIDs: Set(Self.campaignsEligible(on: channel, candidates: candidates).map(\.id)),
                         activeCampaignIDs: activeCampaignIDs
                     ) {
                         return true
@@ -1154,7 +1175,11 @@ extension MinerEngine {
         !waitingCampaignIDs.isDisjoint(with: activeCampaignIDs)
     }
 
-    func liveACLChannels(for campaign: Campaign, limit: Int = 30) async -> [Channel] {
+    func liveACLChannels(
+        for campaign: Campaign,
+        limit: Int = 30,
+        excludingIdentities: Set<String> = []
+    ) async -> [Channel] {
         guard campaign.hasKnownChannelRestrictions else { return [] }
 
         // Probe approved channels concurrently — for restricted campaigns this can be up to
@@ -1162,7 +1187,11 @@ extension MinerEngine {
         // to channel selection. Each result carries its source index so we can restore the
         // campaign's original channel ordering after the parallel fan-out.
         let batch = Self.rotatingVerificationBatch(
-            from: campaign.channels,
+            from: Self.channelsEligibleForCandidates(
+                campaign.channels,
+                candidates: [campaign],
+                excludingIdentities: excludingIdentities
+            ),
             limit: limit,
             offset: approvedChannelProbeOffsets[campaign.id, default: 0]
         )
