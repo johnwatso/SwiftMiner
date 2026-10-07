@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SwiftMiner 1.44.3 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.44.3: far fewer campaign refreshes, faster mining cycles, and steadier long-running memory use.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.44.3.html">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; padding: 32px 20px 48px; font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f4f6f8; color: #0f1720; }
+    main { max-width: 760px; margin: 0 auto; padding: 28px; border-radius: 22px; background: rgba(255, 255, 255, .86); box-shadow: 0 20px 60px rgba(15, 23, 32, .10); border: 1px solid rgba(82, 96, 109, .12); }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section { margin: 18px 0 0; padding: 18px 18px 14px; border: 1px solid rgba(82, 96, 109, .18); border-radius: 16px; border-left: 5px solid #7b4bd9; background: rgba(255, 255, 255, .42); }
+    h2 { margin: 0 0 4px; color: #7b4bd9; font-size: 18px; }
+    ul { margin: 12px 0 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    @media (prefers-color-scheme: dark) { body { background: #0b1015; color: #edf2f7; } main { background: rgba(15, 23, 32, .88); border-color: rgba(159, 176, 194, .14); } .meta { color: #9fb0c2; } .intro { color: #c8d3df; } section { border-color: rgba(159, 176, 194, .18); background: rgba(255, 255, 255, .04); } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SwiftMiner 1.44.3</h1>
+    <p class="meta">Version 1.44.3 &middot; Build 2026100714 &middot; Prepared 7 October 2026</p>
+    <p class="intro">SwiftMiner 1.44.3 cuts the Twitch traffic behind campaign refreshes and keeps long-running sessions lean. Mining cycles spend less time waiting on Twitch's rate limits, live-event connections stay up instead of reconnecting every few minutes, and memory no longer climbs over multi-day runs. Engine 4.35.</p>
+
+    <section>
+      <h2>⚡ Faster campaign refreshes</h2>
+      <ul>
+        <li>Campaign details for esports and partner-only campaigns an account isn't linked to are no longer re-downloaded every twenty minutes on every account. That refresh was most of SwiftMiner's Twitch traffic: one five-account, 43-hour session spent over seven hours in total waiting on rate limits, and some campaign checks took more than 20 seconds.</li>
+        <li>As soon as an account is linked to one of those campaigns, its approved-channel list is fetched fresh, so restricted esports windows are still caught on time. Shared copies of approved-channel lists also expire after twenty minutes instead of six hours.</li>
+        <li>Claiming a drop now refreshes only the campaign it came from, instead of making every account re-download every active campaign.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>🔌 Steadier long-running sessions</h2>
+      <ul>
+        <li>Live-event connections no longer drop and reconnect after almost every keep-alive check. When Twitch is slow to answer, SwiftMiner checks the connection itself before deciding to replace it.</li>
+        <li>Fixed a memory leak where every one of those reconnects left its network session and certificates behind. Multi-day runs had accumulated thousands of them.</li>
+        <li>Approved-channel lists for campaigns that ended more than a day ago are now released from memory.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>🩺 Clearer diagnostics</h2>
+      <ul>
+        <li>Diagnostic exports include a new Counters section that shows how each campaign refresh was answered: from cache, from another account's shared copy, or from Twitch, and why.</li>
+      </ul>
+    </section>
+
+    <p class="meta"><a href="./index.html">All release notes</a></p>
+  </main>
+</body>
+</html>
