@@ -30,6 +30,14 @@
     <p class="intro">SwiftMiner 1.44.3 cuts the Twitch traffic behind campaign refreshes and keeps long-running sessions lean. Mining cycles spend less time waiting on Twitch's rate limits, live-event connections stay up instead of reconnecting every few minutes, and memory no longer climbs over multi-day runs. Engine 4.35.</p>
 
     <section>
+      <h2>🐝 Drop claiming fixes</h2>
+      <ul>
+        <li>A drop that reaches its required watch time is now claimed on the next mining check, instead of waiting up to two minutes for the regular claim pass.</li>
+        <li>The miner card's progress bar now always matches its percentage. Previously it could sit near empty while the label read 100%.</li>
+      </ul>
+    </section>
+
+    <section>
       <h2>⚡ Faster campaign refreshes</h2>
       <ul>
         <li>Campaign details for esports and partner-only campaigns an account isn't linked to are no longer re-downloaded every twenty minutes on every account. That refresh was most of SwiftMiner's Twitch traffic: one five-account, 43-hour session spent over seven hours in total waiting on rate limits, and some campaign checks took more than 20 seconds.</li>
