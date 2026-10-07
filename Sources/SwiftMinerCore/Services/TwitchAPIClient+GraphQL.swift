@@ -625,13 +625,53 @@ extension TwitchAPIClient {
     }
 
     /// Keeps the remembered-facts store inside its bound. Called once at the end of a refresh.
-    func pruneRememberedCampaignFacts() {
+    func pruneRememberedCampaignFacts(now: Date = Date()) {
         Self.pruneCache(
             &lastKnownCampaignDrops,
             maxEntries: maxCampaignDetailsCacheEntries,
             expiresAt: { $0.expiresAt }
         )
+        pruneRememberedApprovedChannels(now: now)
     }
+
+    /// Approved-channel lists are kept per campaign for the life of the process, so without
+    /// this every restricted campaign ever seen kept its full channel list in memory — on
+    /// each account's client — long after it ended. The disk copy already drops ended
+    /// campaigns; this applies the same bound in memory.
+    ///
+    /// A day of grace past the recorded end date, because a details response without an
+    /// `endAt` is stamped with the time it was parsed. A live campaign is re-stamped on every
+    /// refresh, so only lists for campaigns that have stopped appearing age out.
+    private func pruneRememberedApprovedChannels(now: Date) {
+        let cutoff = now.addingTimeInterval(-Self.approvedChannelsEndedGrace)
+        var removed = false
+        for (campaignId, expiry) in lastKnownApprovedChannelExpiry where expiry <= cutoff {
+            lastKnownApprovedChannels.removeValue(forKey: campaignId)
+            lastKnownApprovedChannelExpiry.removeValue(forKey: campaignId)
+            removed = true
+        }
+
+        let overflow = lastKnownApprovedChannels.count - CampaignDetailsDiskCache.maxApprovedChannelEntries
+        if overflow > 0 {
+            let earliestEnding = lastKnownApprovedChannels.keys
+                .sorted {
+                    (lastKnownApprovedChannelExpiry[$0] ?? .distantPast)
+                        < (lastKnownApprovedChannelExpiry[$1] ?? .distantPast)
+                }
+                .prefix(overflow)
+            for campaignId in earliestEnding {
+                lastKnownApprovedChannels.removeValue(forKey: campaignId)
+                lastKnownApprovedChannelExpiry.removeValue(forKey: campaignId)
+            }
+            removed = true
+        }
+
+        if removed {
+            campaignCachesNeedPersisting = true
+        }
+    }
+
+    static let approvedChannelsEndedGrace: TimeInterval = 24 * 60 * 60
 
     /// Whether two drop lists describe the same rewards on the same terms. Deliberately blind
     /// to per-account progress and claim state, which are recomputed from inventory on every
