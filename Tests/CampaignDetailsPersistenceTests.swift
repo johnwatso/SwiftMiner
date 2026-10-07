@@ -196,6 +196,69 @@ final class CampaignDetailsPersistenceTests: XCTestCase {
         XCTAssertEqual(contents.linkStates[detailsKey(campaign.id)]?.isAccountConnected, true)
     }
 
+    /// A claim changes only the claimed campaign's account-specific state. Clearing every
+    /// entry sent all of an account's active campaigns back to Twitch after each claim.
+    func testClaimInvalidationIsScopedToTheClaimedCampaign() async throws {
+        let claimed = makeCampaign(id: "campaign-1", connected: true)
+        let untouched = makeCampaign(id: "campaign-2", connected: true)
+        let expiry = Date().addingTimeInterval(600)
+        CampaignDetailsDiskCache.save(
+            details: [
+                detailsKey(claimed.id): .init(campaign: claimed, expiresAt: expiry),
+                detailsKey(untouched.id): .init(campaign: untouched, expiresAt: expiry)
+            ],
+            linkStates: [:],
+            userLogin: login
+        )
+
+        let client = makeClient()
+        await client.setUserLogin(login)
+        _ = try await client.fetchCampaignDetails(campaignId: claimed.id, userLogin: login)
+
+        await client.invalidateCampaignDetailsAfterClaim(campaignId: claimed.id, dropId: "drop-a")
+
+        let memoryKeys = await Set(client.campaignDetailsByKey.keys)
+        XCTAssertEqual(memoryKeys, [detailsKey(untouched.id)])
+        let contents = CampaignDetailsDiskCache.load(userLogin: login)
+        XCTAssertEqual(Set(contents.details.keys), [detailsKey(untouched.id)])
+    }
+
+    func testClaimInvalidationFindsTheCampaignByDropAndFallsBackToClearingAll() {
+        let entry = { (id: String, dropId: String) in
+            TwitchAPIClient.CampaignDetailsCacheEntry(
+                campaign: Campaign(
+                    id: id,
+                    name: id,
+                    game: Game(id: "1", name: "Game"),
+                    startDate: Date().addingTimeInterval(-3600),
+                    endDate: Date().addingTimeInterval(3600),
+                    drops: [Drop(id: dropId, name: dropId, requiredMinutes: 60)]
+                ),
+                expiresAt: Date().addingTimeInterval(600)
+            )
+        }
+        let entries = ["key-a": entry("a", "drop-a"), "key-b": entry("b", "drop-b")]
+
+        XCTAssertEqual(
+            TwitchAPIClient.campaignDetailsKeysToInvalidate(in: entries, campaignKey: "key-a", dropId: "drop-b"),
+            ["key-a"],
+            "a matching campaign id wins"
+        )
+        XCTAssertEqual(
+            TwitchAPIClient.campaignDetailsKeysToInvalidate(in: entries, campaignKey: nil, dropId: "drop-b"),
+            ["key-b"]
+        )
+        XCTAssertEqual(
+            TwitchAPIClient.campaignDetailsKeysToInvalidate(in: entries, campaignKey: "key-gone", dropId: nil),
+            [],
+            "a known campaign with no cached entry has nothing stale"
+        )
+        XCTAssertNil(
+            TwitchAPIClient.campaignDetailsKeysToInvalidate(in: entries, campaignKey: nil, dropId: "drop-unknown")
+        )
+        XCTAssertNil(TwitchAPIClient.campaignDetailsKeysToInvalidate(in: entries, campaignKey: nil, dropId: nil))
+    }
+
     /// The login comes from the Twitch API, so it is reduced to a safe basename rather than
     /// trusted as one — a traversal attempt must not write outside the cache directory.
     func testLoginIsReducedToASafeFilename() {

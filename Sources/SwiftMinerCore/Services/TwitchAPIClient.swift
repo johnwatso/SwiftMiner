@@ -88,13 +88,6 @@ actor SharedTwitchLookupCache {
         }
     }
 
-    func removeAllCampaignMetadata() {
-        campaignMetadataById.removeAll(keepingCapacity: true)
-        // Detach in-flight generations so a response that started before invalidation cannot
-        // repopulate this cache. The owning client may still use its own account-safe result.
-        campaignMetadataRefreshes.removeAll(keepingCapacity: true)
-    }
-
     /// Publishes only campaign-global facts. The scrub happens here, rather than relying on
     /// every caller to remember it, because this snapshot is deliberately read by other users'
     /// miners. OAuth, progress, claims, account linkage and per-miner priority never enter it.

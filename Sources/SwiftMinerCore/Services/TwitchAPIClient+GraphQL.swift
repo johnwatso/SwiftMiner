@@ -292,16 +292,62 @@ extension TwitchAPIClient {
         )
     }
 
-    /// A successful claim changes the account-specific drop state held inside detailed
-    /// campaign responses. Remove that state from memory and disk immediately so quitting
-    /// before the next refresh cannot resurrect the pre-claim response on relaunch.
-    func invalidateCampaignDetailsAfterClaim() async {
-        campaignDetailsByKey.removeAll(keepingCapacity: true)
+    /// A successful claim changes the account-specific drop state held inside the claimed
+    /// campaign's detailed response. Remove that entry from memory and disk immediately so
+    /// quitting before the next refresh cannot resurrect the pre-claim response on relaunch.
+    ///
+    /// Only the claimed campaign is affected. Claimed state is recomputed from inventory
+    /// benefit IDs on every merge (`DropsService.mergeInventory`), so no other campaign's
+    /// entry can be made wrong by a claim. Clearing all of them used to send every one of
+    /// this account's ~130 active campaigns back to Twitch after each claim — mostly unlinked
+    /// campaigns with no shared path — and clearing the cross-account metadata did the same
+    /// to the other accounts' next expiries, although that copy carries no progress or claim
+    /// state for a claim to invalidate. It is left alone.
+    ///
+    /// When neither the campaign nor the drop can be matched to an entry, every entry for
+    /// this account is cleared, as before.
+    func invalidateCampaignDetailsAfterClaim(campaignId: String? = nil, dropId: String? = nil) async {
+        let keys = Self.campaignDetailsKeysToInvalidate(
+            in: campaignDetailsByKey,
+            campaignKey: campaignId.map { Self.cacheKey("campaign-details", userLogin, $0) },
+            dropId: dropId
+        )
+        if let keys {
+            for key in keys {
+                campaignDetailsByKey.removeValue(forKey: key)
+            }
+        } else {
+            campaignDetailsByKey.removeAll(keepingCapacity: true)
+        }
+        await PerformanceDiagnostics.shared.incrementCounter(
+            keys == nil ? "DropCampaignDetails.claimInvalidation.all" : "DropCampaignDetails.claimInvalidation.scoped"
+        )
         if persistsCampaignCaches {
             campaignCachesNeedPersisting = true
             persistCampaignCachesIfNeeded()
         }
-        await SharedTwitchLookupCache.shared.removeAllCampaignMetadata()
+    }
+
+    /// The details entries a claim makes stale: the claimed campaign's, found by campaign id
+    /// or else by the drop it contains. `nil` means nothing could be matched and the caller
+    /// should fall back to clearing everything.
+    nonisolated static func campaignDetailsKeysToInvalidate(
+        in entries: [String: CampaignDetailsCacheEntry],
+        campaignKey: String?,
+        dropId: String?
+    ) -> [String]? {
+        if let campaignKey, entries[campaignKey] != nil {
+            return [campaignKey]
+        }
+        if let dropId {
+            let matches = entries
+                .filter { _, entry in entry.campaign.drops.contains { drop in drop.id == dropId } }
+                .map(\.key)
+            if !matches.isEmpty { return matches }
+        }
+        // A campaign we know but have no entry for has nothing stale to remove.
+        if campaignKey != nil { return [] }
+        return nil
     }
 
     /// Fetch detailed campaign info including timeBasedDrops
@@ -1333,7 +1379,13 @@ extension TwitchAPIClient {
     static let legacyClaimBenefitKey = "claimDropBenefit"
 
     /// Claim a drop
-    public func claimDrop(dropInstanceId: String) async throws -> ClaimDropResponse {
+    /// `campaignId` and `dropId` identify the claimed drop's campaign so only its cached
+    /// details are invalidated; pass whichever the caller knows.
+    public func claimDrop(
+        dropInstanceId: String,
+        campaignId: String? = nil,
+        dropId: String? = nil
+    ) async throws -> ClaimDropResponse {
         let request = graphQLRequest(
             for: .dropsPageClaimDropRewards,
             variables: [
@@ -1394,7 +1446,7 @@ extension TwitchAPIClient {
             )
         }
 
-        await invalidateCampaignDetailsAfterClaim()
+        await invalidateCampaignDetailsAfterClaim(campaignId: campaignId, dropId: dropId)
 
         return ClaimDropResponse(
             id: claim["id"] as? String ?? "",

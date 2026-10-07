@@ -1798,9 +1798,11 @@ final class ServiceTests: XCTestCase {
         let claim = try await apiClient.claimDrop(dropInstanceId: "shared-instance")
         XCTAssertEqual(claim.status, "CLAIMED")
 
+        // The shared copy carries no progress or claim state, so a claim on one account must
+        // not send every other account back to Twitch for it.
         _ = try await thirdClient.fetchDropCampaigns()
         XCTAssertEqual(operations.recordedValues.filter { $0 == "ViewerDropsDashboard" }.count, 3)
-        XCTAssertEqual(operations.recordedValues.filter { $0 == "DropCampaignDetails" }.count, 2)
+        XCTAssertEqual(operations.recordedValues.filter { $0 == "DropCampaignDetails" }.count, 1)
     }
 
     func testFetchAvailableDropsUsesShortLivedChannelCache() async throws {

@@ -108,7 +108,11 @@ public actor ClaimService {
 
         do {
             traceClaim("\(progress.dropName) (instanceId=\(progress.id))")
-            let response = try await apiClient.claimDrop(dropInstanceId: progress.id)
+            let response = try await apiClient.claimDrop(
+                dropInstanceId: progress.id,
+                campaignId: progress.campaignId,
+                dropId: progress.dropId
+            )
 
             // Get campaign name for the result
             var campaignName = ""
