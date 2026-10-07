@@ -421,6 +421,22 @@ enum LogExporter {
             }
         }
 
+        if !performance.counters.isEmpty {
+            out += "Counters:\n"
+            let grouped = Dictionary(grouping: performance.counters) { element in
+                element.key.split(separator: ".", maxSplits: 1).first.map(String.init) ?? element.key
+            }
+            for group in grouped.keys.sorted() {
+                let entries = grouped[group, default: []]
+                    .sorted { $0.key < $1.key }
+                    .map { key, count in
+                        let name = key.hasPrefix(group + ".") ? String(key.dropFirst(group.count + 1)) : key
+                        return "\(name)=\(count)"
+                    }
+                out += "  \(group): \(entries.joined(separator: " "))\n"
+            }
+        }
+
         if !performance.slowRequests.isEmpty {
             out += "Slow requests:\n"
             for request in performance.slowRequests.prefix(5) {

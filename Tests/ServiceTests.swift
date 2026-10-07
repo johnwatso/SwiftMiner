@@ -1198,6 +1198,124 @@ final class ServiceTests: XCTestCase {
         XCTAssertFalse(campaign.hasUnresolvedChannelRestrictions)
     }
 
+    /// An unlinked esports campaign cannot be mined on this account, so its ACL is cached for
+    /// the long window instead of being refetched every twenty minutes — the 1.44.2 export
+    /// traced most `DropCampaignDetails` traffic to exactly that. Linking it must still yield
+    /// an entry held to the short restricted window rather than the unlinked-era copy.
+    func testUnlinkedRestrictedCampaignUsesLongWindowUntilLinked() async throws {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        let startAt = formatter.string(from: Date().addingTimeInterval(-3600))
+        let endAt = formatter.string(from: Date().addingTimeInterval(6 * 3600))
+        let campaignId = "unlinked-acl-\(UUID().uuidString)"
+        let operations = StringRequestRecorder()
+        let linkEvents = StringRequestRecorder()
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+
+            if request.url?.path == "/integrity" {
+                return (response, #"{"token":"integrity-token","expiration":4102444800000}"#.data(using: .utf8)!)
+            }
+
+            let body = (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data())) as? [String: Any]
+            let operationName = body?["operationName"] as? String ?? ""
+            operations.append(operationName)
+            let linked = !linkEvents.recordedValues.isEmpty
+
+            switch operationName {
+            case "ViewerDropsDashboard":
+                let json = """
+                {
+                  "data": {
+                    "currentUser": {
+                      "dropCampaigns": [{
+                        "id": "\(campaignId)",
+                        "name": "PEC Fall Finals",
+                        "status": "ACTIVE",
+                        "startAt": "\(startAt)",
+                        "endAt": "\(endAt)",
+                        "self": { "isAccountConnected": \(linked) },
+                        "game": { "id": "game", "displayName": "PUBG: BATTLEGROUNDS" }
+                      }]
+                    }
+                  }
+                }
+                """
+                return (response, json.data(using: .utf8)!)
+
+            case "DropCampaignDetails":
+                let json = """
+                {
+                  "data": {
+                    "user": {
+                      "dropCampaign": {
+                        "id": "\(campaignId)",
+                        "name": "PEC Fall Finals",
+                        "status": "ACTIVE",
+                        "startAt": "\(startAt)",
+                        "endAt": "\(endAt)",
+                        "self": { "isAccountConnected": \(linked) },
+                        "allow": {
+                          "isEnabled": true,
+                          "channels": [{ "id": "1", "name": "PUBG_Esports" }]
+                        },
+                        "game": { "id": "game", "displayName": "PUBG: BATTLEGROUNDS" },
+                        "timeBasedDrops": [{
+                          "id": "spray",
+                          "name": "RIP YOU (Spray)",
+                          "requiredMinutesWatched": 60,
+                          "benefitEdges": []
+                        }]
+                      }
+                    }
+                  }
+                }
+                """
+                return (response, json.data(using: .utf8)!)
+
+            default:
+                return (response, #"{"data":{}}"#.data(using: .utf8)!)
+            }
+        }
+
+        let login = "unlinked-acl-viewer"
+        let key = TwitchAPIClient.cacheKey("campaign-details", login, campaignId)
+        await apiClient.setUserLogin(login)
+
+        _ = try await apiClient.fetchDropCampaigns()
+        let unlinkedEntryCache = await apiClient.campaignDetailsByKey
+        let unlinkedEntry = try XCTUnwrap(unlinkedEntryCache[key])
+        XCTAssertFalse(unlinkedEntry.campaign.isAccountConnected)
+        XCTAssertTrue(unlinkedEntry.campaign.hasChannelRestrictions)
+        XCTAssertGreaterThan(
+            unlinkedEntry.expiresAt.timeIntervalSinceNow,
+            60 * 60,
+            "an ACL this account cannot mine from should not be refetched every twenty minutes"
+        )
+
+        _ = try await apiClient.fetchDropCampaigns()
+        XCTAssertEqual(operations.recordedValues.filter { $0 == "DropCampaignDetails" }.count, 1)
+
+        linkEvents.append("linked")
+        let linkedCampaigns = try await apiClient.fetchDropCampaigns()
+        XCTAssertEqual(linkedCampaigns.first?.isAccountConnected, true)
+        XCTAssertEqual(linkedCampaigns.first?.channels.map(\.login), ["PUBG_Esports"])
+        let linkedEntryCache = await apiClient.campaignDetailsByKey
+        let linkedEntry = try XCTUnwrap(linkedEntryCache[key])
+        XCTAssertTrue(linkedEntry.campaign.isAccountConnected)
+        XCTAssertLessThanOrEqual(
+            linkedEntry.expiresAt.timeIntervalSinceNow,
+            20 * 60,
+            "once linked, the ACL answers to the restricted window again"
+        )
+    }
+
     func testCampaignServiceInventoryFillsMissingApprovedChannels() {
         let now = Date()
         let game = Game(id: "2012789438", name: "Call of Duty: Black Ops 7")
@@ -1680,9 +1798,11 @@ final class ServiceTests: XCTestCase {
         let claim = try await apiClient.claimDrop(dropInstanceId: "shared-instance")
         XCTAssertEqual(claim.status, "CLAIMED")
 
+        // The shared copy carries no progress or claim state, so a claim on one account must
+        // not send every other account back to Twitch for it.
         _ = try await thirdClient.fetchDropCampaigns()
         XCTAssertEqual(operations.recordedValues.filter { $0 == "ViewerDropsDashboard" }.count, 3)
-        XCTAssertEqual(operations.recordedValues.filter { $0 == "DropCampaignDetails" }.count, 2)
+        XCTAssertEqual(operations.recordedValues.filter { $0 == "DropCampaignDetails" }.count, 1)
     }
 
     func testFetchAvailableDropsUsesShortLivedChannelCache() async throws {

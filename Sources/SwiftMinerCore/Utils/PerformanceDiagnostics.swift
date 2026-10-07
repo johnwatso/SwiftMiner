@@ -155,6 +155,9 @@ public actor PerformanceDiagnostics {
         public let miningCycles: [MiningCycleSummary]
         public let transportHosts: [TransportHost]
         public let eventOutbox: EventOutboxSummary?
+        /// Named event counts, keyed `"<group>.<name>"`. Used where a request count alone
+        /// cannot say *why* a request was made — e.g. which cache path served a lookup.
+        public let counters: [String: Int]
     }
 
     private struct RequestAccumulator {
@@ -232,6 +235,7 @@ public actor PerformanceDiagnostics {
     private var startupWorkload = WorkloadPhaseAccumulator()
     private var steadyStateWorkload = WorkloadPhaseAccumulator()
     private var transportRecordOrder: UInt64 = 0
+    private var counters: [String: Int] = [:]
 
     private let maxLatencySamplesPerOperation = 200
     private let maxSlowRequests = 20
@@ -254,6 +258,13 @@ public actor PerformanceDiagnostics {
         startupWorkload = WorkloadPhaseAccumulator()
         steadyStateWorkload = WorkloadPhaseAccumulator()
         transportRecordOrder = 0
+        counters.removeAll(keepingCapacity: true)
+    }
+
+    /// Increments a named counter. Names are a fixed vocabulary chosen by the caller, so
+    /// the dictionary stays bounded without pruning.
+    public func incrementCounter(_ name: String, by amount: Int = 1) {
+        counters[name, default: 0] += amount
     }
 
     public func recordRequest(
@@ -534,7 +545,8 @@ public actor PerformanceDiagnostics {
             slowRequests: slowRequests,
             miningCycles: miningCycles,
             transportHosts: transportHosts,
-            eventOutbox: outboxSummary
+            eventOutbox: outboxSummary,
+            counters: counters
         )
     }
 

@@ -292,16 +292,62 @@ extension TwitchAPIClient {
         )
     }
 
-    /// A successful claim changes the account-specific drop state held inside detailed
-    /// campaign responses. Remove that state from memory and disk immediately so quitting
-    /// before the next refresh cannot resurrect the pre-claim response on relaunch.
-    func invalidateCampaignDetailsAfterClaim() async {
-        campaignDetailsByKey.removeAll(keepingCapacity: true)
+    /// A successful claim changes the account-specific drop state held inside the claimed
+    /// campaign's detailed response. Remove that entry from memory and disk immediately so
+    /// quitting before the next refresh cannot resurrect the pre-claim response on relaunch.
+    ///
+    /// Only the claimed campaign is affected. Claimed state is recomputed from inventory
+    /// benefit IDs on every merge (`DropsService.mergeInventory`), so no other campaign's
+    /// entry can be made wrong by a claim. Clearing all of them used to send every one of
+    /// this account's ~130 active campaigns back to Twitch after each claim — mostly unlinked
+    /// campaigns with no shared path — and clearing the cross-account metadata did the same
+    /// to the other accounts' next expiries, although that copy carries no progress or claim
+    /// state for a claim to invalidate. It is left alone.
+    ///
+    /// When neither the campaign nor the drop can be matched to an entry, every entry for
+    /// this account is cleared, as before.
+    func invalidateCampaignDetailsAfterClaim(campaignId: String? = nil, dropId: String? = nil) async {
+        let keys = Self.campaignDetailsKeysToInvalidate(
+            in: campaignDetailsByKey,
+            campaignKey: campaignId.map { Self.cacheKey("campaign-details", userLogin, $0) },
+            dropId: dropId
+        )
+        if let keys {
+            for key in keys {
+                campaignDetailsByKey.removeValue(forKey: key)
+            }
+        } else {
+            campaignDetailsByKey.removeAll(keepingCapacity: true)
+        }
+        await PerformanceDiagnostics.shared.incrementCounter(
+            keys == nil ? "DropCampaignDetails.claimInvalidation.all" : "DropCampaignDetails.claimInvalidation.scoped"
+        )
         if persistsCampaignCaches {
             campaignCachesNeedPersisting = true
             persistCampaignCachesIfNeeded()
         }
-        await SharedTwitchLookupCache.shared.removeAllCampaignMetadata()
+    }
+
+    /// The details entries a claim makes stale: the claimed campaign's, found by campaign id
+    /// or else by the drop it contains. `nil` means nothing could be matched and the caller
+    /// should fall back to clearing everything.
+    nonisolated static func campaignDetailsKeysToInvalidate(
+        in entries: [String: CampaignDetailsCacheEntry],
+        campaignKey: String?,
+        dropId: String?
+    ) -> [String]? {
+        if let campaignKey, entries[campaignKey] != nil {
+            return [campaignKey]
+        }
+        if let dropId {
+            let matches = entries
+                .filter { _, entry in entry.campaign.drops.contains { drop in drop.id == dropId } }
+                .map(\.key)
+            if !matches.isEmpty { return matches }
+        }
+        // A campaign we know but have no entry for has nothing stale to remove.
+        if campaignKey != nil { return [] }
+        return nil
     }
 
     /// Fetch detailed campaign info including timeBasedDrops
@@ -329,13 +375,25 @@ extension TwitchAPIClient {
         // failed details fetch is one of the ways a degraded response arrives, so paying that
         // to avoid a stale link answer raises the odds of the failure this whole path exists
         // to survive.
-        if let cached = campaignDetailsByKey[cacheKey], cached.expiresAt > now {
-            await traceGQLDebug { "[TwitchAPIClient] DropCampaignDetails cache hit for \(campaignId)" }
-            return Self.applyingCurrentLinkState(
+        let cached = campaignDetailsByKey[cacheKey]
+        if let cached, cached.expiresAt > now {
+            let served = Self.applyingCurrentLinkState(
                 to: cached.campaign,
                 basicCampaign: basicCampaign,
                 knownLinkState: knownLinkState
             )
+            // An unlinked restricted campaign is cached for the long window because its ACL
+            // could not be used here. Once it is linked, that ACL is the one this account
+            // mines from, so it must be no older than the restricted window — refetch rather
+            // than serve the unlinked-era copy.
+            if !Self.isUnlinkedEraACLNowNeeded(cached: cached.campaign, served: served) {
+                await recordCampaignDetailsPath("cacheHit")
+                await traceGQLDebug { "[TwitchAPIClient] DropCampaignDetails cache hit for \(campaignId)" }
+                return served
+            }
+            await recordCampaignDetailsPath("miss.newlyLinkedACL")
+        } else {
+            await recordCampaignDetailsPath(cached == nil ? "miss.absent" : "miss.expired")
         }
         // The cross-miner cache holds only campaign-global metadata; the account-specific
         // parts are supplied here. Everything except link state comes from `basicCampaign`,
@@ -368,6 +426,7 @@ extension TwitchAPIClient {
                 )
             )
             campaignCachesNeedPersisting = true
+            await recordCampaignDetailsPath("sharedHit")
             await traceGQLDebug { "[TwitchAPIClient] DropCampaignDetails shared metadata hit for \(campaignId)" }
             return campaign
         }
@@ -379,7 +438,7 @@ extension TwitchAPIClient {
         if let basicCampaign, basicCampaign.isAccountConnected {
             let resolution = try await SharedTwitchLookupCache.shared.resolveCampaignMetadata(
                 for: sharedKey,
-                ttl: sharedCampaignMetadataTTL
+                ttl: { [self] in sharedMetadataTTL(for: $0) }
             ) { [self] in
                 let fetched = try await fetchCampaignDetailsFromNetwork(
                     campaignId: campaignId,
@@ -404,6 +463,7 @@ extension TwitchAPIClient {
             }
             let campaign = reconcilingCampaign(accountCampaign, cacheKey: cacheKey)
             cacheCampaignDetailsForAccount(campaign, cacheKey: cacheKey)
+            await recordCampaignDetailsPath(resolution.loadedByCaller ? "network.sharedLoad" : "sharedInFlight")
             await traceGQLDebug {
                 resolution.loadedByCaller
                     ? "[TwitchAPIClient] DropCampaignDetails populated shared metadata for \(campaignId)"
@@ -415,6 +475,7 @@ extension TwitchAPIClient {
         // Repair the response before it is cached. `detailsCacheTTL` is four hours for a
         // campaign with no ACL of its own, so a single degraded answer stored here takes the
         // campaign out of mining for that whole window — and out of the persisted cache too.
+        await recordCampaignDetailsPath(basicCampaign == nil ? "network.noDashboard" : "network.noLinkState")
         let fetched = try await fetchCampaignDetailsFromNetwork(
             campaignId: campaignId,
             userLogin: userLogin
@@ -424,9 +485,22 @@ extension TwitchAPIClient {
         await SharedTwitchLookupCache.shared.storeCampaignMetadata(
             Self.sharedCampaignMetadata(from: campaign),
             key: sharedKey,
-            ttl: sharedCampaignMetadataTTL
+            ttl: sharedMetadataTTL(for: campaign)
         )
         return campaign
+    }
+
+    /// Whether a cached entry stored while its campaign was unlinked is about to be served as
+    /// linked with an approved-channel list that was cached under the long, unlinked window.
+    nonisolated static func isUnlinkedEraACLNowNeeded(cached: Campaign, served: Campaign) -> Bool {
+        cached.hasChannelRestrictions && !cached.isAccountConnected && served.isAccountConnected
+    }
+
+    /// Counts which path answered a `DropCampaignDetails` lookup, so a diagnostic export can
+    /// say *why* the operation's request count is what it is. `network.*` paths are the ones
+    /// that reached Twitch; `miss.*` say why the per-account cache could not answer.
+    private func recordCampaignDetailsPath(_ path: String) async {
+        await PerformanceDiagnostics.shared.incrementCounter("DropCampaignDetails.\(path)")
     }
 
     private func fetchCampaignDetailsFromNetwork(
@@ -625,13 +699,53 @@ extension TwitchAPIClient {
     }
 
     /// Keeps the remembered-facts store inside its bound. Called once at the end of a refresh.
-    func pruneRememberedCampaignFacts() {
+    func pruneRememberedCampaignFacts(now: Date = Date()) {
         Self.pruneCache(
             &lastKnownCampaignDrops,
             maxEntries: maxCampaignDetailsCacheEntries,
             expiresAt: { $0.expiresAt }
         )
+        pruneRememberedApprovedChannels(now: now)
     }
+
+    /// Approved-channel lists are kept per campaign for the life of the process, so without
+    /// this every restricted campaign ever seen kept its full channel list in memory — on
+    /// each account's client — long after it ended. The disk copy already drops ended
+    /// campaigns; this applies the same bound in memory.
+    ///
+    /// A day of grace past the recorded end date, because a details response without an
+    /// `endAt` is stamped with the time it was parsed. A live campaign is re-stamped on every
+    /// refresh, so only lists for campaigns that have stopped appearing age out.
+    private func pruneRememberedApprovedChannels(now: Date) {
+        let cutoff = now.addingTimeInterval(-Self.approvedChannelsEndedGrace)
+        var removed = false
+        for (campaignId, expiry) in lastKnownApprovedChannelExpiry where expiry <= cutoff {
+            lastKnownApprovedChannels.removeValue(forKey: campaignId)
+            lastKnownApprovedChannelExpiry.removeValue(forKey: campaignId)
+            removed = true
+        }
+
+        let overflow = lastKnownApprovedChannels.count - CampaignDetailsDiskCache.maxApprovedChannelEntries
+        if overflow > 0 {
+            let earliestEnding = lastKnownApprovedChannels.keys
+                .sorted {
+                    (lastKnownApprovedChannelExpiry[$0] ?? .distantPast)
+                        < (lastKnownApprovedChannelExpiry[$1] ?? .distantPast)
+                }
+                .prefix(overflow)
+            for campaignId in earliestEnding {
+                lastKnownApprovedChannels.removeValue(forKey: campaignId)
+                lastKnownApprovedChannelExpiry.removeValue(forKey: campaignId)
+            }
+            removed = true
+        }
+
+        if removed {
+            campaignCachesNeedPersisting = true
+        }
+    }
+
+    static let approvedChannelsEndedGrace: TimeInterval = 24 * 60 * 60
 
     /// Whether two drop lists describe the same rewards on the same terms. Deliberately blind
     /// to per-account progress and claim state, which are recomputed from inventory on every
@@ -1305,7 +1419,13 @@ extension TwitchAPIClient {
     static let legacyClaimBenefitKey = "claimDropBenefit"
 
     /// Claim a drop
-    public func claimDrop(dropInstanceId: String) async throws -> ClaimDropResponse {
+    /// `campaignId` and `dropId` identify the claimed drop's campaign so only its cached
+    /// details are invalidated; pass whichever the caller knows.
+    public func claimDrop(
+        dropInstanceId: String,
+        campaignId: String? = nil,
+        dropId: String? = nil
+    ) async throws -> ClaimDropResponse {
         let request = graphQLRequest(
             for: .dropsPageClaimDropRewards,
             variables: [
@@ -1366,7 +1486,7 @@ extension TwitchAPIClient {
             )
         }
 
-        await invalidateCampaignDetailsAfterClaim()
+        await invalidateCampaignDetailsAfterClaim(campaignId: campaignId, dropId: dropId)
 
         return ClaimDropResponse(
             id: claim["id"] as? String ?? "",

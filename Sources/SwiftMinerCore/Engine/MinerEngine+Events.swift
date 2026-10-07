@@ -83,7 +83,12 @@ extension MinerEngine {
 
         // Use the dropInstanceId directly from PubSub event for claiming
         do {
-            let response = try await apiClient.claimDrop(dropInstanceId: event.dropInstanceId)
+            // The drop id identifies the claimed campaign exactly; the session's current
+            // campaign need not be the one this PubSub drop belongs to.
+            let response = try await apiClient.claimDrop(
+                dropInstanceId: event.dropInstanceId,
+                dropId: event.dropId
+            )
 
             if response.status == "CLAIMED" || response.status == "SUCCESS" {
                 let dropName = dropLabel(for: event.dropId, campaignId: campaignId)

@@ -169,6 +169,39 @@ final class ApprovedChannelPersistenceTests: XCTestCase {
         )
     }
 
+    /// The in-memory copy outlived the campaign: every restricted campaign ever seen kept
+    /// its full channel list on every account's client for the life of the process.
+    func testAnEndedCampaignsListIsReleasedFromMemory() async {
+        let client = makeClient()
+        await client.setUserLogin(userLogin)
+        _ = await client.reconcilingCampaign(campaign(
+            channels: owcs,
+            endDate: Date().addingTimeInterval(-2 * 24 * 60 * 60)
+        ))
+        let rememberedBeforePrune = await client.lastKnownApprovedChannels["campaign-1"]
+        XCTAssertNotNil(rememberedBeforePrune)
+
+        await client.pruneRememberedCampaignFacts()
+
+        let remembered = await client.lastKnownApprovedChannels["campaign-1"]
+        let expiry = await client.lastKnownApprovedChannelExpiry["campaign-1"]
+        XCTAssertNil(remembered)
+        XCTAssertNil(expiry)
+    }
+
+    /// A details response without `endAt` is stamped with its parse time, so a list that only
+    /// just "ended" may belong to a live campaign and must not be dropped.
+    func testAListStampedWithoutAnEndDateSurvivesPruning() async {
+        let client = makeClient()
+        await client.setUserLogin(userLogin)
+        _ = await client.reconcilingCampaign(campaign(channels: owcs, endDate: Date()))
+
+        await client.pruneRememberedCampaignFacts()
+
+        let remembered = await client.lastKnownApprovedChannels["campaign-1"]
+        XCTAssertEqual(remembered?.map(\.login), ["ow_esports"])
+    }
+
     private func makeClient() -> TwitchAPIClient {
         TwitchAPIClient(
             authService: TwitchAuthService(clientId: "test", tokenStore: InMemoryTokenStore()),
