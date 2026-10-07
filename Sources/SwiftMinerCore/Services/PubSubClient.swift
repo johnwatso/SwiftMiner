@@ -114,6 +114,8 @@ protocol PubSubSocket: Sendable {
     func send(_ text: String) async throws
     /// Next text frame; data frames are decoded as UTF-8, other frame kinds return nil.
     func receive() async throws -> String?
+    /// WebSocket control-frame ping; returns once the peer's pong arrives.
+    func sendPing() async throws
     func cancel()
 }
 
@@ -154,9 +156,39 @@ final class URLSessionPubSubSocket: PubSubSocket, @unchecked Sendable {
         }
     }
 
+    func sendPing() async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            task.sendPing { error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
+                }
+            }
+        }
+    }
+
     func cancel() {
         task.cancel(with: .goingAway, reason: nil)
         session.finishTasksAndInvalidate()
+    }
+}
+
+/// Resumes a continuation with whichever of several racing results arrives first.
+private final class FirstResultGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Bool, Never>?
+
+    init(_ continuation: CheckedContinuation<Bool, Never>) {
+        self.continuation = continuation
+    }
+
+    func resolve(_ value: Bool) {
+        let pending: CheckedContinuation<Bool, Never>? = lock.withLock {
+            defer { continuation = nil }
+            return continuation
+        }
+        pending?.resume(returning: value)
     }
 }
 
@@ -669,11 +701,13 @@ public actor PubSubClient: NSObject {
                     try await runtimeClock.sleep(nanoseconds: UInt64(pingInterval * 1_000_000_000))
                     if Task.isCancelled || generation != connectionGeneration { break }
 
+                    // Arm the PONG timeout before sending. The actor is re-entered while the
+                    // send is suspended, so a fast PONG can be handled before `send` returns;
+                    // arming afterwards left a timeout nothing would cancel, and every such
+                    // PING ended in a needless reconnect.
+                    startPongTimeout(generation: generation)
                     log("[PubSub] → PING")
                     try await sendMessage(PubSubMessage(type: .ping))
-
-                    // Start PONG timeout
-                    startPongTimeout(generation: generation)
 
                 } catch {
                     // See the listen loop: a cancelled sleep is teardown, not a
@@ -695,13 +729,42 @@ public actor PubSubClient: NSObject {
         pongTimeoutTask = Task {
             do {
                 try await runtimeClock.sleep(nanoseconds: UInt64(pongTimeout * 1_000_000_000))
-                // If we reach here, PONG was not received in time
-                if !Task.isCancelled && generation == connectionGeneration {
-                    log("[PubSub] PONG timeout!")
-                    await handleConnectionError(PubSubError.pongTimeout, generation: generation)
-                }
             } catch {
-                // Task was cancelled (PONG received)
+                return // Cancelled: PONG received or socket torn down.
+            }
+            guard !Task.isCancelled, generation == connectionGeneration else { return }
+
+            // A missing application-level PONG does not by itself prove the socket is dead:
+            // the legacy edge is being retired and its PING handling carries no guarantee. A
+            // 43h diagnostic run reconnected on almost every ping interval — a fresh socket
+            // per miner every ~3 minutes — so ask the socket itself before tearing it down.
+            log("[PubSub] No PONG in time; checking the socket with a WebSocket ping")
+            let socketAlive = await socketAnswersProtocolPing(generation: generation)
+            guard !Task.isCancelled, generation == connectionGeneration else { return }
+            if socketAlive {
+                log("[PubSub] Socket answered the WebSocket ping; keeping the connection")
+                return
+            }
+            log("[PubSub] PONG timeout!")
+            await handleConnectionError(PubSubError.pongTimeout, generation: generation)
+        }
+    }
+
+    /// Whether the current socket answers a WebSocket control-frame ping within `pongTimeout`.
+    private func socketAnswersProtocolPing(generation: UInt64) async -> Bool {
+        guard generation == connectionGeneration, let socket else { return false }
+        let clock = runtimeClock
+        let timeout = pongTimeout
+        return await withCheckedContinuation { continuation in
+            let gate = FirstResultGate(continuation)
+            let timeoutTask = Task {
+                try await clock.sleep(nanoseconds: RuntimeClock.nanoseconds(timeout))
+                gate.resolve(false)
+            }
+            Task {
+                let answered = (try? await socket.sendPing()) != nil
+                timeoutTask.cancel()
+                gate.resolve(answered)
             }
         }
     }
