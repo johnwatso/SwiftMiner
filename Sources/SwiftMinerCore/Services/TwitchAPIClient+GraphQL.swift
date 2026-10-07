@@ -329,13 +329,25 @@ extension TwitchAPIClient {
         // failed details fetch is one of the ways a degraded response arrives, so paying that
         // to avoid a stale link answer raises the odds of the failure this whole path exists
         // to survive.
-        if let cached = campaignDetailsByKey[cacheKey], cached.expiresAt > now {
-            await traceGQLDebug { "[TwitchAPIClient] DropCampaignDetails cache hit for \(campaignId)" }
-            return Self.applyingCurrentLinkState(
+        let cached = campaignDetailsByKey[cacheKey]
+        if let cached, cached.expiresAt > now {
+            let served = Self.applyingCurrentLinkState(
                 to: cached.campaign,
                 basicCampaign: basicCampaign,
                 knownLinkState: knownLinkState
             )
+            // An unlinked restricted campaign is cached for the long window because its ACL
+            // could not be used here. Once it is linked, that ACL is the one this account
+            // mines from, so it must be no older than the restricted window — refetch rather
+            // than serve the unlinked-era copy.
+            if !Self.isUnlinkedEraACLNowNeeded(cached: cached.campaign, served: served) {
+                await recordCampaignDetailsPath("cacheHit")
+                await traceGQLDebug { "[TwitchAPIClient] DropCampaignDetails cache hit for \(campaignId)" }
+                return served
+            }
+            await recordCampaignDetailsPath("miss.newlyLinkedACL")
+        } else {
+            await recordCampaignDetailsPath(cached == nil ? "miss.absent" : "miss.expired")
         }
         // The cross-miner cache holds only campaign-global metadata; the account-specific
         // parts are supplied here. Everything except link state comes from `basicCampaign`,
@@ -368,6 +380,7 @@ extension TwitchAPIClient {
                 )
             )
             campaignCachesNeedPersisting = true
+            await recordCampaignDetailsPath("sharedHit")
             await traceGQLDebug { "[TwitchAPIClient] DropCampaignDetails shared metadata hit for \(campaignId)" }
             return campaign
         }
@@ -379,7 +392,7 @@ extension TwitchAPIClient {
         if let basicCampaign, basicCampaign.isAccountConnected {
             let resolution = try await SharedTwitchLookupCache.shared.resolveCampaignMetadata(
                 for: sharedKey,
-                ttl: sharedCampaignMetadataTTL
+                ttl: { [self] in sharedMetadataTTL(for: $0) }
             ) { [self] in
                 let fetched = try await fetchCampaignDetailsFromNetwork(
                     campaignId: campaignId,
@@ -404,6 +417,7 @@ extension TwitchAPIClient {
             }
             let campaign = reconcilingCampaign(accountCampaign, cacheKey: cacheKey)
             cacheCampaignDetailsForAccount(campaign, cacheKey: cacheKey)
+            await recordCampaignDetailsPath(resolution.loadedByCaller ? "network.sharedLoad" : "sharedInFlight")
             await traceGQLDebug {
                 resolution.loadedByCaller
                     ? "[TwitchAPIClient] DropCampaignDetails populated shared metadata for \(campaignId)"
@@ -415,6 +429,7 @@ extension TwitchAPIClient {
         // Repair the response before it is cached. `detailsCacheTTL` is four hours for a
         // campaign with no ACL of its own, so a single degraded answer stored here takes the
         // campaign out of mining for that whole window — and out of the persisted cache too.
+        await recordCampaignDetailsPath(basicCampaign == nil ? "network.noDashboard" : "network.noLinkState")
         let fetched = try await fetchCampaignDetailsFromNetwork(
             campaignId: campaignId,
             userLogin: userLogin
@@ -424,9 +439,22 @@ extension TwitchAPIClient {
         await SharedTwitchLookupCache.shared.storeCampaignMetadata(
             Self.sharedCampaignMetadata(from: campaign),
             key: sharedKey,
-            ttl: sharedCampaignMetadataTTL
+            ttl: sharedMetadataTTL(for: campaign)
         )
         return campaign
+    }
+
+    /// Whether a cached entry stored while its campaign was unlinked is about to be served as
+    /// linked with an approved-channel list that was cached under the long, unlinked window.
+    nonisolated static func isUnlinkedEraACLNowNeeded(cached: Campaign, served: Campaign) -> Bool {
+        cached.hasChannelRestrictions && !cached.isAccountConnected && served.isAccountConnected
+    }
+
+    /// Counts which path answered a `DropCampaignDetails` lookup, so a diagnostic export can
+    /// say *why* the operation's request count is what it is. `network.*` paths are the ones
+    /// that reached Twitch; `miss.*` say why the per-account cache could not answer.
+    private func recordCampaignDetailsPath(_ path: String) async {
+        await PerformanceDiagnostics.shared.incrementCounter("DropCampaignDetails.\(path)")
     }
 
     private func fetchCampaignDetailsFromNetwork(

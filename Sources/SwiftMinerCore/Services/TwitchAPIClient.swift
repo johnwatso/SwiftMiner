@@ -49,7 +49,7 @@ actor SharedTwitchLookupCache {
     /// metadata copy so progress, claims, and account-link state never cross accounts.
     func resolveCampaignMetadata(
         for key: String,
-        ttl: TimeInterval,
+        ttl: @escaping @Sendable (Campaign) -> TimeInterval,
         load: @escaping @Sendable () async throws -> Campaign
     ) async throws -> CampaignMetadataResolution {
         let now = Date()
@@ -75,7 +75,7 @@ actor SharedTwitchLookupCache {
                 storeCampaignMetadata(
                     TwitchAPIClient.sharedCampaignMetadata(from: detailed),
                     key: key,
-                    ttl: ttl
+                    ttl: ttl(detailed)
                 )
                 campaignMetadataRefreshes.removeValue(forKey: key)
             }
@@ -386,16 +386,42 @@ public actor TwitchAPIClient {
     /// arrive with each `ViewerDropsDashboard` refresh, and `campaignLinkStateTTL` below
     /// keeps the mutable part on its own short leash.
     let campaignDetailsCacheTTL: TimeInterval = 4 * 60 * 60
-    /// ACL-restricted campaigns keep the old short window. `channels` is the approved-channel
+    /// ACL-restricted campaigns this account is linked to keep the old short window (see
+    /// `detailsCacheTTL(for:)` for why unlinked ones do not). `channels` is the approved-channel
     /// list, and for a scarce esports campaign that list is the difference between catching a
     /// match window and missing it — John has missed those events before. The long window
     /// above is only safe for campaigns anyone can watch anywhere, which is nearly all of
     /// them, so the launch saving survives almost intact.
     let restrictedCampaignDetailsCacheTTL: TimeInterval = 20 * 60
 
-    /// The details window for one campaign: short when its channel list gates who can mine it.
+    /// The details window for one campaign: short when its channel list gates who can mine it
+    /// *on this account*.
+    ///
+    /// An unlinked campaign cannot be mined here at all, so a fresh ACL for it buys nothing.
+    /// Refreshing those every twenty minutes anyway was the bulk of SwiftMiner's Twitch
+    /// traffic: the 1.44.2 export from 2026-10-07 (5 accounts, 42h51m) recorded 25,707
+    /// `DropCampaignDetails` requests — ~120 per account-hour — with ~7.4h of cumulative
+    /// rate-limit wait. Each of ~20 unlinked esports/partner campaigns per account went to
+    /// the network three times an hour, uncoalesced, on every account.
+    ///
+    /// The moment such a campaign becomes linked, `fetchCampaignDetails` treats its
+    /// unlinked-era entry as a miss, so a newly linked esports campaign still gets a fresh
+    /// ACL on the next cycle rather than inheriting a four-hour-old one.
     func detailsCacheTTL(for campaign: Campaign) -> TimeInterval {
-        campaign.hasChannelRestrictions ? restrictedCampaignDetailsCacheTTL : campaignDetailsCacheTTL
+        campaign.hasChannelRestrictions && campaign.isAccountConnected
+            ? restrictedCampaignDetailsCacheTTL
+            : campaignDetailsCacheTTL
+    }
+
+    /// The cross-miner window for one campaign's global metadata. A restricted campaign's
+    /// copy carries the ACL that linked accounts mine from, so it answers to the same short
+    /// window as their per-account entries; everything else keeps the long window.
+    ///
+    /// Before per-account windows depended on linkage, unlinked accounts' twenty-minute
+    /// refetches incidentally refreshed this copy. With those gone, a six-hour copy could
+    /// otherwise serve a linked account an ACL hours out of date.
+    nonisolated func sharedMetadataTTL(for campaign: Campaign) -> TimeInterval {
+        campaign.hasChannelRestrictions ? restrictedCampaignDetailsCacheTTL : sharedCampaignMetadataTTL
     }
     /// Account-link state is mutable and directly decides whether a campaign can be mined,
     /// so it is deliberately kept far shorter than the details window above. Keeping this

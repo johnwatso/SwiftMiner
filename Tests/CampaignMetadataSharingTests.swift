@@ -303,6 +303,40 @@ final class CampaignMetadataSharingTests: XCTestCase {
         XCTAssertEqual(openTTL, longWindow)
         XCTAssertEqual(listTTL, shortWindow)
         XCTAssertEqual(flagTTL, shortWindow)
+
+        // An ACL this account cannot mine from is not worth refetching every twenty minutes.
+        let unlinkedTTL = await client.detailsCacheTTL(for: restrictedByList.withAccountConnected(false))
+        XCTAssertEqual(unlinkedTTL, longWindow)
+
+        // The shared copy is what linked accounts mine from, so its ACL keeps the short window.
+        XCTAssertEqual(client.sharedMetadataTTL(for: restrictedByList), shortWindow)
+        XCTAssertEqual(client.sharedMetadataTTL(for: restrictedByFlag), shortWindow)
+        let sharedLongWindow = await client.sharedCampaignMetadataTTL
+        XCTAssertEqual(client.sharedMetadataTTL(for: openCampaign), sharedLongWindow)
+    }
+
+    /// The long unlinked window must not leak into mining: once the account is linked, an
+    /// entry cached while it was not is treated as a miss so the ACL is fetched again.
+    func testANewlyLinkedRestrictedCampaignDoesNotServeItsUnlinkedEraACL() {
+        let restricted = Self.campaign(
+            channels: [Channel(id: "1", login: "ow_esports", displayName: "OWCS")],
+            allowIsEnabled: true
+        )
+        let open = Self.campaign(channels: [], allowIsEnabled: nil)
+
+        XCTAssertTrue(TwitchAPIClient.isUnlinkedEraACLNowNeeded(
+            cached: restricted.withAccountConnected(false),
+            served: restricted
+        ))
+        XCTAssertFalse(TwitchAPIClient.isUnlinkedEraACLNowNeeded(
+            cached: restricted.withAccountConnected(false),
+            served: restricted.withAccountConnected(false)
+        ))
+        XCTAssertFalse(TwitchAPIClient.isUnlinkedEraACLNowNeeded(cached: restricted, served: restricted))
+        XCTAssertFalse(TwitchAPIClient.isUnlinkedEraACLNowNeeded(
+            cached: open.withAccountConnected(false),
+            served: open
+        ))
     }
 
     /// Twitch returns a restricted campaign's approved channels on one fetch and omits them
