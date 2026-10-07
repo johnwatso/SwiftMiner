@@ -120,10 +120,19 @@ protocol PubSubSocket: Sendable {
 typealias PubSubSocketFactory = @Sendable (URL) -> any PubSubSocket
 
 final class URLSessionPubSubSocket: PubSubSocket, @unchecked Sendable {
+    /// Each socket owns its session and must invalidate it: a URLSession is retained by the
+    /// system until invalidated, so dropping only the task leaked the session together with
+    /// its connection, TLS certificates and metrics on every reconnect.
+    private let session: URLSession
     private let task: URLSessionWebSocketTask
 
     init(url: URL) {
-        task = URLSession(configuration: .default).webSocketTask(with: url)
+        session = URLSession(configuration: .default)
+        task = session.webSocketTask(with: url)
+    }
+
+    deinit {
+        session.invalidateAndCancel()
     }
 
     func resume() {
@@ -147,6 +156,7 @@ final class URLSessionPubSubSocket: PubSubSocket, @unchecked Sendable {
 
     func cancel() {
         task.cancel(with: .goingAway, reason: nil)
+        session.finishTasksAndInvalidate()
     }
 }
 
