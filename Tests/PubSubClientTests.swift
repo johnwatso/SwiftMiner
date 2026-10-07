@@ -13,6 +13,17 @@ final class MockPubSubSocket: PubSubSocket, @unchecked Sendable {
     private var wasCancelled = false
     private var automaticallyRespondsToTopicRequests = true
     private var topicResponseError: String?
+    private var answersPingDuringSend = false
+    private var protocolPingAnswer: ProtocolPingAnswer = .fail
+    private var protocolPingWaiters: [CheckedContinuation<Void, Error>] = []
+    private var protocolPingCount = 0
+
+    /// How the socket answers a WebSocket control-frame ping.
+    enum ProtocolPingAnswer {
+        case pong
+        case fail
+        case never
+    }
 
     // MARK: Test controls
 
@@ -23,6 +34,16 @@ final class MockPubSubSocket: PubSubSocket, @unchecked Sendable {
     }
 
     var resumed: Bool { lock.withLock { wasResumed } }
+    var protocolPings: Int { lock.withLock { protocolPingCount } }
+
+    /// Answer each PING with a PONG before `send` returns, as a fast server can.
+    func setAnswersPingDuringSend(_ enabled: Bool) {
+        lock.withLock { answersPingDuringSend = enabled }
+    }
+
+    func setProtocolPingAnswer(_ answer: ProtocolPingAnswer) {
+        lock.withLock { protocolPingAnswer = answer }
+    }
     var cancelled: Bool { lock.withLock { wasCancelled } }
 
     func setSendError(_ error: Error?) {
@@ -66,11 +87,20 @@ final class MockPubSubSocket: PubSubSocket, @unchecked Sendable {
     }
 
     func send(_ text: String) async throws {
-        let state: (error: Error?, responds: Bool, responseError: String?) = lock.withLock {
+        let state: (error: Error?, responds: Bool, responseError: String?, pongs: Bool) = lock.withLock {
             if sendError == nil { sentTexts.append(text) }
-            return (sendError, automaticallyRespondsToTopicRequests, topicResponseError)
+            return (sendError, automaticallyRespondsToTopicRequests, topicResponseError, answersPingDuringSend)
         }
         if let error = state.error { throw error }
+
+        if state.pongs,
+           let request = try? JSONDecoder().decode(PubSubMessage.self, from: Data(text.utf8)),
+           request.type == .ping {
+            deliver(.success(#"{"type":"PONG"}"#))
+            // Let the listen loop handle the PONG while this send is still suspended.
+            try await Task.sleep(nanoseconds: 50_000_000)
+            return
+        }
 
         guard state.responds,
               let request = try? JSONDecoder().decode(PubSubMessage.self, from: Data(text.utf8)),
@@ -98,14 +128,35 @@ final class MockPubSubSocket: PubSubSocket, @unchecked Sendable {
         }
     }
 
+    func sendPing() async throws {
+        let answer: ProtocolPingAnswer = lock.withLock {
+            protocolPingCount += 1
+            return protocolPingAnswer
+        }
+        switch answer {
+        case .pong:
+            return
+        case .fail:
+            throw URLError(.networkConnectionLost)
+        case .never:
+            try await withCheckedThrowingContinuation { continuation in
+                lock.withLock { protocolPingWaiters.append(continuation) }
+            }
+        }
+    }
+
     func cancel() {
         // Unblock any pending receive so cancelled sockets don't leak waiters.
-        let pending: CheckedContinuation<String?, Error>? = lock.withLock {
+        let pending: (CheckedContinuation<String?, Error>?, [CheckedContinuation<Void, Error>]) = lock.withLock {
             wasCancelled = true
-            defer { waiter = nil }
-            return waiter
+            defer {
+                waiter = nil
+                protocolPingWaiters.removeAll()
+            }
+            return (waiter, protocolPingWaiters)
         }
-        pending?.resume(throwing: URLError(.cancelled))
+        pending.0?.resume(throwing: URLError(.cancelled))
+        for ping in pending.1 { ping.resume(throwing: URLError(.cancelled)) }
     }
 }
 
@@ -407,7 +458,7 @@ final class PubSubClientTests: XCTestCase {
 
     func testPongTimeoutForcesReconnect() async throws {
         let factory = MockSocketFactory()
-        let client = makeClient(factory: factory, pingInterval: 0.05, pongTimeout: 0.05)
+        let client = makeClient(factory: factory, pingInterval: 0.2, pongTimeout: 0.05)
 
         try await client.connect()
 
@@ -416,6 +467,51 @@ final class PubSubClientTests: XCTestCase {
         }
         // No PONG is ever pushed, so the timeout must tear the socket down.
         try await waitUntil("reconnect after PONG timeout") { factory.count >= 2 }
+        await client.disconnect()
+    }
+
+    func testPongDuringPingSendKeepsSocket() async throws {
+        let factory = MockSocketFactory()
+        let client = makeClient(factory: factory, pingInterval: 0.4, pongTimeout: 0.1)
+
+        try await client.connect()
+        let socket = try XCTUnwrap(factory[0])
+        socket.setAnswersPingDuringSend(true)
+        try await waitUntil("PING sent") {
+            socket.sent.contains { $0.type == .ping }
+        }
+
+        // A PONG handled before the PING send returned used to leave an armed timeout
+        // that nothing cancelled, forcing a reconnect on every ping interval.
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        XCTAssertEqual(factory.count, 1, "A PONG received during the PING send should keep the socket")
+        XCTAssertEqual(socket.protocolPings, 0, "An answered PING needs no fallback check")
+        await client.disconnect()
+    }
+
+    func testMissingPongKeepsSocketThatAnswersProtocolPing() async throws {
+        let factory = MockSocketFactory()
+        let client = makeClient(factory: factory, pingInterval: 0.2, pongTimeout: 0.05)
+
+        try await client.connect()
+        let socket = try XCTUnwrap(factory[0])
+        socket.setProtocolPingAnswer(.pong)
+
+        try await waitUntil("fallback WebSocket ping") { socket.protocolPings >= 2 }
+        XCTAssertEqual(factory.count, 1, "A socket answering WebSocket pings should not be replaced")
+        await client.disconnect()
+    }
+
+    func testMissingPongReconnectsWhenProtocolPingNeverAnswers() async throws {
+        let factory = MockSocketFactory()
+        let client = makeClient(factory: factory, pingInterval: 0.2, pongTimeout: 0.05)
+
+        try await client.connect()
+        let socket = try XCTUnwrap(factory[0])
+        socket.setProtocolPingAnswer(.never)
+
+        try await waitUntil("reconnect after unanswered WebSocket ping") { factory.count >= 2 }
+        XCTAssertTrue(socket.cancelled)
         await client.disconnect()
     }
 
