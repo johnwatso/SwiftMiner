@@ -192,6 +192,9 @@ extension MinerEngine {
         if earned > 0 {
             onEarnedProgress?(earned)
         }
+        if case .claimable = result.transition {
+            pendingClaimableDrop = true
+        }
         return result
     }
 }

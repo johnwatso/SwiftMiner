@@ -417,6 +417,10 @@ public actor MinerEngine {
     // Configuration
     let campaignCheckInterval: UInt64 = 300 * 1_000_000_000 // 5 minutes
     let claimCheckInterval: UInt64 = 2 * 60 * 1_000_000_000 // 2 minutes (conditional polling)
+    /// Set when any progress source sees a drop reach its required minutes. The watch loop
+    /// claims on its next tick instead of waiting out the two-minute claim cadence, which
+    /// otherwise left a finished drop sitting at 100% for up to two minutes.
+    var pendingClaimableDrop = false
 
     static func shouldRefreshClaimInventory(
         lastCheck: UInt64?,

@@ -926,17 +926,11 @@ struct AnimatedLinearProgressView: View {
     var duration: Double = 0.65
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var displayedValue: Double
 
     init(value: Double, tint: Color, duration: Double = 0.65) {
         self.value = value
         self.tint = tint
         self.duration = duration
-        // Seed at the true value so the bar renders where it actually is on the
-        // first frame. Previously it reset to 0 and swept up on every appear,
-        // which looked like the bar re-filling each time the Overview was shown
-        // or refreshed — and masked the small, live incremental steps.
-        _displayedValue = State(initialValue: min(1, max(0, value)))
     }
 
     private var clampedValue: Double {
@@ -944,20 +938,13 @@ struct AnimatedLinearProgressView: View {
     }
 
     var body: some View {
-        ProgressView(value: displayedValue)
+        // Drawn straight from `value` rather than a mirrored @State copy. The
+        // copy only moved when onChange fired, and a change it missed left the
+        // bar frozen near empty while the percent beside it read 100%.
+        ProgressView(value: clampedValue)
             .progressViewStyle(.linear)
             .tint(tint)
-            .onChange(of: clampedValue) { _, newValue in
-                // Animate only genuine progress changes, not the initial render.
-                guard !reduceMotion else {
-                    displayedValue = newValue
-                    return
-                }
-
-                withAnimation(.easeInOut(duration: duration)) {
-                    displayedValue = newValue
-                }
-            }
+            .animation(reduceMotion ? nil : .easeInOut(duration: duration), value: clampedValue)
     }
 }
 

@@ -715,14 +715,17 @@ extension MinerEngine {
                     }
 
                     // Conditional claim polling: every ~2 minutes while actively
-                    // mining. If claiming or inventory sync removes the current
-                    // campaign from the mineable set, rescan now.
-                    if runtimeClock.elapsedSeconds(since: lastClaimCheck) >= claimCheckSeconds {
+                    // mining, or on the next tick once a drop has turned claimable.
+                    // If claiming or inventory sync removes the current campaign
+                    // from the mineable set, rescan now.
+                    let claimNow = pendingClaimableDrop
+                    if claimNow || runtimeClock.elapsedSeconds(since: lastClaimCheck) >= claimCheckSeconds {
+                        pendingClaimableDrop = false
                         lastClaimCheck = runtimeClock.nowNanoseconds()
                         let campaignBeforeClaimSync = session?.currentCampaignId.flatMap { id in
                             allCampaigns.first(where: { $0.id == id })
                         }
-                        _ = await claimReadyDrops()
+                        _ = await claimReadyDrops(forceInventoryRefresh: claimNow)
                         if streamOverrideLogin == nil, let currentCampaignId = session?.currentCampaignId {
                             let claimSyncCandidates = candidateCampaigns(
                                 from: allCampaigns,
