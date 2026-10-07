@@ -1,5 +1,6 @@
-import Foundation
+import AppKit
 import Darwin
+import Foundation
 
 /// Cheap, self-contained sampler for this process's own CPU time and memory
 /// footprint using Mach `task_info`. Each call is a couple of syscalls and
@@ -17,6 +18,16 @@ enum ProcessResourceSampler {
         }
         guard result == KERN_SUCCESS else { return nil }
         return info.phys_footprint
+    }
+
+    /// Bytes currently allocated across every malloc zone. Set against the footprint this
+    /// splits growth into heap objects (Swift/ObjC allocations — caches, retained models, a
+    /// leak) versus everything else (decoded images in IOSurfaces, graphics, mapped files),
+    /// which is the first question any memory-growth report needs answered.
+    static func mallocHeapInUseBytes() -> UInt64? {
+        var stats = malloc_statistics_t()
+        malloc_zone_statistics(nil, &stats)
+        return stats.size_in_use > 0 ? UInt64(stats.size_in_use) : nil
     }
 
     /// Cumulative CPU time (user + system) the whole process has consumed, in
@@ -73,6 +84,10 @@ final class ResourceUsageMonitor {
         let timestamp: Date
         let cpuPercent: Double
         let memoryBytes: UInt64
+        var heapBytes: UInt64? = nil
+        /// Whether a user window was on screen. Opening the window loads artwork and builds
+        /// the view hierarchy, so footprint changes are only comparable within the same state.
+        var windowVisible: Bool? = nil
     }
 
     nonisolated struct Diagnostics: Sendable, Equatable {
@@ -92,6 +107,13 @@ final class ResourceUsageMonitor {
         let memoryGrowthMBPerHour: Double?
         let topCPUSamples: [Sample]
         let topMemorySamples: [Sample]
+        var currentHeapBytes: UInt64? = nil
+        var heapDeltaBytes: Int64? = nil
+        /// The last sample of each wall-clock hour, oldest first: enough to tell a steady leak
+        /// from a step (window opened) or a plateau (a cache filling to its limit).
+        var hourlyTimeline: [Sample] = []
+        /// Rows held by the Activity Log's live list — the largest model collection in the app.
+        var inMemoryActivityLogEntries: Int? = nil
     }
 
     /// Latest accumulated snapshot. Observed by the diagnostics popup.
@@ -163,17 +185,21 @@ final class ResourceUsageMonitor {
                             snapshot.averageCPUPercent, snapshot.peakCPUPercent))
         lines.append(String(format: "# memory_mb avg: %.2f, peak: %.2f",
                             mb(snapshot.averageMemoryBytes), mb(snapshot.peakMemoryBytes)))
-        lines.append("timestamp,cpu_percent,memory_mb")
+        lines.append("timestamp,cpu_percent,memory_mb,heap_mb,window_open")
         for sample in history {
-            lines.append(String(format: "%@,%.2f,%.2f",
+            let heap = sample.heapBytes.map { String(format: "%.2f", mb($0)) } ?? ""
+            let window = sample.windowVisible.map { $0 ? "1" : "0" } ?? ""
+            lines.append(String(format: "%@,%.2f,%.2f,%@,%@",
                                 formatter.string(from: sample.timestamp),
                                 sample.cpuPercent,
-                                mb(sample.memoryBytes)))
+                                mb(sample.memoryBytes),
+                                heap,
+                                window))
         }
         return lines.joined(separator: "\n") + "\n"
     }
 
-    func diagnostics(now: Date = Date()) -> Diagnostics {
+    func diagnostics(now: Date = Date(), inMemoryActivityLogEntries: Int? = nil) -> Diagnostics {
         let first = history.first
         let last = history.last
         let duration = snapshot.startedAt.map { max(0, now.timeIntervalSince($0)) }
@@ -192,7 +218,7 @@ final class ResourceUsageMonitor {
             return $0.memoryBytes > $1.memoryBytes
         }.prefix(5))
 
-        return Diagnostics(
+        var diagnostics = Diagnostics(
             isRunning: isRunning,
             startedAt: snapshot.startedAt,
             durationSeconds: duration,
@@ -210,6 +236,29 @@ final class ResourceUsageMonitor {
             topCPUSamples: topCPU,
             topMemorySamples: topMemory
         )
+        diagnostics.currentHeapBytes = last?.heapBytes
+        if let firstHeap = first?.heapBytes, let lastHeap = last?.heapBytes {
+            diagnostics.heapDeltaBytes = Int64(lastHeap) - Int64(firstHeap)
+        }
+        diagnostics.hourlyTimeline = Self.hourlyTimeline(history)
+        diagnostics.inMemoryActivityLogEntries = inMemoryActivityLogEntries
+        return diagnostics
+    }
+
+    /// Last sample per calendar hour, oldest first.
+    nonisolated static func hourlyTimeline(_ samples: [Sample], calendar: Calendar = .current) -> [Sample] {
+        var result: [Sample] = []
+        var currentHour: Date?
+        for sample in samples {
+            let hour = calendar.dateInterval(of: .hour, for: sample.timestamp)?.start
+            if hour == currentHour, !result.isEmpty {
+                result[result.count - 1] = sample
+            } else {
+                result.append(sample)
+                currentHour = hour
+            }
+        }
+        return result
     }
 
     private func sample() {
@@ -241,7 +290,13 @@ final class ResourceUsageMonitor {
         updated.peakMemoryBytes = max(updated.peakMemoryBytes, memory)
         snapshot = updated
 
-        history.append(Sample(timestamp: now, cpuPercent: cpuPercent, memoryBytes: memory))
+        history.append(Sample(
+            timestamp: now,
+            cpuPercent: cpuPercent,
+            memoryBytes: memory,
+            heapBytes: ProcessResourceSampler.mallocHeapInUseBytes(),
+            windowVisible: NSApp?.windows.contains { $0.canBecomeMain && $0.isVisible && !$0.isMiniaturized }
+        ))
         if history.count > maxHistory {
             history.removeFirst(history.count - maxHistory)
         }

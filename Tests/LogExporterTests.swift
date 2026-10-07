@@ -278,6 +278,72 @@ final class LogExporterTests: XCTestCase {
         await PerformanceDiagnostics.shared.reset()
     }
 
+    func testReportShowsHeapAndHourlyMemoryTimeline() {
+        let now = Date(timeIntervalSince1970: 1_730_000_500)
+        let mb: UInt64 = 1024 * 1024
+        var usage = ResourceUsageMonitor.Diagnostics(
+            isRunning: true,
+            startedAt: now.addingTimeInterval(-7200),
+            durationSeconds: 7200,
+            sampleCount: 2,
+            currentCPUPercent: 10,
+            averageCPUPercent: 10,
+            peakCPUPercent: 10,
+            currentMemoryBytes: 400 * mb,
+            averageMemoryBytes: 350 * mb,
+            peakMemoryBytes: 400 * mb,
+            firstSampleAt: now.addingTimeInterval(-7200),
+            lastSampleAt: now,
+            memoryDeltaBytes: Int64(100 * mb),
+            memoryGrowthMBPerHour: 50,
+            topCPUSamples: [],
+            topMemorySamples: []
+        )
+        usage.currentHeapBytes = 180 * mb
+        usage.heapDeltaBytes = Int64(30 * mb)
+        usage.inMemoryActivityLogEntries = 1234
+        usage.hourlyTimeline = [
+            ResourceUsageMonitor.Sample(
+                timestamp: now.addingTimeInterval(-3600),
+                cpuPercent: 10,
+                memoryBytes: 300 * mb,
+                heapBytes: 150 * mb,
+                windowVisible: false
+            ),
+            ResourceUsageMonitor.Sample(
+                timestamp: now,
+                cpuPercent: 10,
+                memoryBytes: 400 * mb,
+                heapBytes: 180 * mb,
+                windowVisible: true
+            )
+        ]
+
+        let report = LogExporter.buildReport(snapshot(resourceUsage: usage), now: now)
+
+        XCTAssertTrue(report.contains("inMemory activityLogEntries=1234"))
+        XCTAssertTrue(report.contains("heap current=180.00 MB delta=+30.00 MB"))
+        XCTAssertTrue(report.contains("memoryTimeline (last sample per hour):"))
+        XCTAssertTrue(report.contains("memory=300.00 MB heap=150.00 MB window=closed"))
+        XCTAssertTrue(report.contains("memory=400.00 MB heap=180.00 MB window=open"))
+    }
+
+    func testHourlyTimelineKeepsLastSamplePerHour() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let hour = Date(timeIntervalSince1970: 1_730_000_000 - 1_730_000_000.truncatingRemainder(dividingBy: 3600))
+        func sample(_ offset: TimeInterval, _ memory: UInt64) -> ResourceUsageMonitor.Sample {
+            ResourceUsageMonitor.Sample(timestamp: hour.addingTimeInterval(offset), cpuPercent: 0, memoryBytes: memory)
+        }
+
+        let timeline = ResourceUsageMonitor.hourlyTimeline(
+            [sample(10, 1), sample(1800, 2), sample(3599, 3), sample(3600, 4), sample(7300, 5)],
+            calendar: calendar
+        )
+
+        XCTAssertEqual(timeline.map(\.memoryBytes), [3, 4, 5])
+    }
+
     func testReportDoesNotPresentMissingResourceSamplesAsZeroUsage() {
         let now = Date(timeIntervalSince1970: 1_730_000_500)
         let usage = ResourceUsageMonitor.Diagnostics(

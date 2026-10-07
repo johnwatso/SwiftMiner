@@ -53,7 +53,9 @@ actor AvatarImageCache {
         self.budgetCheckWriteInterval = max(1, budgetCheckWriteInterval)
         self.retryDelaysNanoseconds = retryDelaysNanoseconds
         memory.countLimit = 64
-        memory.totalCostLimit = 64 * 1_024 * 1_024
+        // Avatars render at sidebar/card size; 24 MB of decoded bitmaps covers every miner
+        // and Discord user several times over without pinning memory in the background.
+        memory.totalCostLimit = 24 * 1_024 * 1_024
     }
 
     private var cacheDirectory: URL? {
@@ -91,6 +93,11 @@ actor AvatarImageCache {
         let result = await task.value
         inFlight[key] = nil
         return result
+    }
+
+    /// Drops decoded images but keeps the disk cache. Called when the last user window closes.
+    func purgeMemory() {
+        memory.removeAllObjects()
     }
 
     func clearCache() {

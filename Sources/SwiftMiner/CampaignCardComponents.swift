@@ -304,8 +304,14 @@ actor CampaignArtworkCache {
         self.diskFileLimit = diskFileLimit
         self.budgetCheckWriteInterval = max(1, budgetCheckWriteInterval)
         memory.countLimit = 96
-        memory.totalCostLimit = 192 * 1_024 * 1_024
+        memory.totalCostLimit = Self.memoryCostLimit
     }
+
+    /// Decoded-bitmap budget. NSCache only evicts at this limit or under system memory
+    /// pressure, so whatever it allows stays resident for the life of a background session —
+    /// the previous 192 MB let artwork alone account for much of the footprint of an instance
+    /// whose window had been opened once and closed.
+    static let memoryCostLimit = 64 * 1_024 * 1_024
 
     func image(for url: URL) async -> NSImage? {
         applyDiskBudgetIfNeeded()
@@ -346,6 +352,12 @@ actor CampaignArtworkCache {
         let image = await task.value
         inFlight[key] = nil
         return image
+    }
+
+    /// Drops decoded images but keeps the disk cache, so reopening the window re-reads from
+    /// disk instead of the network. Called when the last user window closes.
+    func purgeMemory() {
+        memory.removeAllObjects()
     }
 
     func clearCache() {

@@ -358,6 +358,16 @@ enum LogExporter {
             out += " growth=\(String(format: "%+.2f", growth)) MB/hour"
         }
         out += "\n"
+        if let entries = usage.inMemoryActivityLogEntries {
+            out += "  inMemory activityLogEntries=\(entries)\n"
+        }
+        if let heap = usage.currentHeapBytes {
+            out += "  heap current=\(formatMB(heap))"
+            if let delta = usage.heapDeltaBytes {
+                out += " delta=\(formatSignedMB(delta))"
+            }
+            out += "\n"
+        }
 
         if !usage.topCPUSamples.isEmpty {
             out += "  topCPU:\n"
@@ -369,6 +379,19 @@ enum LogExporter {
             out += "  topMemory:\n"
             for sample in usage.topMemorySamples {
                 out += "    - \(formatter.string(from: sample.timestamp)) memory=\(formatMB(sample.memoryBytes)) cpu=\(formatPercent(sample.cpuPercent))\n"
+            }
+        }
+        if !usage.hourlyTimeline.isEmpty {
+            out += "  memoryTimeline (last sample per hour):\n"
+            for sample in usage.hourlyTimeline {
+                out += "    - \(formatter.string(from: sample.timestamp)) memory=\(formatMB(sample.memoryBytes))"
+                if let heap = sample.heapBytes {
+                    out += " heap=\(formatMB(heap))"
+                }
+                if let visible = sample.windowVisible {
+                    out += " window=\(visible ? "open" : "closed")"
+                }
+                out += "\n"
             }
         }
         return out
@@ -694,7 +717,9 @@ enum LogExporter {
             arch: arch,
             miners: miners,
             settings: settingsRows,
-            resourceUsage: navigation.resourceUsageMonitor.diagnostics(),
+            resourceUsage: navigation.resourceUsageMonitor.diagnostics(
+                inMemoryActivityLogEntries: navigation.events.count
+            ),
             performance: await PerformanceDiagnostics.shared.snapshot(),
             earningSummaries: earningSummaries,
             nonEarningHours: nonEarningHours,

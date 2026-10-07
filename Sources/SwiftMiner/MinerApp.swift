@@ -733,6 +733,25 @@ fileprivate final class AppPresentationController: ObservableObject {
                 }
             }
         }
+
+        // Decoded artwork and avatars only serve the window. Once the last one closes, a
+        // background session would otherwise hold them until the OS applies memory pressure.
+        observers.append(center.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: nil,
+            queue: .main
+        ) { notification in
+            let closing = notification.object as? NSWindow
+            Task { @MainActor in
+                guard closing?.canBecomeMain == true else { return }
+                let anotherWindowOpen = NSApp.windows.contains { window in
+                    window !== closing && window.canBecomeMain && window.isVisible && !window.isMiniaturized
+                }
+                guard !anotherWindowOpen else { return }
+                await CampaignArtworkCache.shared.purgeMemory()
+                await AvatarImageCache.shared.purgeMemory()
+            }
+        })
     }
 
     func configure(mode: AppPresenceMode) {
