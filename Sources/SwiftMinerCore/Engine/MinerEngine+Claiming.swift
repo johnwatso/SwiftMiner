@@ -53,8 +53,12 @@ extension MinerEngine {
             reportedInternalTestDropIds.formUnion(newlySkippedInternalTestDrops.map(\.dropId))
 
             if claimable.isEmpty {
-                log("No claimable drops found in inventory")
+                if !hasLoggedNoClaimableDrops {
+                    hasLoggedNoClaimableDrops = true
+                    log("No claimable drops found in inventory")
+                }
             } else {
+                hasLoggedNoClaimableDrops = false
                 log("Found \(claimable.count) claimable drop(s): \(claimable.map { $0.dropName }.joined(separator: ", "))")
             }
             if !newlySkippedInternalTestDrops.isEmpty {

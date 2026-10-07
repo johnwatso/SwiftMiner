@@ -23,7 +23,7 @@ public struct Progress: Codable, Sendable, Equatable {
     ) {
         self.id = id
         self.dropId = dropId
-        self.dropName = dropName
+        self.dropName = dropName.trimmingCharacters(in: .whitespacesAndNewlines)
         self.campaignId = campaignId
         self.currentMinutes = currentMinutes
         self.requiredMinutes = requiredMinutes

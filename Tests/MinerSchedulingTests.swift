@@ -310,6 +310,33 @@ final class MinerSchedulingTests: XCTestCase {
         XCTAssertTrue(MinerEngine.shouldAbandonUnverifiedSelection(isUnverified: true, emptyPolls: 3))
     }
 
+    func testFlatProgressPollsCountOnlyIdenticalReadings() {
+        let reading = (dropId: "d1", minutes: 412)
+        XCTAssertEqual(MinerEngine.flatProgressPolls(previous: nil, current: reading, count: 4), 0)
+        XCTAssertEqual(MinerEngine.flatProgressPolls(previous: reading, current: reading, count: 2), 3)
+        XCTAssertEqual(
+            MinerEngine.flatProgressPolls(previous: reading, current: (dropId: "d1", minutes: 413), count: 5),
+            0,
+            "Any credited minute restarts the run"
+        )
+        XCTAssertEqual(
+            MinerEngine.flatProgressPolls(previous: reading, current: (dropId: "d2", minutes: 412), count: 5),
+            0,
+            "A different drop is a new reading, not a flat one"
+        )
+    }
+
+    func testFlatProgressTriggersStallBeforeTheLongWindow() {
+        // The long-standing 15-minute window still applies on its own.
+        XCTAssertTrue(MinerEngine.isProgressStalled(stalledMinutes: 15, flatProgressPolls: 0))
+        XCTAssertFalse(MinerEngine.isProgressStalled(stalledMinutes: 14, flatProgressPolls: 0))
+        // Six flat polls with six quiet minutes is enough.
+        XCTAssertTrue(MinerEngine.isProgressStalled(stalledMinutes: 6, flatProgressPolls: 6))
+        XCTAssertFalse(MinerEngine.isProgressStalled(stalledMinutes: 6, flatProgressPolls: 5))
+        // Flat GQL readings alone must not override real-time credit that reset the stall clock.
+        XCTAssertFalse(MinerEngine.isProgressStalled(stalledMinutes: 2, flatProgressPolls: 9))
+    }
+
     func testApprovedChannelsFailOpenOnlyForCurrentCompatibilityFailures() {
         XCTAssertTrue(MinerEngine.shouldOfferUnverifiedApprovedChannels(
             verifiedCount: 0,

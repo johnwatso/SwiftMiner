@@ -376,6 +376,8 @@ extension MinerEngine {
                 var lastWatchLivenessCheck = runtimeClock.nowNanoseconds()
                 var lastClaimCheck = runtimeClock.nowNanoseconds()
                 var emptyCurrentDropPolls = 0
+                var lastPolledDrop: (dropId: String, minutes: Int)?
+                var flatProgressPolls = 0
                 let claimCheckSeconds = Double(claimCheckInterval) / 1_000_000_000
                 while await watchSessionManager.isWatching && !shouldSwitchChannel {
                     do {
@@ -463,6 +465,13 @@ extension MinerEngine {
                         do {
                             if let current = try await apiClient.fetchCurrentDrop(channelId: channel.id) {
                                 emptyCurrentDropPolls = 0
+                                let reading = (dropId: current.dropId, minutes: current.currentMinutes)
+                                flatProgressPolls = Self.flatProgressPolls(
+                                    previous: lastPolledDrop,
+                                    current: reading,
+                                    count: flatProgressPolls
+                                )
+                                lastPolledDrop = reading
                                 selectedChannelWasUnverified = false
                                 onOperationalEvent?(.successfulPoll)
                                 let campaignId = session?.currentCampaignId
@@ -530,7 +539,13 @@ extension MinerEngine {
 
                     // While a stream override is active we deliberately stay on the chosen
                     // streamer until they go offline, so progress stalls must not switch channels.
-                    if streamOverrideLogin == nil, extraMinutesWatched >= Self.maxExtraMinutes {
+                    if streamOverrideLogin == nil,
+                       Self.isProgressStalled(stalledMinutes: extraMinutesWatched, flatProgressPolls: flatProgressPolls) {
+                        if extraMinutesWatched < Self.maxExtraMinutes, let flat = lastPolledDrop {
+                            log("\(Self.antiStallLogTag) Twitch reported the same \(flat.minutes) minute(s) on \(flatProgressPolls + 1) consecutive checks; treating \(channel.displayName) as stalled after \(extraMinutesWatched) mins.")
+                        }
+                        // One recovery per run of flat readings; the next run must re-earn it.
+                        flatProgressPolls = 0
                         log("\(Self.antiStallLogTag) Progress stalled for \(extraMinutesWatched) mins. Refreshing inventory to check for external claims...")
                         recordActivityEvent(
                             .stallDetected,
@@ -708,7 +723,11 @@ extension MinerEngine {
                                         shouldSwitchChannel = true
                                     }
                                 } else {
-                                    log("Higher-ranked campaign \(bestCampaign.name) (\(bestCampaign.gameName)) has no live channel right now; staying on \(campaign.name).")
+                                    let notice = "\(bestCampaign.id)|\(campaign.id)"
+                                    if lastUnreachablePreemptorNotice != notice {
+                                        lastUnreachablePreemptorNotice = notice
+                                        log("Higher-ranked campaign \(bestCampaign.name) (\(bestCampaign.gameName)) has no live channel right now; staying on \(campaign.name). Re-checking every 5 minutes without repeating this.")
+                                    }
                                 }
                             }
                         }

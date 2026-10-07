@@ -177,7 +177,9 @@ public struct Drop: Codable, Sendable, Identifiable, Equatable {
         dropEndDate: Date? = nil
     ) {
         self.id = id
-        self.name = name
+        // Twitch pads some reward names with trailing tabs, which then leak into every
+        // log line and notification that quotes them.
+        self.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         self.description = description
         self.imageURL = imageURL
         self.requiredMinutes = requiredMinutes
@@ -257,7 +259,7 @@ public struct Drop: Codable, Sendable, Identifiable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
         id = try container.decode(String.self, forKey: .id)
-        name = try container.decode(String.self, forKey: .name)
+        name = try container.decode(String.self, forKey: .name).trimmingCharacters(in: .whitespacesAndNewlines)
         description = try container.decodeIfPresent(String.self, forKey: .description)
         imageURL = try container.decodeIfPresent(URL.self, forKey: .imageURL)
         requiredMinutes = try container.decode(Int.self, forKey: .requiredMinutes)

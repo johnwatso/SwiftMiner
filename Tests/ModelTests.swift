@@ -936,6 +936,36 @@ final class ModelTests: XCTestCase {
         )
     }
 
+    func testDirectorySkippedOnlyWhenApprovedProbesCoverEveryCandidate() {
+        let game = Game(id: "g1", name: "Rainbow Six Siege")
+        let now = Date()
+        func campaign(_ id: String, channelCount: Int) -> Campaign {
+            Campaign(
+                id: id,
+                name: id,
+                game: game,
+                status: .active,
+                startDate: now.addingTimeInterval(-3600),
+                endDate: now.addingTimeInterval(3600),
+                drops: [Drop(id: "d-\(id)", name: "Drop", requiredMinutes: 60)],
+                channels: (0..<channelCount).map {
+                    Channel(id: "\(id)-\($0)", login: "\(id)_\($0)", displayName: "\(id) \($0)")
+                },
+                isAccountConnected: true
+            )
+        }
+
+        // The 2026-10-07 R6 case: eight approved channels, directory downloaded every scan.
+        XCTAssertTrue(MinerEngine.approvedChannelProbesCoverEveryCandidate([campaign("r6", channelCount: 8)]))
+        // A game-wide candidate needs the directory.
+        XCTAssertFalse(MinerEngine.approvedChannelProbesCoverEveryCandidate([
+            campaign("r6", channelCount: 8), campaign("general", channelCount: 0)
+        ]))
+        // A long ACL (VCT's 131) only rotates through the probe, so the directory still helps.
+        XCTAssertFalse(MinerEngine.approvedChannelProbesCoverEveryCandidate([campaign("vct", channelCount: 131)]))
+        XCTAssertFalse(MinerEngine.approvedChannelProbesCoverEveryCandidate([]))
+    }
+
     func testRestrictedCampaignTracksUnavailableApprovedChannelList() {
         let now = Date()
         let campaign = Campaign(

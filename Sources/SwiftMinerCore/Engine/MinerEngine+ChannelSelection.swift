@@ -466,23 +466,32 @@ extension MinerEngine {
         }
 
         let liveChannels: [Channel]
-        do {
-            var fetched = try await dropsService.findLiveChannels(forGame: primary.game)
-            if fetched.isEmpty, candidates.contains(where: { $0.game.isSpecialEvents }) {
-                log("[ChannelSelect]   Special Event bypass: no directory channels for '\(gameName)', using ACL list")
-                fetched = candidates.flatMap(\.channels)
-            }
-            let screened = await Self.screeningKnownOfflineChannels(fetched)
-            if !screened.droppedLogins.isEmpty {
-                log("[ChannelSelect]   Skipping \(screened.droppedLogins.count) directory channel(s) already seen offline: \(screened.droppedLogins.joined(separator: ", "))")
-            }
-            liveChannels = screened.kept
-        } catch {
-            log("[ChannelSelect]   Failed to fetch live channels for '\(gameName)': \(error.localizedDescription)")
-            // Continue with an empty directory result. Restricted campaigns still get their
-            // approved channels checked for liveness and verified below; never start watching
-            // an arbitrary ACL entry that may be offline or running a different campaign.
+        if Self.approvedChannelProbesCoverEveryCandidate(candidates) {
+            // Every candidate is limited to a short approved list that the ACL probe below
+            // checks in full on this scan. The game directory could only re-discover those
+            // same channels, so downloading ~100 live streams to discard them all is skipped.
+            let approvedCount = Set(candidates.flatMap { $0.channels.map(\.login) }).count
+            log("[ChannelSelect]   Every candidate is limited to approved channels (\(approvedCount) in all); probing them directly instead of the game directory")
             liveChannels = []
+        } else {
+            do {
+                var fetched = try await dropsService.findLiveChannels(forGame: primary.game)
+                if fetched.isEmpty, candidates.contains(where: { $0.game.isSpecialEvents }) {
+                    log("[ChannelSelect]   Special Event bypass: no directory channels for '\(gameName)', using ACL list")
+                    fetched = candidates.flatMap(\.channels)
+                }
+                let screened = await Self.screeningKnownOfflineChannels(fetched)
+                if !screened.droppedLogins.isEmpty {
+                    log("[ChannelSelect]   Skipping \(screened.droppedLogins.count) directory channel(s) already seen offline: \(screened.droppedLogins.joined(separator: ", "))")
+                }
+                liveChannels = screened.kept
+            } catch {
+                log("[ChannelSelect]   Failed to fetch live channels for '\(gameName)': \(error.localizedDescription)")
+                // Continue with an empty directory result. Restricted campaigns still get their
+                // approved channels checked for liveness and verified below; never start watching
+                // an arbitrary ACL entry that may be offline or running a different campaign.
+                liveChannels = []
+            }
         }
 
         log("[ChannelSelect]   Found \(liveChannels.count) live candidate channel(s)")
@@ -794,6 +803,24 @@ extension MinerEngine {
     /// is ACL-restricted — restricted campaigns get their approved channels probed directly, and
     /// those channels are frequently absent from the public game directory (e.g. esports/official
     /// broadcasts). Returning `false` here means there is genuinely nothing left to try.
+    /// Whether the direct approved-channel probe already covers every channel these candidates
+    /// may be watched on in a single scan, which makes the game-directory query redundant.
+    /// Special Events are excluded: their directory result feeds a separate bypass.
+    internal static func approvedChannelProbesCoverEveryCandidate(
+        _ candidates: [Campaign],
+        probeLimit: Int = approvedChannelProbeLimit
+    ) -> Bool {
+        guard !candidates.isEmpty else { return false }
+        return candidates.allSatisfy { campaign in
+            campaign.hasKnownChannelRestrictions
+                && !campaign.game.isSpecialEvents
+                && campaign.channels.count <= probeLimit
+        }
+    }
+
+    /// Approved channels `liveACLChannels` checks per scan.
+    static let approvedChannelProbeLimit = 30
+
     internal static func shouldContinueChannelSelection(liveChannelCount: Int, candidates: [Campaign]) -> Bool {
         liveChannelCount > 0 || candidates.contains { $0.hasKnownChannelRestrictions }
     }
@@ -1177,7 +1204,7 @@ extension MinerEngine {
 
     func liveACLChannels(
         for campaign: Campaign,
-        limit: Int = 30,
+        limit: Int = approvedChannelProbeLimit,
         excludingIdentities: Set<String> = []
     ) async -> [Channel] {
         guard campaign.hasKnownChannelRestrictions else { return [] }

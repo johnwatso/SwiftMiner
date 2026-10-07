@@ -265,6 +265,41 @@ public actor MinerEngine {
     /// before it was selected.
     static let watchLivenessRecheckInterval: TimeInterval = 5 * 60
 
+    /// Consecutive once-a-minute current-drop polls that may report the same drop at the same
+    /// minute count before the watch is treated as stalled, ahead of `maxExtraMinutes`.
+    ///
+    /// A channel can stay live and keep accepting heartbeats while Twitch stops crediting it —
+    /// on 2026-10-07 `supertf` did exactly that and the full 15-minute window was spent before
+    /// recovery moved to a channel that earned on the next minute. Twitch's own session context
+    /// saying "still N minutes" six times running is direct evidence, not inference, so the
+    /// recovery can run then. Six polls rather than fewer: poll and credit cadences are both
+    /// about a minute and drift against each other, so two equal readings in a row are normal.
+    static let flatProgressPollLimit = 6
+
+    /// Updates the run of identical current-drop readings. Any change of drop or minutes, or a
+    /// first reading, restarts the run at zero.
+    static func flatProgressPolls(
+        previous: (dropId: String, minutes: Int)?,
+        current: (dropId: String, minutes: Int),
+        count: Int
+    ) -> Int {
+        guard let previous,
+              previous.dropId == current.dropId,
+              previous.minutes == current.minutes else { return 0 }
+        return count + 1
+    }
+
+    /// Whether the watch has stalled: the long-standing no-progress window, or Twitch reporting
+    /// flat progress for `flatProgressPollLimit` polls while nothing else has credited either.
+    static func isProgressStalled(
+        stalledMinutes: Int,
+        flatProgressPolls: Int,
+        limit: Int = maxExtraMinutes,
+        flatLimit: Int = flatProgressPollLimit
+    ) -> Bool {
+        stalledMinutes >= limit || (flatProgressPolls >= flatLimit && stalledMinutes >= flatLimit)
+    }
+
     static func shouldAbandonUnverifiedSelection(
         isUnverified: Bool,
         emptyPolls: Int,
@@ -365,6 +400,15 @@ public actor MinerEngine {
     // Reliability takes precedence over idle request reduction: a newly-started short campaign
     // must never wait 10–15 minutes to be discovered just because earlier scans were empty.
     static let noCandidateBackoffMaxInterval: UInt64 = 5 * 60 * 1_000_000_000
+
+    /// The higher-ranked-but-unreachable campaign last reported for the current session, as
+    /// "preemptor|current". The re-evaluation runs every five minutes, and repeating the same
+    /// "staying on X" line each time filled the log (210 lines in one 18-hour export) without
+    /// saying anything new; it is reported again only when either side changes.
+    var lastUnreachablePreemptorNotice: String?
+    /// Whether the empty-inventory claim check has already been logged since the last time
+    /// something was claimable. Logged once per quiet stretch instead of every two minutes.
+    var hasLoggedNoClaimableDrops = false
 
     /// Cache of all campaigns fetched during the last check
     public internal(set) var allCampaigns: [Campaign] = []

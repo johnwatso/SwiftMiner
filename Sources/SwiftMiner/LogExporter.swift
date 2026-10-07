@@ -274,8 +274,10 @@ enum LogExporter {
     }
 
     /// Renders the earning ledger: what each miner banked per hour actually spent watching.
-    /// A healthy miner sits near 60 min/h; a flat line next to a climbing watch count is the
-    /// signature of a miner that looks alive and earns nothing.
+    /// `earned` sums the minutes credited to every drop, and the drops of one campaign progress
+    /// together, so a healthy miner reads 60 min/h *or more* (three parallel drops ≈ 180). A flat
+    /// line next to a climbing watch count is the signature of a miner that looks alive and
+    /// earns nothing.
     private static func renderEarningLedger(
         _ snapshot: Snapshot,
         formatter: ISO8601DateFormatter
@@ -288,6 +290,7 @@ enum LogExporter {
         func label(_ accountID: String) -> String {
             LogRedactor.redact(snapshot.accountNames[accountID] ?? accountID)
         }
+        out += "(earned = drop-minutes summed across drops progressing in parallel, so rate can exceed 60min/h)\n"
 
         for summary in snapshot.earningSummaries {
             out += "[\(label(summary.accountID))]"
