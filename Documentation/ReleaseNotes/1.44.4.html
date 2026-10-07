@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SwiftMiner 1.44.4 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.44.4: faster recovery from streams that stop crediting, lighter memory use in the background, and clearer memory diagnostics.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.44.4.html">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; padding: 32px 20px 48px; font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f4f6f8; color: #0f1720; }
+    main { max-width: 760px; margin: 0 auto; padding: 28px; border-radius: 22px; background: rgba(255, 255, 255, .86); box-shadow: 0 20px 60px rgba(15, 23, 32, .10); border: 1px solid rgba(82, 96, 109, .12); }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section { margin: 18px 0 0; padding: 18px 18px 14px; border: 1px solid rgba(82, 96, 109, .18); border-radius: 16px; border-left: 5px solid #7b4bd9; background: rgba(255, 255, 255, .42); }
+    h2 { margin: 0 0 4px; color: #7b4bd9; font-size: 18px; }
+    ul { margin: 12px 0 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    @media (prefers-color-scheme: dark) { body { background: #0b1015; color: #edf2f7; } main { background: rgba(15, 23, 32, .88); border-color: rgba(159, 176, 194, .14); } .meta { color: #9fb0c2; } .intro { color: #c8d3df; } section { border-color: rgba(159, 176, 194, .18); background: rgba(255, 255, 255, .04); } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SwiftMiner 1.44.4</h1>
+    <p class="meta">Version 1.44.4 &middot; Build 2026100809 &middot; Prepared 8 October 2026</p>
+    <p class="intro">SwiftMiner 1.44.4 moves off a stream that has stopped crediting drops in about six minutes instead of fifteen, holds less memory while the window is closed, and makes diagnostic exports show where memory is going. Engine 4.36.</p>
+
+    <section>
+      <h2>🐝 Mining fixes</h2>
+      <ul>
+        <li>When a stream stays live but Twitch stops crediting watch time, SwiftMiner now switches to another channel after about six minutes instead of fifteen. It acts only when Twitch itself reports the same progress on six checks in a row and no other source has credited anything.</li>
+        <li>Drop names no longer carry the stray tab characters Twitch sometimes sends, which showed up in the Activity Log and notifications.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>⚡ Less Twitch traffic</h2>
+      <ul>
+        <li>For campaigns that only count on a short list of approved channels, SwiftMiner now checks those channels directly instead of downloading the game's whole live directory every few minutes and discarding it.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>🧠 Lighter in the background</h2>
+      <ul>
+        <li>Campaign artwork and profile pictures held in memory are now capped far lower, and are released when you close the window. They are still cached on disk, so reopening the window stays quick.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>🩺 Clearer diagnostics</h2>
+      <ul>
+        <li>Diagnostic exports now include an hourly memory timeline, showing whether the window was open and how much of the total is app data. A climb can then be traced to the window, a cache, or steady growth.</li>
+        <li>The Activity Log no longer repeats "No claimable drops found" or "Higher-ranked campaign has no live channel" every few minutes. Each is logged once until something changes.</li>
+        <li>The earning ledger explains why rates above 60 minutes per hour are normal: several drops in a campaign progress at the same time.</li>
+      </ul>
+    </section>
+
+    <p class="meta"><a href="./index.html">All release notes</a></p>
+  </main>
+</body>
+</html>
