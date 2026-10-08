@@ -504,3 +504,204 @@ private actor ManagedCounter {
 extension MinerEngine {
     func _testSetAwaitingLinkState(_ ids: Set<String>) { campaignsAwaitingLinkState = ids }
 }
+
+
+/// Reproduces recovery repeatedly choosing the same popular stream despite verified alternatives.
+@MainActor
+final class StalledChannelSelectionTests: XCTestCase {
+    private func campaign(_ id: String = "campaign", channels: [Channel] = []) -> Campaign {
+        Campaign(
+            id: id, name: id, game: Game(id: "game", name: "Game"), status: .active,
+            startDate: Date().addingTimeInterval(-3600), endDate: Date().addingTimeInterval(3600),
+            drops: [Drop(id: "drop-\(id)", name: "Drop", requiredMinutes: 60)],
+            channels: channels, isAccountConnected: true
+        )
+    }
+
+    private func channels(_ count: Int = 3) -> [Channel] {
+        (0..<count).map { index in
+            Channel(id: "id-\(index)", login: "stream-\(index)", displayName: "Stream \(index)",
+                    isLive: true, viewerCount: 1000 - index)
+        }
+    }
+
+    private func engine(clock: RuntimeClock = .continuous, spreading: Bool = false) async -> MinerEngine {
+        let engine = MinerEngine(clientId: "test", tokenStore: InMemoryTokenStore(), runtimeClock: clock)
+        await engine.updateMiningPreferences(
+            priorityGames: [], excludedGames: [], avoidDuplicateStreams: spreading,
+            prioritiseFollowedStreamers: true
+        )
+        return engine
+    }
+
+    func testRepeatedStallsTryDifferentStreamsWithAndWithoutSpreading() async {
+        for spreading in [false, true] {
+            let engine = await engine(spreading: spreading)
+            let campaign = campaign()
+            let streams = channels()
+            for index in 0..<streams.count {
+                let selected = await engine.bestVerifiedCampaignMatch(
+                    candidates: [campaign], matches: streams.map { (campaign, $0) },
+                    relationshipRanks: [streams[0].id: 10]
+                )
+                XCTAssertEqual(selected?.channel.id, streams[index].id,
+                               "Stall recovery must beat viewer and followed-streamer preference")
+                await engine.noteChannelStall(campaignId: campaign.id, channel: streams[index])
+            }
+        }
+    }
+
+    func testReservationOnlyReceivesUnstalledAlternatives() async {
+        let engine = await engine(spreading: true)
+        let campaign = campaign()
+        let streams = channels(7)
+        await engine.noteChannelStall(campaignId: campaign.id, channel: streams[0])
+        await engine.setChannelAssignmentReservationProvider { id, ranked, count in
+            XCTAssertEqual(id, campaign.id)
+            XCTAssertEqual(ranked, Array(streams.dropFirst()).map(\.id))
+            XCTAssertEqual(count, 6)
+            return ranked[1]
+        }
+        let selected = await engine.bestVerifiedCampaignMatch(
+            candidates: [campaign], matches: streams.map { (campaign, $0) }, relationshipRanks: [:]
+        )
+        XCTAssertEqual(selected?.channel.id, streams[2].id)
+    }
+
+    func testOccupiedAlternativesStillBeatStalledBestStream() async {
+        let engine = await engine(spreading: true)
+        let campaign = campaign()
+        let streams = channels(6)
+        await engine.noteChannelStall(campaignId: campaign.id, channel: streams[0])
+        await engine.setChannelAssignmentReservationProvider { _, _, _ in nil }
+        let selected = await engine.bestVerifiedCampaignMatch(
+            candidates: [campaign], matches: streams.map { (campaign, $0) }, relationshipRanks: [:]
+        )
+        XCTAssertEqual(selected?.channel.id, streams[1].id)
+    }
+
+    func testAllStalledStreamsRemainAvailableAsLastResort() async {
+        let engine = await engine()
+        let campaign = campaign()
+        let streams = channels()
+        for stream in streams { await engine.noteChannelStall(campaignId: campaign.id, channel: stream) }
+        let selected = await engine.bestVerifiedCampaignMatch(
+            candidates: [campaign], matches: streams.map { (campaign, $0) }, relationshipRanks: [:]
+        )
+        XCTAssertEqual(selected?.channel.id, streams[0].id)
+    }
+
+    func testOnlyApprovedStreamKeepsCampaignPriority() async {
+        let engine = await engine()
+        let streams = channels()
+        let primary = campaign("primary", channels: [streams[0]])
+        let secondary = campaign("secondary")
+        await engine.noteChannelStall(campaignId: primary.id, channel: streams[0])
+        let selected = await engine.bestVerifiedCampaignMatch(
+            candidates: [primary, secondary],
+            matches: [(primary, streams[0]), (secondary, streams[1])], relationshipRanks: [:]
+        )
+        XCTAssertEqual(selected?.campaign.id, primary.id)
+        XCTAssertEqual(selected?.channel.id, streams[0].id)
+    }
+
+    func testCooldownExpiresAtItsMonotonicDeadline() async {
+        let clock = StalledSelectionClock()
+        let engine = await engine(clock: clock.runtime)
+        let campaign = campaign()
+        let streams = channels()
+        await engine.noteChannelStall(campaignId: campaign.id, channel: streams[0])
+        clock.advance(seconds: MinerEngine.stalledChannelCooldownInterval - 1)
+        var selected = await engine.bestVerifiedCampaignMatch(
+            candidates: [campaign], matches: streams.map { (campaign, $0) }, relationshipRanks: [:]
+        )
+        XCTAssertEqual(selected?.channel.id, streams[1].id)
+        clock.advance(seconds: 1)
+        selected = await engine.bestVerifiedCampaignMatch(
+            candidates: [campaign], matches: streams.map { (campaign, $0) }, relationshipRanks: [:]
+        )
+        XCTAssertEqual(selected?.channel.id, streams[0].id)
+    }
+
+    func testCooldownIsScopedToAccountCampaignAndStableLogin() async {
+        let engine = await engine()
+        let otherEngine = await self.engine()
+        let primary = campaign("primary")
+        let secondary = campaign("secondary")
+        let streams = channels()
+        let unresolved = Channel(id: "STREAM-0", login: " STREAM-0 ", displayName: "Stream 0")
+        await engine.noteChannelStall(campaignId: primary.id, channel: unresolved)
+        let sameAccount = await engine.bestVerifiedCampaignMatch(
+            candidates: [primary], matches: streams.map { (primary, $0) }, relationshipRanks: [:]
+        )
+        let otherCampaign = await engine.bestVerifiedCampaignMatch(
+            candidates: [secondary], matches: streams.map { (secondary, $0) }, relationshipRanks: [:]
+        )
+        let otherAccount = await otherEngine.bestVerifiedCampaignMatch(
+            candidates: [primary], matches: streams.map { (primary, $0) }, relationshipRanks: [:]
+        )
+        XCTAssertEqual(sameAccount?.channel.id, streams[1].id)
+        XCTAssertEqual(otherCampaign?.channel.id, streams[0].id)
+        XCTAssertEqual(otherAccount?.channel.id, streams[0].id)
+    }
+
+    func testRescanKeepsStallPreferenceUntilTheCurrentStreamActuallyEarns() async {
+        let engine = await engine()
+        let campaign = campaign()
+        let streams = channels()
+        await engine.noteChannelStall(campaignId: campaign.id, channel: streams[0])
+        await engine.noteChannelStall(campaignId: campaign.id, channel: streams[1])
+        await engine.forceRefresh()
+        var selected = await engine.bestVerifiedCampaignMatch(
+            candidates: [campaign], matches: streams.map { (campaign, $0) }, relationshipRanks: [:]
+        )
+        XCTAssertEqual(selected?.channel.id, streams[2].id)
+
+        await engine._testCreditCurrentChannel(campaignId: campaign.id, login: streams[0].login)
+        selected = await engine.bestVerifiedCampaignMatch(
+            candidates: [campaign], matches: streams.map { (campaign, $0) }, relationshipRanks: [:]
+        )
+        XCTAssertEqual(selected?.channel.id, streams[0].id)
+        let otherStillCooling = await engine.isChannelOnStallCooldown(campaignId: campaign.id, channel: streams[1])
+        XCTAssertTrue(otherStillCooling, "Credit on one stream does not prove another stream recovered")
+    }
+
+    func testVerificationBudgetStartsWithAlternativesAndRespectsApprovedChannels() async {
+        let engine = await engine()
+        let streams = channels(40)
+        let primary = campaign("primary")
+        await engine.noteChannelStall(campaignId: primary.id, channel: streams[0])
+        let ordered = await engine.prioritizingUnstalledChannels(streams, candidates: [primary])
+        let batch = MinerEngine.rotatingVerificationBatch(from: ordered, limit: 30, offset: 0)
+        XCTAssertFalse(batch.channels.contains(streams[0]))
+        XCTAssertEqual(ordered.last?.id, streams[0].id)
+
+        let restricted = campaign("restricted", channels: [streams[1]])
+        let withRestricted = await engine.prioritizingUnstalledChannels(
+            streams, candidates: [primary, restricted]
+        )
+        XCTAssertEqual(withRestricted.last?.id, streams[0].id,
+                       "An unrelated approved campaign must not promote an ineligible stalled stream")
+        let shared = campaign("shared", channels: [streams[0]])
+        let withShared = await engine.prioritizingUnstalledChannels(streams, candidates: [primary, shared])
+        XCTAssertEqual(withShared.first?.id, streams[0].id)
+    }
+}
+
+private final class StalledSelectionClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var tick: UInt64 = 0
+    var runtime: RuntimeClock {
+        RuntimeClock(nowNanoseconds: { self.lock.withLock { self.tick } }, sleepNanoseconds: { _ in })
+    }
+    func advance(seconds: TimeInterval) {
+        lock.withLock { tick += RuntimeClock.nanoseconds(seconds) }
+    }
+}
+
+extension MinerEngine {
+    func _testCreditCurrentChannel(campaignId: String, login: String) {
+        currentChannelLogin = login
+        noteCampaignProgress(campaignId)
+    }
+}

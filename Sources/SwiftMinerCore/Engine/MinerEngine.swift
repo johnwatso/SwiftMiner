@@ -238,6 +238,27 @@ public actor MinerEngine {
     /// How long a non-earning campaign is skipped before it's retried.
     static let nonEarningCooldownInterval: TimeInterval = 30 * 60
 
+    /// A confirmed non-earning stream loses preference for this campaign, on this account.
+    /// Keep it available as a last resort when no other verified stream can serve the campaign.
+    static let stalledChannelCooldownInterval: TimeInterval = 30 * 60
+    var stalledChannelCooldownUntil: [String: [String: UInt64]] = [:]
+
+    static func stalledChannelIdentity(_ channel: Channel) -> String {
+        normalizedChannelIdentity(channel.login.isEmpty ? channel.id : channel.login)
+    }
+
+    func noteChannelStall(campaignId: String, channel: Channel) {
+        stalledChannelCooldownUntil[campaignId, default: [:]][Self.stalledChannelIdentity(channel)] =
+            runtimeClock.deadline(after: Self.stalledChannelCooldownInterval)
+    }
+
+    func isChannelOnStallCooldown(campaignId: String, channel: Channel) -> Bool {
+        guard let until = stalledChannelCooldownUntil[campaignId]?[Self.stalledChannelIdentity(channel)] else {
+            return false
+        }
+        return until > runtimeClock.nowNanoseconds()
+    }
+
     /// An unverified emergency fallback must prove that it can earn within a few polls.
     /// Otherwise a Twitch verification outage could strand the miner on a guessed channel
     /// for the full general stall window.
@@ -359,6 +380,9 @@ public actor MinerEngine {
             consecutiveStallsByCampaign[campaignId] = 0
         }
         campaignStallCooldownUntil[campaignId] = nil
+        if let identity = currentChannelLogin ?? session?.currentChannelId {
+            stalledChannelCooldownUntil[campaignId]?[Self.normalizedChannelIdentity(identity)] = nil
+        }
     }
 
     /// A higher-ranked campaign normally preempts the current session, but not

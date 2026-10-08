@@ -521,14 +521,17 @@ extension MinerEngine {
         // below the verification cap.
         let nowTick = runtimeClock.nowNanoseconds()
         unverifiedChannelCooldownUntil = unverifiedChannelCooldownUntil.filter { $0.value > nowTick }
+        stalledChannelCooldownUntil = stalledChannelCooldownUntil
+            .mapValues { $0.filter { $0.value > nowTick } }
+            .filter { !$0.value.isEmpty }
         let eligibleDirectoryChannels = Self.channelsEligibleForCandidates(sortedChannels, candidates: candidates)
         let skippedByACL = sortedChannels.count - eligibleDirectoryChannels.count
         if skippedByACL > 0 {
             log("[ChannelSelect]   Skipping \(skippedByACL) directory channel(s) outside every candidate's approved-channel list")
         }
-        let orderedChannels = Self.prioritizingKnownApprovedChannels(
-            eligibleDirectoryChannels,
-            campaigns: candidates
+        let orderedChannels = prioritizingUnstalledChannels(
+            Self.prioritizingKnownApprovedChannels(eligibleDirectoryChannels, campaigns: candidates),
+            candidates: candidates
         )
         let verificationLimit = Self.adaptiveChannelVerificationLimit(
             liveChannelCount: orderedChannels.count,
@@ -606,14 +609,14 @@ extension MinerEngine {
                             $0.campaign.id == match.id &&
                                 Self.normalizedChannelIdentity($0.channel.id) == Self.normalizedChannelIdentity(channel.id)
                         }
-                        let campaignAlreadyRecorded = verifiedMatches.contains { $0.campaign.id == match.id }
-                        if !alreadyRecorded && (avoidDuplicateStreams || !campaignAlreadyRecorded) {
+                        if !alreadyRecorded {
                             verifiedMatches.append((campaign: match, channel: channel))
                         }
                     }
                     if !avoidDuplicateStreams,
                        let best = await bestVerifiedCampaignMatch(candidates: candidates, matches: verifiedMatches, relationshipRanks: relationshipRanks),
-                       best.campaign.id == candidates.first?.id {
+                       best.campaign.id == candidates.first?.id,
+                       !isChannelOnStallCooldown(campaignId: best.campaign.id, channel: best.channel) {
                         log("[ChannelSelect]   Selected \(best.campaign.name) on \(best.channel.displayName)")
                         currentChannelName = best.channel.displayName
                         currentChannelId = best.channel.id
@@ -655,7 +658,9 @@ extension MinerEngine {
         // verified, not whether an approved channel happened to exist somewhere in the unscanned
         // directory tail.
         for candidate in candidates where candidate.hasKnownChannelRestrictions {
-            let alreadyMatched = verifiedMatches.contains { $0.campaign.id == candidate.id }
+            let alreadyMatched = verifiedMatches.contains {
+                $0.campaign.id == candidate.id && !isChannelOnStallCooldown(campaignId: candidate.id, channel: $0.channel)
+            }
             if alreadyMatched && !avoidDuplicateStreams { continue }
             let probed = await liveACLChannels(for: candidate, excludingIdentities: attemptedChannelIdentities)
             for ch in probed {
@@ -689,8 +694,7 @@ extension MinerEngine {
                             $0.campaign.id == match.id &&
                                 Self.normalizedChannelIdentity($0.channel.id) == Self.normalizedChannelIdentity(channel.id)
                         }
-                        let campaignAlreadyRecorded = verifiedMatches.contains { $0.campaign.id == match.id }
-                        if !alreadyRecorded && (avoidDuplicateStreams || !campaignAlreadyRecorded) {
+                        if !alreadyRecorded {
                             verifiedMatches.append((campaign: match, channel: channel))
                         }
                     }
@@ -928,12 +932,35 @@ extension MinerEngine {
         return nil
     }
 
+    /// Spend the bounded verification scan on alternatives before recently failed streams.
+    /// A stream can still be useful for another same-game campaign, so only move it back when
+    /// every candidate it can serve has stalled on it.
+    func prioritizingUnstalledChannels(_ channels: [Channel], candidates: [Campaign]) -> [Channel] {
+        let preferred = channels.filter { channel in
+            candidates.contains { candidate in
+                (!candidate.hasKnownChannelRestrictions || Self.channelMatchesCampaignACL(channel, campaign: candidate))
+                    && !isChannelOnStallCooldown(campaignId: candidate.id, channel: channel)
+            }
+        }
+        let preferredIdentities = Set(preferred.map(Self.stalledChannelIdentity))
+        return preferred + channels.filter { !preferredIdentities.contains(Self.stalledChannelIdentity($0)) }
+    }
+
     func bestVerifiedCampaignMatch(
         candidates: [Campaign],
         matches: [(campaign: Campaign, channel: Channel)],
         relationshipRanks: [String: Int]
     ) async -> (campaign: Campaign, channel: Channel)? {
-        let rankedMatches = matches.sorted { left, right in
+        let unstalledCampaignIds = Set(matches.compactMap { match in
+            isChannelOnStallCooldown(campaignId: match.campaign.id, channel: match.channel) ? nil : match.campaign.id
+        })
+        // Apply recovery preference before streamer ranking and fleet reservations. Otherwise
+        // the most popular free stream wins again immediately after we just stalled on it.
+        let preferredMatches = matches.filter { match in
+            !unstalledCampaignIds.contains(match.campaign.id)
+                || !isChannelOnStallCooldown(campaignId: match.campaign.id, channel: match.channel)
+        }
+        let rankedMatches = preferredMatches.sorted { left, right in
             let leftRank = streamerRelationshipRank(for: left.channel, ranks: relationshipRanks)
             let rightRank = streamerRelationshipRank(for: right.channel, ranks: relationshipRanks)
             if leftRank != rightRank { return leftRank > rightRank }

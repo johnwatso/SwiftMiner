@@ -619,6 +619,8 @@ extension MinerEngine {
                             } else if progressAcknowledged {
                                 log("\(Self.antiStallLogTag) Inventory confirmed new progress during stall recovery. Keeping the current channel.")
                             } else {
+                                noteChannelStall(campaignId: campaign.id, channel: channel)
+                                log("\(Self.antiStallLogTag) Deprioritising \(channel.displayName) for \(campaign.name) for \(Int(Self.stalledChannelCooldownInterval / 60))m; preferring another eligible stream.")
                                 // Genuine stall for this campaign this window — record it so a
                                 // campaign that can never earn (nothing left, unlinked, or a
                                 // Twitch-side crediting outage) is eventually skipped instead of
