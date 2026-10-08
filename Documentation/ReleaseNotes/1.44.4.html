@@ -26,13 +26,13 @@
 <body>
   <main>
     <h1>SwiftMiner 1.44.4</h1>
-    <p class="meta">Version 1.44.4 &middot; Build 2026100809 &middot; Prepared 8 October 2026</p>
-    <p class="intro">SwiftMiner 1.44.4 moves off a stream that has stopped crediting drops in about six minutes instead of fifteen, holds less memory while the window is closed, and makes diagnostic exports show where memory is going. Engine 4.36.</p>
+    <p class="meta">Version 1.44.4 &middot; Build 2026100809 &middot; Released 8 October 2026</p>
+    <p class="intro">SwiftMiner 1.44.4 starts recovery for a stream that has stopped crediting drops in about six minutes instead of fifteen, holds less memory while the window is closed, and makes diagnostic exports show where memory is going. Engine 4.36.</p>
 
     <section>
       <h2>🐝 Mining fixes</h2>
       <ul>
-        <li>When a stream stays live but Twitch stops crediting watch time, SwiftMiner now switches to another channel after about six minutes instead of fifteen. It acts only when Twitch itself reports the same progress on six checks in a row and no other source has credited anything.</li>
+        <li>When a stream stays live but Twitch stops crediting watch time, SwiftMiner now starts stall recovery after about six minutes instead of fifteen. It acts only when Twitch itself reports the same progress on six checks in a row and no other source has credited anything.</li>
         <li>Drop names no longer carry the stray tab characters Twitch sometimes sends, which showed up in the Activity Log and notifications.</li>
       </ul>
     </section>
