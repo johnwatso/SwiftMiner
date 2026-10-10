@@ -304,6 +304,71 @@ final class MinerSchedulingTests: XCTestCase {
         XCTAssertFalse(MinerEngine.isOnStallCooldown("unknown", cooldowns: cooldowns, now: nowTick))
     }
 
+    func testRepeatedNonEarningRoundsBackOffAndStillRetryAtDeadline() async {
+        let clock = StalledSelectionClock()
+        let engine = MinerEngine(clientId: "test", tokenStore: InMemoryTokenStore(), runtimeClock: clock.runtime)
+        let target = campaign(id: "c", endsInDays: 5, drops: [drop(id: "d", required: 60)])
+
+        for expectedMinutes in [30, 60, 120, 120] {
+            let interval = await engine.coolDownNonEarningCampaign(target.id)
+            XCTAssertEqual(interval, TimeInterval(expectedMinutes * 60))
+            clock.advance(seconds: interval - 1)
+            let beforeExpiry = await engine.candidateCampaigns(
+                from: [target], priorityGames: [], excludedGames: [], strategy: .mineAll, logSummary: false
+            )
+            XCTAssertTrue(beforeExpiry.isEmpty)
+            clock.advance(seconds: 1)
+            let atExpiry = await engine.candidateCampaigns(
+                from: [target], priorityGames: [], excludedGames: [], strategy: .mineAll, logSummary: false
+            )
+            XCTAssertEqual(atExpiry.map(\.id), [target.id])
+        }
+        let otherCampaignDelay = await engine.coolDownNonEarningCampaign("other")
+        let otherAccount = MinerEngine(clientId: "test", tokenStore: InMemoryTokenStore())
+        let otherAccountDelay = await otherAccount.coolDownNonEarningCampaign(target.id)
+        XCTAssertEqual(otherCampaignDelay, 30 * 60)
+        XCTAssertEqual(otherAccountDelay, 30 * 60)
+    }
+
+    func testInventoryProgressResetsStallHistoryButFlatReadingsDoNot() async {
+        let engine = MinerEngine(clientId: "test", tokenStore: InMemoryTokenStore())
+        let target = campaign(id: "c", endsInDays: 5, drops: [drop(id: "d", required: 60, current: 10)])
+        let stalledChannel = Channel(id: "stream", login: "stream", displayName: "Stream")
+        await engine.noteChannelStall(campaignId: target.id, channel: stalledChannel)
+        await engine.coolDownNonEarningCampaign(target.id)
+        await engine.coolDownNonEarningCampaign(target.id)
+        await engine.coolDownNonEarningCampaign("other")
+        await engine._testPrepareInventoryStallRecovery(target)
+
+        func snapshot(_ minutes: Int) -> InventorySnapshot {
+            InventorySnapshot(accountId: "test", benefitIDs: [], progress: [
+                Progress(id: "p-d", dropId: "d", dropName: "d", campaignId: "c",
+                         currentMinutes: minutes, requiredMinutes: 60)
+            ])
+        }
+        let unchanged = await engine.acknowledgeInventoryProgress(
+            snapshot(10), campaignId: target.id, context: "test", publishProgressUpdate: false
+        )
+        XCTAssertFalse(unchanged)
+        let unchangedDelay = await engine.campaignStallCooldownIntervals[target.id]
+        XCTAssertEqual(unchangedDelay, 60 * 60)
+
+        let advanced = await engine.acknowledgeInventoryProgress(
+            snapshot(11), campaignId: target.id, context: "test", publishProgressUpdate: false
+        )
+        XCTAssertTrue(advanced)
+        let streak = await engine.consecutiveStallsByCampaign[target.id]
+        let deadline = await engine.campaignStallCooldownUntil[target.id]
+        let stillCooling = await engine.isChannelOnStallCooldown(campaignId: target.id, channel: stalledChannel)
+        XCTAssertEqual(streak, 0)
+        XCTAssertNil(deadline)
+        XCTAssertFalse(stillCooling)
+        let resetDelay = await engine.coolDownNonEarningCampaign(target.id)
+        let otherDelay = await engine.campaignStallCooldownIntervals["other"]
+        XCTAssertEqual(resetDelay, 30 * 60)
+        XCTAssertEqual(otherDelay, 30 * 60)
+    }
+
     func testUnverifiedSelectionAbandonsAtProbationLimitOnly() {
         XCTAssertFalse(MinerEngine.shouldAbandonUnverifiedSelection(isUnverified: false, emptyPolls: 100))
         XCTAssertFalse(MinerEngine.shouldAbandonUnverifiedSelection(isUnverified: true, emptyPolls: 2))
@@ -503,6 +568,16 @@ private actor ManagedCounter {
 
 extension MinerEngine {
     func _testSetAwaitingLinkState(_ ids: Set<String>) { campaignsAwaitingLinkState = ids }
+
+    func _testPrepareInventoryStallRecovery(_ campaign: Campaign) {
+        allCampaigns = [campaign]
+        currentChannelLogin = "stream"
+        consecutiveStallsByCampaign[campaign.id] = 2
+        _ = observeDropProgress(DropProgressObservation(
+            campaignId: campaign.id, dropId: "d", dropLabel: "d",
+            currentMinutes: 10, requiredMinutes: 60, source: .inventory
+        ))
+    }
 }
 
 

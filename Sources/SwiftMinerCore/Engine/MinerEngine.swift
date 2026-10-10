@@ -221,6 +221,9 @@ public actor MinerEngine {
     /// the time the skip expires, so the miner moves on instead of looping the
     /// same dead campaign forever.
     var campaignStallCooldownUntil: [String: UInt64] = [:]
+    /// Retained across retries until this campaign earns again, so a persistent
+    /// crediting outage does not preempt other work every thirty minutes.
+    var campaignStallCooldownIntervals: [String: TimeInterval] = [:]
 
     /// Campaigns found on live channels whose account-link state Twitch has not reported yet.
     /// Only ever non-empty for an account signed in with Twitch's TV client, which cannot ask.
@@ -235,8 +238,22 @@ public actor MinerEngine {
     /// no external claim (and no failover streamer to try), a campaign is
     /// treated as non-earning and put on cooldown.
     static let nonEarningStallThreshold = 3
-    /// How long a non-earning campaign is skipped before it's retried.
+    /// Initial retry delay; repeated non-earning rounds double it up to two hours.
     static let nonEarningCooldownInterval: TimeInterval = 30 * 60
+    static let nonEarningMaxCooldownInterval: TimeInterval = 2 * 60 * 60
+
+    @discardableResult
+    func coolDownNonEarningCampaign(_ campaignId: String) -> TimeInterval {
+        let previous = campaignStallCooldownIntervals[campaignId]
+        let interval = min(
+            previous.map { $0 * 2 } ?? Self.nonEarningCooldownInterval,
+            Self.nonEarningMaxCooldownInterval
+        )
+        campaignStallCooldownIntervals[campaignId] = interval
+        campaignStallCooldownUntil[campaignId] = runtimeClock.deadline(after: interval)
+        consecutiveStallsByCampaign[campaignId] = 0
+        return interval
+    }
 
     /// A confirmed non-earning stream loses preference for this campaign, on this account.
     /// Keep it available as a last resort when no other verified stream can serve the campaign.
@@ -380,6 +397,7 @@ public actor MinerEngine {
             consecutiveStallsByCampaign[campaignId] = 0
         }
         campaignStallCooldownUntil[campaignId] = nil
+        campaignStallCooldownIntervals[campaignId] = nil
         if let identity = currentChannelLogin ?? session?.currentChannelId {
             stalledChannelCooldownUntil[campaignId]?[Self.normalizedChannelIdentity(identity)] = nil
         }

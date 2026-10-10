@@ -643,11 +643,7 @@ extension MinerEngine {
                                     // No better channel and it keeps not earning: cool the
                                     // campaign down so candidateCampaigns skips it, letting the
                                     // miner pick other work or go idle instead of looping here.
-                                    let minutes = Int(Self.nonEarningCooldownInterval / 60)
-                                    campaignStallCooldownUntil[campaign.id] = runtimeClock.deadline(
-                                        after: Self.nonEarningCooldownInterval
-                                    )
-                                    consecutiveStallsByCampaign[campaign.id] = 0
+                                    let minutes = Int(coolDownNonEarningCampaign(campaign.id) / 60)
                                     session?.currentCampaignId = nil
                                     log("\(Self.antiStallLogTag) Campaign \"\(campaign.name)\" stalled \(Self.nonEarningStallThreshold)× with no progress and no external claims; skipping it for \(minutes)m and looking for other work.")
                                     shouldSwitchChannel = true

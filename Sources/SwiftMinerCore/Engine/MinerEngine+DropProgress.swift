@@ -12,15 +12,6 @@ extension MinerEngine {
         let mergedCampaigns = DropsService.mergeInventory(snapshot, into: allCampaigns)
         allCampaigns = mergedCampaigns
 
-        let updatedCandidates = candidateCampaigns(
-            from: mergedCampaigns,
-            priorityGames: priorityGames,
-            excludedGames: excludedGames,
-            strategy: miningStrategy,
-            logSummary: false
-        )
-        onCampaignUpdate?(updatedCandidates)
-
         let currentCampaignProgress = snapshot.progress.filter { progress in
             progress.campaignId == campaignId && !progress.isClaimed
         }
@@ -53,12 +44,22 @@ extension MinerEngine {
         if acknowledged {
             extraMinutesWatched = 0
             resetProgressStallClock()
+            noteCampaignProgress(campaignId)
 
             if publishProgressUpdate,
                let progress = try? await dropsService.getOverallProgress() {
                 onProgressUpdate?(progress)
             }
         }
+
+        let updatedCandidates = candidateCampaigns(
+            from: mergedCampaigns,
+            priorityGames: priorityGames,
+            excludedGames: excludedGames,
+            strategy: miningStrategy,
+            logSummary: false
+        )
+        onCampaignUpdate?(updatedCandidates)
 
         return acknowledged
     }
