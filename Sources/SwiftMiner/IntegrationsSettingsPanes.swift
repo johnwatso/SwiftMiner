@@ -26,13 +26,6 @@ struct WebDashboardSettingsView: View {
     @State private var draftTwitchClientID = ""
     @State private var draftTwitchClientSecret = ""
 
-    /// Internet access (Twitch sign-in over a tunnel) is only offered when the
-    /// Discord/SwiftBot integration is on or the host mines for several people —
-    /// the cases where letting friends self-serve actually matters.
-    private var internetEligible: Bool {
-        settings.swiftBotEnabled || navigation.configuredMinerCount > 1
-    }
-
     private var swiftBotIsConnected: Bool {
         settings.swiftBotEnabled && navigation.swiftBotState == .connected
     }
@@ -54,24 +47,14 @@ struct WebDashboardSettingsView: View {
         Form {
             Section {
                 Toggle("Enable Web Dashboard", isOn: $settings.webDashboardEnabled)
-                SettingsSecondaryText("A browser dashboard for managing miners. Reach it locally with a username and password (below). When you run the Discord integration or mine for more than one person, you can also let users sign in over the internet to manage their own miner. Changes take effect after restarting SwiftMiner.")
+                SettingsSecondaryText("A browser dashboard for managing miners. Reach it locally with a username and password (below), or set up internet access so users can sign in to manage their own miner. Changes take effect after restarting SwiftMiner.")
             } header: {
                 Text("Web Dashboard")
             }
 
             if settings.webDashboardEnabled {
                 localAccessSection
-                if internetEligible {
-                    oauthSections
-                } else {
-                    Section {
-                        Label("The dashboard is local-only right now. Internet access (Twitch sign-in) becomes available when the Discord integration is enabled or you have more than one miner.", systemImage: "lock.fill")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } header: {
-                        Text("Internet Access")
-                    }
-                }
+                oauthSections
             }
         }
         .formStyle(.grouped)
@@ -327,7 +310,7 @@ struct WebDashboardSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
-            SettingsSecondaryText("Your dashboard's public address, carried on SwiftBot's existing Cloudflare tunnel — SwiftMiner doesn't run its own.")
+            SettingsSecondaryText("Use SwiftBot's existing Cloudflare tunnel or configure your own tunnel for the dashboard's public address. SwiftMiner doesn't run its own tunnel.")
         } header: {
             Text("Internet Access")
         }
@@ -423,7 +406,9 @@ struct WebDashboardSettingsView: View {
                     .font(.headline)
             }
 
-            SettingsSecondaryText("Pick the public address for your dashboard. SwiftBot carries it on its Cloudflare tunnel — one click registers the route and DNS for you.")
+            SettingsSecondaryText(settings.swiftBotEnabled
+                ? "Pick the public address for your dashboard. SwiftBot carries it on its Cloudflare tunnel — one click registers the route and DNS for you."
+                : "Enter the public address for your dashboard and route your tunnel to the local target below. Configure Twitch sign-in to let users access their own miner over the internet.")
 
             if settings.swiftBotEnabled {
                 if let info = swiftBotTunnelInfo, !info.domain.isEmpty {
