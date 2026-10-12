@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SwiftMiner 1.44.6 - Release Notes</title>
-  <meta name="description" content="Release notes for SwiftMiner 1.44.6: HLS-based watch sessions replace deprecated Spade heartbeats, concurrent campaign progress display, longer retry delays for stalled campaigns, and web dashboard internet setup.">
+  <meta name="description" content="Release notes for SwiftMiner 1.44.6: longer retry delays for repeatedly stalled campaigns, inventory-confirmed recovery, and web dashboard internet setup for every miner.">
   <link rel="canonical" href="https://swiftminer.app/release-notes/1.44.6.html">
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
@@ -26,25 +26,8 @@
 <body>
   <main>
     <h1>SwiftMiner 1.44.6</h1>
-    <p class="meta">Version 1.44.6 &middot; Build 2026101216 &middot; Prepared 12 October 2026</p>
-    <p class="intro">SwiftMiner 1.44.6 switches from Twitch's deprecated Spade watch tracking to HLS playlist segment requests, restoring drop progress for all campaigns. The activity card now shows the drop Twitch is actually crediting when a stream grants multiple campaigns. Engine 4.39.</p>
-
-    <section>
-      <h2>📡 HLS watch sessions replace Spade heartbeats</h2>
-      <ul>
-        <li>Twitch deprecated SpadeEvent watch tracking around 8 October 2026. The old minute-watched beacon still returned HTTP 204 but silently stopped crediting drop progress. SwiftMiner now fetches HLS playlist segments via HEAD requests every 20 seconds, which Twitch continues to credit. Thanks to <a href="https://github.com/DevilXD/TwitchDropsMiner">TwitchDropsMiner</a> and its community for identifying the change and the fix.</li>
-        <li>Signed playback tokens are cached for three minutes and automatically refreshed on expiry or playlist failure. Tokens and signed URLs are never logged.</li>
-        <li>Legacy Spade and GQL watch transports are retained as labeled fallbacks when HLS is transiently unavailable.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h2>🎮 Concurrent campaign progress</h2>
-      <ul>
-        <li>When a stream grants drops for more than one campaign for the same game, the activity card now shows the drop Twitch is actually crediting rather than always displaying the scheduler's primary campaign at zero progress.</li>
-        <li>The subtitle names the credited campaign when it differs from the scheduled one, so parallel rewards are visible at a glance.</li>
-      </ul>
-    </section>
+    <p class="meta">Version 1.44.6 &middot; Build 2026101023 &middot; Released 10 October 2026</p>
+    <p class="intro">SwiftMiner 1.44.6 gives earning campaigns more time to run when other campaigns repeatedly stall, and restores normal retries when Twitch inventory confirms new progress. Web dashboard internet setup is now available for a single miner without SwiftBot. Engine 4.38.</p>
 
     <section>
       <h2>🐝 More time for campaigns that earn</h2>
