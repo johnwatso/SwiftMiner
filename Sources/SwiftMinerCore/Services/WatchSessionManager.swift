@@ -93,7 +93,10 @@ private var heartbeatTask: Task<Void, Never>?
 private let heartbeatFailureThreshold: Int
 private let runtimeClock: RuntimeClock
 
-/// 59-second watch interval — matches the Python reference implementation
+/// Twitch currently credits playlist segment requests on a roughly 20-second cadence.
+public static let watchInterval: TimeInterval = 20
+
+/// Watch interval, injectable for deterministic tests.
 private let heartbeatInterval: TimeInterval
 
 /// Session identifier generator
@@ -136,7 +139,7 @@ public func setHeartbeatSentHandler(_ handler: (@Sendable (WatchSession) -> Void
 public init(
     apiClient: TwitchAPIClient,
     urlSession: URLSession = .shared,
-    heartbeatInterval: TimeInterval = SpadeBeaconService.watchInterval
+    heartbeatInterval: TimeInterval = WatchSessionManager.watchInterval
 ) {
     self.spadeBeacon = SpadeBeaconService(urlSession: urlSession)
     self.apiClient = apiClient
@@ -188,7 +191,8 @@ init(
 
         // TDM PARITY: Fetch Playback Access Token to verify session stability
         // If this fails, the channel might be restricted or user ghost-banned from earning.
-        _ = try await apiClient.fetchPlaybackAccessToken(channelLogin: channel.login)
+        let playback = try await apiClient.fetchPlaybackAccessToken(channelLogin: channel.login)
+        await apiClient.cacheHLSPlaybackToken(channelLogin: channel.login, value: playback.value, signature: playback.signature)
         Logger.engine.debug("Playback access token verified for \(channel.login)")
 
         // Fetch broadcast ID for accurate Spade beacons
@@ -335,28 +339,34 @@ init(
 
         do {
             do {
-                // Direct Spade is TwitchDropsMiner's current primary watch transport.
-                try await spadeBeacon.sendBeacon(
-                    channelLogin: session.channelName,
-                    channelId:    session.channelId,
-                    broadcastId:  session.broadcastId ?? "0",
-                    userId:       userId,
-                    gameName:     session.gameName,
-                    gameId:       session.gameId
-                )
-                session.lastHeartbeatTransport = "Spade"
+                let segmentCount = try await apiClient.sendHLSWatchHeartbeat(channelLogin: session.channelName)
+                session.lastHeartbeatTransport = "HLS playlist (\(segmentCount) segments)"
             } catch {
-                // Retain Twitch's GQL mutation as a fallback if the direct endpoint is
-                // transiently unavailable or rejects the beacon.
-                try await apiClient.sendSpadeEvents(
-                    channelLogin: session.channelName,
-                    channelId: session.channelId,
-                    broadcastId: session.broadcastId ?? "0",
-                    userId: userId,
-                    gameName: session.gameName,
-                    gameId: session.gameId
-                )
-                session.lastHeartbeatTransport = "Twitch GQL fallback"
+                // Twitch has stopped crediting Spade reliably. Keep both old transports as
+                // a compatibility fallback, but name them explicitly so a 204 is not mistaken
+                // for proof that HLS watch requests worked.
+                Logger.engine.warning("HLS watch request failed for \(session.channelName): \(error.localizedDescription). Trying legacy Spade fallback.")
+                do {
+                    try await spadeBeacon.sendBeacon(
+                        channelLogin: session.channelName,
+                        channelId: session.channelId,
+                        broadcastId: session.broadcastId ?? "0",
+                        userId: userId,
+                        gameName: session.gameName,
+                        gameId: session.gameId
+                    )
+                    session.lastHeartbeatTransport = "Spade fallback"
+                } catch {
+                    try await apiClient.sendSpadeEvents(
+                        channelLogin: session.channelName,
+                        channelId: session.channelId,
+                        broadcastId: session.broadcastId ?? "0",
+                        userId: userId,
+                        gameName: session.gameName,
+                        gameId: session.gameId
+                    )
+                    session.lastHeartbeatTransport = "Twitch GQL fallback"
+                }
             }
 
             // Update session stats

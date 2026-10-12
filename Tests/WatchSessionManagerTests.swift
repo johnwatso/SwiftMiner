@@ -33,6 +33,43 @@ final class WatchSessionManagerTests: XCTestCase {
     }
 
     // MARK: - Session Management Tests
+
+    func testHLSWatchHeartbeatHeadsCurrentPlaylistSegments() async throws {
+        let playbackTokenJson = #"{"data":{"streamPlaybackAccessToken":{"value":"test token","signature":"test-signature"}}}"#
+        let headRequests = Counter()
+        let playbackRequests = Counter()
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            if request.url?.host == "gql.twitch.tv" {
+                if String(data: request.httpBody ?? Data(), encoding: .utf8)?.contains("testchannel") == true {
+                    playbackRequests.next()
+                }
+                return (response, playbackTokenJson.data(using: .utf8)!)
+            }
+            if request.url?.host == "usher.ttvnw.net", request.httpMethod == "GET",
+               request.url?.path.hasSuffix("testchannel.m3u8") == true {
+                let master = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1200000\nmedia.m3u8\n"
+                return (response, master.data(using: .utf8)!)
+            }
+            if request.httpMethod == "GET", request.url?.path.hasSuffix("media.m3u8") == true {
+                let media = "#EXTM3U\n#EXTINF:2,\nsegment-1.ts\n#EXTINF:2,\nsegment-2.ts\n"
+                return (response, media.data(using: .utf8)!)
+            }
+            if request.httpMethod == "HEAD" {
+                headRequests.next()
+                return (response, Data())
+            }
+            throw URLError(.badServerResponse)
+        }
+
+        let count = try await apiClient.sendHLSWatchHeartbeat(channelLogin: "testchannel")
+        let secondCount = try await apiClient.sendHLSWatchHeartbeat(channelLogin: "testchannel")
+
+        XCTAssertEqual(count, 2)
+        XCTAssertEqual(secondCount, 2)
+        XCTAssertEqual(headRequests.value, 4)
+        XCTAssertEqual(playbackRequests.value, 1, "The cached playback token should avoid a GraphQL token fetch on every heartbeat")
+    }
     
     func testStartWatchingSuccess() async throws {
         // Mock GQL for playback access token
@@ -74,7 +111,7 @@ final class WatchSessionManagerTests: XCTestCase {
         let watchTime = await manager.totalWatchTime
         XCTAssertGreaterThan(watchTime, 0)
         let currentSession = await manager.currentSession
-        XCTAssertEqual(currentSession?.lastHeartbeatTransport, "Spade")
+        XCTAssertEqual(currentSession?.lastHeartbeatTransport, "Spade fallback")
         
         await manager.stopWatching()
         

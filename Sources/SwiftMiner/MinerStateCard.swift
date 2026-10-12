@@ -1165,7 +1165,11 @@ struct MinerActivitySnapshot {
                 return MinerActivityItem(
                     id: "override-\(miner.id)",
                     title: campaign.game.name,
-                    subtitle: "Stream override · @\(overrideLogin)",
+                    subtitle: progress.map { progress in
+                        progress.campaignName == campaign.name
+                            ? "Stream override · @\(overrideLogin)"
+                            : "\(progress.campaignName) · Stream override · @\(overrideLogin)"
+                    } ?? "Stream override · @\(overrideLogin)",
                     detail: detail,
                     symbol: "person.fill.viewfinder",
                     accent: .indigo,
@@ -1194,7 +1198,10 @@ struct MinerActivitySnapshot {
             return MinerActivityItem(
                 id: "now-\(campaign.id)",
                 title: campaign.game.name,
-                subtitle: campaign.name,
+                // A stream can grant more than one campaign for the same game. When Twitch
+                // is crediting one of those parallel rewards, name that campaign rather than
+                // leaving the card apparently frozen on the scheduler's primary campaign.
+                subtitle: progress?.campaignName ?? campaign.name,
                 detail: detail,
                 symbol: "bolt.fill",
                 accent: .green,
@@ -1468,6 +1475,9 @@ struct MinerActivitySnapshot {
     /// box art otherwise.
     struct ActiveDropProgress {
         let dropName: String
+        /// The campaign that owns `dropName`. It can differ from the scheduler's selected
+        /// campaign when one stream grants concurrent campaigns for the same game.
+        let campaignName: String
         let fraction: Double
         let currentMinutes: Int
         let requiredMinutes: Int
@@ -1479,10 +1489,53 @@ struct MinerActivitySnapshot {
         for campaign: Campaign,
         miner: MinerManager.ManagedMiner
     ) -> ActiveDropProgress? {
+        // Twitch can credit several campaigns from a single stream. The scheduler chooses
+        // one campaign to find that stream, but its first unstarted drop is not necessarily
+        // the drop Twitch is currently advancing. Prefer an in-progress reward from another
+        // active campaign for the same game so the overview reports the minutes that are
+        // actually accumulating instead of a permanent-looking 0 / N. A positive Twitch
+        // progress reading is stronger evidence than a stale per-campaign link flag.
+        let parallelProgress = miner.allCampaigns
+            .filter { candidate in
+                candidate.id != campaign.id
+                    && candidate.isTimeActive
+                    && sameGame(candidate.game, campaign.game)
+            }
+            .flatMap { candidate in
+                candidate.drops.compactMap { drop -> (Campaign, Drop)? in
+                    guard isInProgress(drop) else { return nil }
+                    return (candidate, drop)
+                }
+            }
+            .sorted { lhs, rhs in
+                let lhsFraction = progressFraction(for: lhs.1, miner: miner)
+                let rhsFraction = progressFraction(for: rhs.1, miner: miner)
+                if lhsFraction != rhsFraction { return lhsFraction > rhsFraction }
+                return lhs.1.progress?.currentMinutes ?? 0 > rhs.1.progress?.currentMinutes ?? 0
+            }
+            .first
+
+        if let parallelProgress {
+            return makeActiveDropProgress(
+                for: parallelProgress.1,
+                in: parallelProgress.0,
+                miner: miner
+            )
+        }
+
         guard let drop = campaign.dropInProgress else {
             return nil
         }
 
+        return makeActiveDropProgress(for: drop, in: campaign, miner: miner)
+    }
+
+    @MainActor
+    private static func makeActiveDropProgress(
+        for drop: Drop,
+        in campaign: Campaign,
+        miner: MinerManager.ManagedMiner
+    ) -> ActiveDropProgress {
         let dropState = miner.stateStore?.dropStates.first { $0.dropId == drop.id }
         let currentMinutes = max(dropState?.progressMinutes ?? 0, drop.progress?.currentMinutes ?? 0)
         let requiredMinutes = max(dropState?.requiredMinutes ?? 0, drop.progress?.requiredMinutes ?? drop.requiredMinutes)
@@ -1492,6 +1545,7 @@ struct MinerActivitySnapshot {
         guard requiredMinutes > 0 else {
             return ActiveDropProgress(
                 dropName: dropName,
+                campaignName: campaign.name,
                 fraction: 0,
                 currentMinutes: 0,
                 requiredMinutes: 0,
@@ -1502,11 +1556,33 @@ struct MinerActivitySnapshot {
         let fraction = min(1.0, max(0.0, Double(currentMinutes) / Double(requiredMinutes)))
         return ActiveDropProgress(
             dropName: dropName,
+            campaignName: campaign.name,
             fraction: fraction,
             currentMinutes: currentMinutes,
             requiredMinutes: requiredMinutes,
             artworkURL: artworkURL
         )
+    }
+
+    @MainActor
+    private static func isInProgress(_ drop: Drop) -> Bool {
+        guard !drop.isClaimed, !drop.isSubscriptionRequired else { return false }
+        let progress = drop.progress?.currentMinutes ?? 0
+        let required = max(drop.progress?.requiredMinutes ?? 0, drop.requiredMinutes)
+        return progress > 0 && required > progress
+    }
+
+    @MainActor
+    private static func progressFraction(for drop: Drop, miner: MinerManager.ManagedMiner) -> Double {
+        let state = miner.stateStore?.dropStates.first { $0.dropId == drop.id }
+        let current = max(state?.progressMinutes ?? 0, drop.progress?.currentMinutes ?? 0)
+        let required = max(state?.requiredMinutes ?? 0, drop.progress?.requiredMinutes ?? drop.requiredMinutes)
+        guard required > 0 else { return 0 }
+        return Double(current) / Double(required)
+    }
+
+    private static func sameGame(_ lhs: Game, _ rhs: Game) -> Bool {
+        lhs.id == rhs.id || normalizedGameKey(lhs.name) == normalizedGameKey(rhs.name)
     }
 
     /// Uses Twitch's cumulative per-drop total, reconciled with the miner's persisted ledger.

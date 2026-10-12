@@ -53,6 +53,50 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertEqual(progress?.fraction ?? -1, 0.6, accuracy: 0.0001)
     }
 
+    func testWatchingCardShowsConcurrentCampaignDropThatTwitchIsCrediting() {
+        let selected = makeCampaign(
+            id: "selected",
+            gameId: "overwatch",
+            gameName: "Overwatch",
+            isAccountConnected: true,
+            drops: [Drop(id: "selected-drop", name: "Prost Spray", requiredMinutes: 60)]
+        )
+        let concurrentlyCredited = makeCampaign(
+            id: "parallel",
+            gameId: "overwatch",
+            gameName: "Overwatch",
+            // Twitch sometimes reports the game link on the campaign selected to find a
+            // stream but omits it on another campaign that the same stream is crediting.
+            // Progress must remain visible in that case.
+            isAccountConnected: false,
+            drops: [
+                Drop(
+                    id: "parallel-drop",
+                    name: "Heroes of Heart Avatar",
+                    requiredMinutes: 30,
+                    progress: Progress(
+                        dropId: "parallel-drop",
+                        campaignId: "parallel",
+                        currentMinutes: 22,
+                        requiredMinutes: 30
+                    )
+                )
+            ]
+        )
+        let miner = makeMiner(
+            status: .watching,
+            campaigns: [selected, concurrentlyCredited],
+            currentCampaignId: selected.id
+        )
+
+        let snapshot = resolveSnapshot(for: miner)
+
+        XCTAssertEqual(snapshot.now.title, "Overwatch")
+        XCTAssertEqual(snapshot.now.subtitle, concurrentlyCredited.name)
+        XCTAssertEqual(snapshot.now.detail, "Heroes of Heart Avatar · 22 / 30 min watched")
+        XCTAssertEqual(snapshot.now.progressFraction ?? -1, 22.0 / 30.0, accuracy: 0.0001)
+    }
+
     func testOperatorQueuePinsCurrentAndResolvedNextAheadOfRemainingCampaigns() {
         let current = makeCampaign(id: "current", gameId: "current-game", gameName: "Current", isAccountConnected: true)
         let next = makeCampaign(id: "next", gameId: "next-game", gameName: "Next", isAccountConnected: true)

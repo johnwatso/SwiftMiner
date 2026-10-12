@@ -223,6 +223,7 @@ public actor TwitchAPIClient {
     private let runtimeClock: RuntimeClock
     private let retryJitterFactor: @Sendable () -> Double
     private let queryHashStore: TwitchQueryHashStore
+    private var hlsPlaybackTokens: [String: (value: String, signature: String, expiresAt: Date)] = [:]
 
     /// Android User-Agent that matches the Android client ID. Starts as a
     /// random pick for pre-login traffic; swapped to a sticky-per-account UA
@@ -670,6 +671,110 @@ public actor TwitchAPIClient {
             return nil
         }
         return URL(string: value)
+    }
+
+    /// Requests the current HLS media playlist and HEADs its segment URLs without
+    /// downloading stream media. Twitch no longer credits the legacy minute-watched
+    /// Spade event consistently, so the playlist request is the primary watch signal.
+    /// Playback tokens and signed playlist URLs are intentionally never logged.
+    public func sendHLSWatchHeartbeat(channelLogin: String) async throws -> Int {
+        let cachedPlayback = hlsPlaybackTokens[channelLogin]
+        let playback: (value: String, signature: String)
+        if let cachedPlayback, cachedPlayback.expiresAt > Date() {
+            playback = (cachedPlayback.value, cachedPlayback.signature)
+        } else {
+            playback = try await fetchPlaybackAccessToken(channelLogin: channelLogin)
+            hlsPlaybackTokens[channelLogin] = (playback.value, playback.signature, Date().addingTimeInterval(180))
+        }
+        guard var components = URLComponents(string: "https://usher.ttvnw.net/api/channel/hls/\(channelLogin).m3u8") else {
+            throw TwitchMinerError.networkError("Could not prepare the HLS playlist request")
+        }
+        components.queryItems = [
+            URLQueryItem(name: "allow_source", value: "true"),
+            URLQueryItem(name: "allow_audio_only", value: "true"),
+            URLQueryItem(name: "allow_spectre", value: "true"),
+            URLQueryItem(name: "player_backend", value: "mediaplayer"),
+            URLQueryItem(name: "playlist_include_framerate", value: "true"),
+            URLQueryItem(name: "reassignments_supported", value: "true"),
+            URLQueryItem(name: "sig", value: playback.signature),
+            URLQueryItem(name: "token", value: playback.value)
+        ]
+        guard let playlistURL = components.url else {
+            throw TwitchMinerError.networkError("Could not prepare the HLS playlist request")
+        }
+
+        func fetchPlaylist(_ url: URL) async throws -> String {
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.timeoutInterval = 15
+            request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+            request.setValue(clientId, forHTTPHeaderField: "Client-Id")
+            request.setValue("https://www.twitch.tv", forHTTPHeaderField: "Origin")
+            request.setValue("https://www.twitch.tv/\(channelLogin)", forHTTPHeaderField: "Referer")
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                hlsPlaybackTokens.removeValue(forKey: channelLogin)
+                throw TwitchMinerError.networkError("Twitch returned an unavailable HLS playlist (HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0))")
+            }
+            guard let text = String(data: data, encoding: .utf8), text.contains("#EXTM3U") else {
+                throw TwitchMinerError.networkError("Twitch returned an unavailable HLS playlist")
+            }
+            return text
+        }
+
+        let master = try await fetchPlaylist(playlistURL)
+        let masterLines = master.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let mediaURL: URL
+        if let firstVariant = masterLines.first(where: { !$0.isEmpty && !$0.hasPrefix("#") }),
+           let resolved = URL(string: firstVariant, relativeTo: playlistURL)?.absoluteURL {
+            mediaURL = resolved
+        } else {
+            mediaURL = playlistURL
+        }
+
+        let media = mediaURL == playlistURL ? master : try await fetchPlaylist(mediaURL)
+        let segments = media.split(whereSeparator: \.isNewline).compactMap { raw -> URL? in
+            let line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty, !line.hasPrefix("#"),
+                  let url = URL(string: line, relativeTo: mediaURL)?.absoluteURL,
+                  ["https"].contains(url.scheme?.lowercased() ?? "") else { return nil }
+            return url
+        }
+        guard !segments.isEmpty else {
+            throw TwitchMinerError.networkError("Twitch's HLS playlist contained no media segments")
+        }
+
+        let urls = Array(segments.suffix(32))
+        let agent = userAgent
+        let urlSession = session
+        let successfulRequests = await withTaskGroup(of: Bool.self, returning: Int.self) { group in
+            for url in urls {
+                group.addTask {
+                    var request = URLRequest(url: url)
+                    request.httpMethod = "HEAD"
+                    request.timeoutInterval = 10
+                    request.setValue(agent, forHTTPHeaderField: "User-Agent")
+                    do {
+                        let (_, response) = try await urlSession.data(for: request)
+                        guard let http = response as? HTTPURLResponse else { return false }
+                        return (200..<300).contains(http.statusCode)
+                    } catch {
+                        return false
+                    }
+                }
+            }
+            var count = 0
+            for await succeeded in group where succeeded { count += 1 }
+            return count
+        }
+        guard successfulRequests > 0 else {
+            throw TwitchMinerError.networkError("Twitch did not accept any HLS segment watch requests")
+        }
+        return successfulRequests
+    }
+
+    func cacheHLSPlaybackToken(channelLogin: String, value: String, signature: String) {
+        hlsPlaybackTokens[channelLogin] = (value, signature, Date().addingTimeInterval(180))
     }
 
     /// Get channel information
