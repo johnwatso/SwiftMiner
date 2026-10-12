@@ -26,13 +26,13 @@
 <body>
   <main>
     <h1>SwiftMiner 1.44.7</h1>
-    <p class="meta">Version 1.44.7 &middot; Build 2026101216 &middot; Prepared 12 October 2026</p>
+    <p class="meta">Version 1.44.7 &middot; Build 2026101216 &middot; Released 12 October 2026</p>
     <p class="intro">SwiftMiner 1.44.7 replaces Twitch's deprecated Spade watch tracking with HLS playlist segment requests and makes the Overview card show the reward Twitch is actually crediting when a stream grants multiple campaigns. Engine 4.39.</p>
 
     <section>
       <h2>📡 HLS watch sessions replace Spade heartbeats</h2>
       <ul>
-        <li>Twitch deprecated SpadeEvent watch tracking around 8 October 2026. The old minute-watched beacon still returned HTTP 204 but silently stopped crediting drop progress. SwiftMiner now fetches HLS playlist segments via HEAD requests every 20 seconds, which Twitch continues to credit. Thanks to <a href="https://github.com/DevilXD/TwitchDropsMiner">TwitchDropsMiner</a> and its community for identifying the change and the fix.</li>
+        <li>Twitch deprecated SpadeEvent watch tracking around 8 October 2026. The old minute-watched beacon still returned HTTP 204 but silently stopped crediting drop progress. SwiftMiner now fetches HLS playlist segments via HEAD requests every 20 seconds, which Twitch continues to credit. A huge thank-you to <a href="https://github.com/DevilXD/TwitchDropsMiner">TwitchDropsMiner (TDM)</a> and its community for identifying and sharing the fix.</li>
         <li>Signed playback tokens are cached for three minutes and automatically refreshed on expiry or playlist failure. Tokens and signed URLs are never logged.</li>
         <li>Legacy Spade and GQL watch transports are retained as labelled fallbacks when HLS is transiently unavailable.</li>
       </ul>
