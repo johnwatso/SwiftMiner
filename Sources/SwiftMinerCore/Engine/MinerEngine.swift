@@ -451,6 +451,8 @@ public actor MinerEngine {
     /// Whether the empty-inventory claim check has already been logged since the last time
     /// something was claimable. Logged once per quiet stretch instead of every two minutes.
     var hasLoggedNoClaimableDrops = false
+    /// Stops re-claiming an instance Twitch accepts but inventory never marks claimed.
+    var repeatClaimGuard = RepeatClaimGuard()
 
     /// Cache of all campaigns fetched during the last check
     public internal(set) var allCampaigns: [Campaign] = []

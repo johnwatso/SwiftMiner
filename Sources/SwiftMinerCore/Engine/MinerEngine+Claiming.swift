@@ -5,6 +5,31 @@ import Foundation
 //
 // Split out of MinerEngine.swift, which had grown past the point where one file could be read.
 
+/// Remembers drop instances whose claim Twitch accepted but which inventory keeps listing as
+/// unclaimed (seen with an account not linked to the game: one account re-claimed the same seven
+/// drops every five minutes for ~39 hours). After `maxAcceptedClaims` accepted claims for one
+/// instance the engine stops trying, so the claim counter, notifications and per-cycle claim time
+/// stop being inflated by a claim that never sticks.
+struct RepeatClaimGuard {
+    static let maxAcceptedClaims = 2
+
+    private var acceptedClaims: [String: Int] = [:]
+    private var reportedSuppressed: Set<String> = []
+
+    func isSuppressed(_ instanceId: String) -> Bool {
+        acceptedClaims[instanceId, default: 0] >= Self.maxAcceptedClaims
+    }
+
+    mutating func recordAcceptedClaim(_ instanceId: String) {
+        acceptedClaims[instanceId, default: 0] += 1
+    }
+
+    /// True only the first time an instance is reported as suppressed, so the warning is logged once.
+    mutating func markReported(_ instanceId: String) -> Bool {
+        reportedSuppressed.insert(instanceId).inserted
+    }
+}
+
 extension MinerEngine {
     func claimReadyDrops(forceInventoryRefresh: Bool = false) async -> Bool {
         let nowTick = runtimeClock.nowNanoseconds()
@@ -37,11 +62,22 @@ extension MinerEngine {
                     .filter(\.isClaimed)
                     .map(\.id)
             )
-            let claimable = snapshot.progress.filter {
+            let candidates = snapshot.progress.filter {
                 $0.isComplete
                     && !$0.isClaimed
                     && !claimedDropIds.contains($0.dropId)
                     && !isLikelyInternalTestProgress($0)
+            }
+            let claimable = candidates.filter { !repeatClaimGuard.isSuppressed($0.id) }
+            let newlySuppressed = candidates.filter {
+                repeatClaimGuard.isSuppressed($0.id) && repeatClaimGuard.markReported($0.id)
+            }
+            if !newlySuppressed.isEmpty {
+                let names = newlySuppressed.map(\.dropName).joined(separator: ", ")
+                let linkHint = newlySuppressed.contains { progress in
+                    allCampaigns.first(where: { $0.id == progress.campaignId })?.isAccountConnected == false
+                } ? " The account does not appear to be linked to the game." : ""
+                log("Warning: Twitch accepted the claim for \(names) but inventory still lists it as unclaimed.\(linkHint) Not retrying it again this run.")
             }
             let newlySkippedInternalTestDrops = snapshot.progress.filter {
                 $0.isComplete
@@ -71,6 +107,7 @@ extension MinerEngine {
                 if result.success {
                     let confirmation = result.confirmedByInventory ? " (confirmed by fresh inventory)" : ""
                     log("Claimed drop: \(result.dropName)\(confirmation)")
+                    repeatClaimGuard.recordAcceptedClaim(progress.id)
 
                     let drop = Drop(
                         id: progress.dropId,

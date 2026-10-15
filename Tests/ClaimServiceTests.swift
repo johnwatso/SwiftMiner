@@ -231,4 +231,22 @@ final class ClaimServiceTests: XCTestCase {
         XCTAssertFalse(result.success)
         XCTAssertNotNil(result.error)
     }
+
+    // MARK: - Repeat claim guard
+
+    func testRepeatClaimGuardSuppressesInstanceAfterRepeatedAcceptedClaims() {
+        var guardState = RepeatClaimGuard()
+        for _ in 0..<RepeatClaimGuard.maxAcceptedClaims {
+            XCTAssertFalse(guardState.isSuppressed("instance-1"))
+            guardState.recordAcceptedClaim("instance-1")
+        }
+        XCTAssertTrue(guardState.isSuppressed("instance-1"))
+        XCTAssertFalse(guardState.isSuppressed("instance-2"))
+    }
+
+    func testRepeatClaimGuardReportsSuppressionOnce() {
+        var guardState = RepeatClaimGuard()
+        XCTAssertTrue(guardState.markReported("instance-1"))
+        XCTAssertFalse(guardState.markReported("instance-1"))
+    }
 }
