@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SwiftMiner - Keep Drops moving</title>
+<meta id="theme-color" name="theme-color" content="#0d0a1a">
+<link rel="icon" href="../public/assets/landing/swiftminer-icon.webp">
+<script>(function(){var d=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=d;document.documentElement.style.colorScheme=d;})();</script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="site-header"><div class="site-header-inner wrap">
+  <a class="brand" href="#top"><img src="../public/assets/landing/swiftminer-icon.webp" width="32" height="32" alt="">SwiftMiner<span class="brand-dot">.</span></a>
+  <nav class="site-nav"><a href="#features">Features</a><a href="#how">How it works</a><a href="#security">Security</a></nav>
+  <div class="header-actions"><a class="pill-link" href="https://github.com/johnwatso/SwiftMiner"><span>GitHub</span></a></div>
+</div></header>
+<main>
+<section class="hero wrap" id="top">
+  <h1>Keep Drops moving<br><span>on your Mac.</span></h1>
+  <p class="hero-copy">SwiftMiner quietly watches eligible Twitch streams, tracks campaign progress, and claims rewards across every account you add. No Docker. No Python.</p>
+  <div class="hero-actions"><a class="button button-primary" href="#download">Download</a><a class="button button-secondary" href="#how">See how it works</a></div>
+  <p class="platform-note">Native macOS app <span>·</span> macOS 14+ <span>·</span> Free</p>
+</section>
+<section class="showcase wrap"><div class="showcase-stage">
+  <img class="app-shot shot-light" src="../public/assets/landing/overview-light.webp" alt="SwiftMiner overview, light">
+  <img class="app-shot shot-dark" src="../public/assets/landing/overview-dark.webp" alt="SwiftMiner overview, dark">
+</div></section>
+
+<section class="section wrap" id="demo">
+  <div class="demo-shell" id="demo-shell">
+    <div class="demo-toolbar"><div><span class="eyebrow">A drop, start to finish</span><h3>Two accounts. Nothing to babysit.</h3></div>
+      <div class="demo-controls"><span class="note">Illustrated demo</span><button id="d-pause" aria-label="Pause">Ⅱ</button><button id="d-restart" aria-label="Restart">↻</button></div></div>
+    <div class="demo-stage">
+      <article class="miner" id="m-a"><div class="miner-top"><strong>quietcomet</strong><span class="pill" id="p-a">Mining</span></div><div class="game" id="g-a">The Finals</div><div class="drop" id="d-a">Broadcast Black Hover Pad</div><div class="bar"><i id="b-a"></i></div><div class="meta"><span id="pc-a">0%</span><span id="ch-a">Watching channel</span></div><div class="line" id="l-a"></div></article>
+      <article class="miner" id="m-b"><div class="miner-top"><strong>Pixelpanda</strong><span class="pill" id="p-b">Mining</span></div><div class="game" id="g-b">ARC Raiders</div><div class="drop" id="d-b">Air Freshener</div><div class="bar"><i id="b-b"></i></div><div class="meta"><span id="pc-b">0%</span><span id="ch-b">Watching channel</span></div><div class="line" id="l-b"></div></article>
+    </div>
+    <div class="demo-caption"><span class="num" id="d-num">01</span><div><strong id="d-title"></strong><p id="d-desc"></p></div><div class="dots" id="d-dots"><i></i><i></i><i></i><i></i><i></i></div></div>
+  </div>
+  <p class="demo-foot">A simplified loop with accelerated timing. Channel names and rewards are illustrative.</p>
+</section>
+
+<section class="section wrap" id="features">
+  <div class="section-heading"><div><span class="eyebrow">Set it once</span><h2>Let SwiftMiner<br>keep watch.</h2></div><p>Everything needed to keep Drops moving, from picking the right stream to claiming the reward.</p></div>
+  <div class="feature-grid">
+    <article class="feature-card"><span class="feature-icon">⚡</span><h3>Fully automatic</h3><p>Watches eligible streams in the background and claims rewards the moment they unlock.</p></article>
+    <article class="feature-card"><span class="feature-icon">👥</span><h3>Multi-account</h3><p>Run several Twitch accounts side by side, each with its own miner and progress.</p></article>
+    <article class="feature-card"><span class="feature-icon">⇄</span><h3>Smart switching</h3><p>Moves to the stream that makes the most progress on the drops you care about.</p></article>
+    <article class="feature-card"><span class="feature-icon">◎</span><h3>Every miner in one view</h3><p>See what each account is watching and how far along it is, without opening Twitch.</p></article>
+    <article class="feature-card"><span class="feature-icon">▦</span><h3>Follow every Drop</h3><p>Campaigns, games, and reward progress tracked in one list.</p></article>
+    <article class="feature-card"><span class="feature-icon">☁</span><h3>Check in from any device</h3><p>An optional web dashboard lets you sign in with Discord and look in from your phone.</p></article>
+  </div>
+</section>
+
+<section class="section wrap" id="console">
+  <div class="section-heading"><div><span class="eyebrow">A proper Mac app</span><h2>The whole picture.<br>At a glance.</h2></div><p>A familiar native console. No dashboard to host.</p></div>
+  <div class="tabs" role="tablist" id="tabs"></div>
+  <figure style="margin:0"><div class="tab-frame"><img class="shot-light" id="t-light" alt=""><img class="shot-dark" id="t-dark" alt=""></div><figcaption class="tab-cap" id="t-cap"></figcaption></figure>
+</section>
+
+<section class="section wrap" id="how">
+  <div class="section-heading"><div><span class="eyebrow">Four steps</span><h2>How the Twitch<br>Drops miner works.</h2></div><p>From sign-in to claimed reward, with nothing to babysit.</p></div>
+  <div class="steps">
+    <div class="step"><b>01</b><h3>Add your Twitch account</h3><p>Sign in with Twitch. SwiftMiner never sees your password.</p></div>
+    <div class="step"><b>02</b><h3>Pick preferred games</h3><p>Choose the games whose Drops you want.</p></div>
+    <div class="step"><b>03</b><h3>SwiftMiner watches streams</h3><p>It finds eligible streams and keeps progress moving.</p></div>
+    <div class="step"><b>04</b><h3>Rewards are claimed</h3><p>Drops are claimed automatically when they complete.</p></div>
+  </div>
+</section>
+
+<section class="section wrap" id="security">
+  <div class="section-heading"><div><span class="eyebrow">Native, not wrapped</span><h2>Written for the Mac,<br>not just run on it.</h2></div><p>Swift top to bottom, signed, notarized, and self-updating.</p></div>
+  <div class="compare-grid">
+    <article class="compare-card compare-card-primary"><div class="compare-card-heading"><img src="../public/assets/landing/swiftminer-icon.webp" width="28" height="28" alt=""><h3>SwiftMiner</h3></div>
+      <ul class="compare-points">
+        <li><span class="point-good">✓</span><strong>Setup</strong><span>Download, sign in, done</span></li>
+        <li><span class="point-good">✓</span><strong>Runtime</strong><span>Native Swift, no Docker or Python</span></li>
+        <li><span class="point-good">✓</span><strong>Credentials</strong><span>Protected by Keychain, no password handling</span></li>
+        <li><span class="point-good">✓</span><strong>Updates</strong><span>Signed and self-updating</span></li>
+      </ul></article>
+    <article class="compare-card compare-card-muted"><div class="compare-card-heading"><h3>Script-based miners</h3></div>
+      <ul class="compare-points">
+        <li><span class="point-warn">✗</span><strong>Setup</strong><span>Install runtimes and dependencies</span></li>
+        <li><span class="point-warn">✗</span><strong>Runtime</strong><span>Docker or Python environment</span></li>
+        <li><span class="point-warn">✗</span><strong>Credentials</strong><span>Tokens kept in config files</span></li>
+        <li><span class="point-warn">✗</span><strong>Updates</strong><span>Manual</span></li>
+      </ul></article>
+  </div>
+</section>
+
+<section class="get-started wrap" id="download"><div class="cta-panel">
+  <img src="../public/assets/landing/swiftminer-icon.webp" alt="">
+  <span class="eyebrow">Meet your new drop miner</span>
+  <h2>Ready for the<br><span class="accent">next drop.</span></h2>
+  <p>Free, native, and built for the Mac you already have running.</p>
+  <div class="hero-actions"><a class="button button-primary" href="#">Get SwiftMiner</a><a class="button button-secondary" href="#">Release notes</a></div>
+  <p class="download-meta">Free · macOS 14+ · Apple silicon and Intel</p>
+</div></section>
+</main>
+<footer class="site-footer wrap"><div><a class="brand" href="#top"><img src="../public/assets/landing/swiftminer-icon.webp" alt="">SwiftMiner<span class="brand-dot">.</span></a><p>Keep Drops moving.</p></div>
+<div class="footer-links"><a href="https://github.com/johnwatso/SwiftMiner">GitHub</a><a href="#">Help</a><a href="#">Release notes</a></div></footer>
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)};
+var P=[
+ {t:'Mining begins.',d:'Both accounts watch eligible streams for their preferred games.',a:{c:'live',p:'Mining',v:34,ch:'Watching streamerOne',l:'Progress ticking up every minute.'},b:{c:'live',p:'Mining',v:58,ch:'Watching raidLive',l:'Progress ticking up every minute.'},ms:4600},
+ {t:'A stream goes offline.',d:'quietcomet’s channel ends. Progress is saved, nothing is lost.',a:{c:'warn',p:'Channel offline',v:52,ch:'streamerOne ended',l:'Looking for another eligible channel…'},b:{c:'live',p:'Mining',v:71,ch:'Watching raidLive',l:'Progress ticking up every minute.'},ms:4200},
+ {t:'It switches on its own.',d:'SwiftMiner picks the next eligible stream and carries on.',a:{c:'live',p:'Mining',v:63,ch:'Watching dropsHQ',l:'Switched channel. Progress continues.'},b:{c:'live',p:'Mining',v:88,ch:'Watching raidLive',l:'Almost there.'},ms:4600},
+ {t:'The reward is claimed.',d:'Pixelpanda’s drop completes and is claimed automatically.',a:{c:'live',p:'Mining',v:79,ch:'Watching dropsHQ',l:'Progress ticking up every minute.'},b:{c:'done',p:'Claimed',v:100,ch:'Drop claimed',l:'Reward is in your Twitch inventory.'},ms:4400},
+ {t:'On to the next drop.',d:'Pixelpanda moves to the next campaign in its queue.',a:{c:'done',p:'Claimed',v:100,ch:'Drop claimed',l:'Reward is in your Twitch inventory.'},b:{c:'live',p:'Mining',v:6,ch:'Watching nextStreamer',l:'Next campaign in the priority queue.'},ms:4400}
+];
+var i=0,playing=!matchMedia('(prefers-reduced-motion: reduce)').matches,tm;
+function set(k,o){var m=$('m-'+k);m.className='miner '+o.c;$('p-'+k).textContent=o.p;$('b-'+k).style.width=o.v+'%';$('pc-'+k).textContent=o.v+'%';$('ch-'+k).textContent=o.ch;$('l-'+k).textContent=o.l}
+function render(){var p=P[i];set('a',p.a);set('b',p.b);$('d-num').textContent=('0'+(i+1));$('d-title').textContent=p.t;$('d-desc').textContent=p.d;
+ [].forEach.call($('d-dots').children,function(e,n){e.className=n===i?'on':''})}
+function next(){clearTimeout(tm);if(!playing)return;tm=setTimeout(function(){i=(i+1)%P.length;render();next()},P[i].ms)}
+$('d-pause').onclick=function(){playing=!playing;this.textContent=playing?'Ⅱ':'▷';next()};
+$('d-restart').onclick=function(){i=0;render();next()};
+render();next();
+var T=[['Overview','overview','Every miner and the priority queue in one view.'],['Miners','miners','Each account, its current channel and progress.'],['Drops','drops','Campaigns, games and reward progress.'],['Activity Log','activity-log','A plain record of what the engine did and why.'],['Web dashboard','webui-preview','Optional sign-in with Discord to check from any device.']];
+var tabs=$('tabs');
+function pick(n){T.forEach(function(t,k){tabs.children[k].setAttribute('aria-selected',k===n)});var b='../public/assets/landing/'+T[n][1];$('t-light').src=b+'-light.webp';$('t-dark').src=b+'-dark.webp';$('t-cap').textContent=T[n][2]}
+T.forEach(function(t,n){var b=document.createElement('button');b.setAttribute('role','tab');b.textContent=t[0];b.onclick=function(){pick(n)};tabs.appendChild(b)});
+pick(0);
+})();
+</script>
+</body></html>
