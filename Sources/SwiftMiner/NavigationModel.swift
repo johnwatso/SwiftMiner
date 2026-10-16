@@ -933,7 +933,10 @@ public final class NavigationModel {
                 guard Settings.shared.dmCampaignDetectedEnabled else { return }
                 guard let miner = self.minerManager.miners.first(where: { $0.id == minerId }) else { return }
                 let priorityGames = self.priorityGames(for: miner)
-                guard priorityGames.contains(where: { $0.caseInsensitiveCompare(campaign.game.name) == .orderedSame }) else { return }
+                guard PriorityGameMatcher(priorityGames).matches(
+                    gameId: campaign.game.id,
+                    gameName: campaign.game.name
+                ) else { return }
                 await dmEventService.emitCampaignDetected(
                     campaignId: campaign.id,
                     campaignName: campaign.name,

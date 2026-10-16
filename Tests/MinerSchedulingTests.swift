@@ -146,6 +146,25 @@ final class MinerSchedulingTests: XCTestCase {
         XCTAssertEqual(candidates.map(\.id), ["c-wanted"])
     }
 
+    func testWildcardPriorityMinesNewCallOfDutyTitleWithoutAnExactRule() async {
+        let engine = MinerEngine(clientId: "test", tokenStore: InMemoryTokenStore())
+        let newTitle = unlinkedCampaign(
+            id: "c-cod-new",
+            gameName: "Call of Duty: Black Ops 7",
+            endsInDays: 2
+        )
+
+        let candidates = await engine.candidateCampaigns(
+            from: [newTitle],
+            priorityGames: [GameFamily.callOfDuty.priorityToken],
+            excludedGames: [],
+            strategy: .onlyPriority,
+            logSummary: false
+        )
+
+        XCTAssertEqual(candidates.map(\.id), ["c-cod-new"])
+    }
+
     /// Same-game fallbacks follow the same rule.
     func testSameGameFallbackAdmitsUnknownLinkOnlyWhenTheGameIsLinked() {
         let game = Game(id: "g-other", name: "Other Game")

@@ -54,17 +54,13 @@ struct MinerHealthCard: View {
     private func blockedPriorityGameRequiringLink(for miner: MinerManager.ManagedMiner) -> String? {
         guard miner.isRunning else { return nil }
 
-        let priorityGames = Set(
-            settings.priorityGames
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-                .filter { !$0.isEmpty }
-        )
-        guard !priorityGames.isEmpty else { return nil }
+        let priorityMatcher = PriorityGameMatcher(settings.priorityGames)
+        guard !priorityMatcher.rules.isEmpty else { return nil }
 
         return miner.allCampaigns.first { campaign in
             guard campaign.isTimeActive
                 && !campaign.isAccountConnected
-                && priorityGames.contains(campaign.gameName.lowercased())
+                && priorityMatcher.matches(gameId: campaign.game.id, gameName: campaign.gameName)
                 && campaign.drops.contains(where: { !$0.isClaimed }) else {
                 return false
             }

@@ -1,4 +1,5 @@
 import Foundation
+import SwiftMinerCore
 
 /// Derived state for Discord. Not a direct reflection of internal miner state.
 /// Enforces 1 Discord = 1 Twitch relationship for the bot interface.
@@ -22,6 +23,10 @@ public struct DiscordUserProjection: Codable, Sendable {
     public let includesGlobalPriorityGames: Bool
     /// The user-facing source selection for this miner's priority queue.
     public let prioritySource: String
+    /// Franchise-wide wildcard rules appearing in either priority list, keyed by
+    /// the opaque token that list carries. Absent when no wildcard is in use, so
+    /// older clients see an unchanged payload.
+    public let priorityFamilies: [String: PriorityFamily]?
     /// Games excluded only for this miner (global exclusions are not repeated).
     public let excludedGames: [String]
     /// Total configured miners on this SwiftMiner host. Used to hide multi-miner-only controls.
@@ -61,6 +66,7 @@ public struct DiscordUserProjection: Codable, Sendable {
         self.issues = issues
         self.dmState = dmState
         self.priorityGames = priorityGames
+        self.priorityFamilies = PriorityFamily.catalog(for: priorityGames + personalPriorityGames)
         self.priorityGameArtwork = priorityGameArtwork
         self.personalPriorityGames = personalPriorityGames
         self.includesGlobalPriorityGames = includesGlobalPriorityGames
@@ -69,6 +75,29 @@ public struct DiscordUserProjection: Codable, Sendable {
         self.configuredMinerCount = configuredMinerCount
         self.sharedPriorityOwner = sharedPriorityOwner
         self.diagnostics = diagnostics
+    }
+
+    /// A wildcard rule as clients display and match it: the token in a priority
+    /// list stands for every title the franchise runs, now and later.
+    public struct PriorityFamily: Codable, Sendable, Equatable {
+        public let name: String
+        public let detail: String
+        /// Normalised franchise name; a title matches when it equals this or
+        /// starts with it followed by a space.
+        public let matchPrefix: String
+
+        static func catalog(for rules: [String]) -> [String: PriorityFamily]? {
+            var families: [String: PriorityFamily] = [:]
+            for rule in rules {
+                guard let family = GameFamily(priorityToken: rule) else { continue }
+                families[rule] = PriorityFamily(
+                    name: family.displayName,
+                    detail: family.matchingDescription,
+                    matchPrefix: family.matchPrefix
+                )
+            }
+            return families.isEmpty ? nil : families
+        }
     }
 
     /// The person whose shared priority list a miner follows, resolved to one

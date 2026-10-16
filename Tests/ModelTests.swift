@@ -131,6 +131,24 @@ final class ModelTests: XCTestCase {
         let decoded = try JSONDecoder().decode(GamePreference.self, from: json)
 
         XCTAssertEqual(decoded.gameName, "Overwatch 2")
+        XCTAssertEqual(decoded.match, .exact)
+    }
+
+    func testCallOfDutyFamilyMatchesTitlesButNotLookalikes() {
+        let family = GameFamily.callOfDuty
+
+        XCTAssertTrue(family.matches(gameName: "Call of Duty: Black Ops 7"))
+        XCTAssertTrue(family.matches(gameName: "Call of Duty – Warzone"))
+        XCTAssertFalse(family.matches(gameName: "Call of Dutylike"))
+        XCTAssertFalse(family.matches(gameName: "Battlefield 6"))
+    }
+
+    func testFamilyPriorityTokenMatchesAndKeepsDiscoveryTermReadable() {
+        let matcher = PriorityGameMatcher([GameFamily.callOfDuty.priorityToken, "Rust"])
+
+        XCTAssertEqual(matcher.priorityIndex(gameId: "", gameName: "Call of Duty: Warzone"), 0)
+        XCTAssertEqual(matcher.priorityIndex(gameId: "", gameName: "Rust"), 1)
+        XCTAssertEqual(matcher.discoveryGames, ["Call of Duty", "Rust"])
     }
 
     func testManagedMinerNormalizesStreamOverrideLogin() {

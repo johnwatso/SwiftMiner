@@ -7,6 +7,24 @@ import SwiftMinerCore
 final class DiscordAPIRoutesTests: XCTestCase {
     private let discordUserId = "123456789012345678"
 
+    func testProjectionDescribesWildcardTokensForWebClients() throws {
+        let token = GameFamily.callOfDuty.priorityToken
+        let projection = DiscordUserProjection(
+            discordUserId: discordUserId,
+            state: .active,
+            priorityGames: ["Fortnite", token],
+            personalPriorityGames: []
+        )
+
+        let family = try XCTUnwrap(projection.priorityFamilies?[token])
+        XCTAssertEqual(family.name, "Call of Duty")
+        XCTAssertEqual(family.matchPrefix, "call of duty")
+        XCTAssertNil(projection.priorityFamilies?["Fortnite"])
+
+        let plain = DiscordUserProjection(discordUserId: discordUserId, state: .active, priorityGames: ["Fortnite"])
+        XCTAssertNil(plain.priorityFamilies)
+    }
+
     func testRegisterUserIsIdempotentAndReturnsDMState() async throws {
         let harness = try await RouteHarness()
 

@@ -519,6 +519,22 @@ enum WebDashboardAssets {
           border: 1px solid var(--glass-stroke); background: var(--field);
         }
         .priority-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 600; }
+        /* Rare-card foil: a slow rainbow sweep through the symbol and text. */
+        .wildcard-badge {
+          display: inline-flex; align-items: center; flex: none; vertical-align: middle;
+          padding: 2px 7px; border-radius: 7px; margin-left: 6px;
+          font-size: 11px; font-weight: 600; line-height: 1.3;
+          background: rgba(0,0,0,0.48); border: 1px solid rgba(255,255,255,0.14);
+        }
+        .wildcard-holo {
+          color: transparent; white-space: nowrap;
+          background-image: linear-gradient(100deg, #ff9fb2, #ffd89f, #f4ff9f, #9fffc0, #9fe0ff, #c39fff, #ff9fb2);
+          background-size: 200% 100%;
+          -webkit-background-clip: text; background-clip: text;
+          animation: wildcard-holo 4s linear infinite;
+        }
+        @keyframes wildcard-holo { from { background-position: 0 0; } to { background-position: -200% 0; } }
+        @media (prefers-reduced-motion: reduce) { .wildcard-holo { animation: none; } }
         .priority-row-btn {
           flex: none; display: inline-grid; width: 26px; height: 26px; place-items: center;
           padding: 0; border: 0; border-radius: 7px; cursor: pointer;

@@ -61,6 +61,20 @@ struct GameSearchField: View {
         searchQuery.lowercased()
     }
 
+    /// Families are curated rules, not Twitch search results. Keeping them
+    /// separate lets the picker explain that one choice will cover future
+    /// categories, instead of making it look like another title named Call of
+    /// Duty.
+    private var matchingFamilies: [GameFamily] {
+        GameFamily.matching(searchQuery: searchQuery).filter { family in
+            !settings.gamePreferences.contains(where: { $0.gameFamily == family })
+        }
+    }
+
+    private var hasVisibleSuggestions: Bool {
+        !matchingFamilies.isEmpty || !allSuggestions.isEmpty
+    }
+
     /// Track campaign feed updates from the shared store so search stays in sync
     /// with the rest of the app without maintaining its own stale cache.
     private var campaignRefreshToken: String {
@@ -98,7 +112,7 @@ struct GameSearchField: View {
     private var shouldShowNoMatchesState: Bool {
         !normalizedQuery.isEmpty
             && !isSearchingTwitch
-            && allSuggestions.isEmpty
+            && !hasVisibleSuggestions
             && filteredGames.isEmpty
             && twitchSearchResults.isEmpty
             && twitchSearchErrorMessage == nil
@@ -108,7 +122,7 @@ struct GameSearchField: View {
     private var shouldShowSearchErrorState: Bool {
         !normalizedQuery.isEmpty
             && !isSearchingTwitch
-            && allSuggestions.isEmpty
+            && !hasVisibleSuggestions
             && hasAccounts
             && twitchSearchErrorMessage != nil
     }
@@ -117,7 +131,7 @@ struct GameSearchField: View {
     private var shouldShowAlreadyAddedMatchesState: Bool {
         !normalizedQuery.isEmpty
             && !isSearchingTwitch
-            && allSuggestions.isEmpty
+            && !hasVisibleSuggestions
             && filteredGames.isEmpty
             && !twitchSearchResults.isEmpty
             && hasAccounts
@@ -194,7 +208,7 @@ struct GameSearchField: View {
                     accountRequiredNotice
                 }
             } else if showSuggestions {
-                if allSuggestions.isEmpty {
+                if !hasVisibleSuggestions {
                     if shouldShowLoadingState || isSearchingTwitch {
                         HStack(spacing: 8) {
                             ProgressView()
@@ -245,6 +259,26 @@ struct GameSearchField: View {
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) {
+                            if !matchingFamilies.isEmpty {
+                                suggestionSectionTitle("Game Families")
+                                ForEach(matchingFamilies, id: \.rawValue) { family in
+                                    GameFamilySuggestionRow(family: family) {
+                                        settings.addGameFamily(family)
+                                        searchText = ""
+                                        showSuggestions = false
+                                        twitchSearchResults = []
+                                    }
+                                }
+                            }
+
+                            if !matchingFamilies.isEmpty && !allSuggestions.isEmpty {
+                                Divider().padding(.vertical, 3)
+                            }
+
+                            if !allSuggestions.isEmpty {
+                                suggestionSectionTitle("Games")
+                            }
+
                             if shouldShowDiscoveryHint {
                                 Text("Can't find your game? Search all of Twitch.")
                                     .font(.caption)
@@ -303,6 +337,15 @@ struct GameSearchField: View {
                 }
             }
         }
+    }
+
+    private func suggestionSectionTitle(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.top, 7)
+            .padding(.bottom, 3)
     }
 
     /// Every suggestion in this field comes from Twitch — the account's campaign feed for the
@@ -471,6 +514,39 @@ struct GameSearchField: View {
     }
 }
 
+/// A clearly-labelled family result. Its `repeat` icon is intentionally kept
+/// on both the searchable result and the saved rule so the broad match is never
+/// mistaken for a one-off Twitch category.
+private struct GameFamilySuggestionRow: View {
+    let family: GameFamily
+    let onSelect: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "repeat")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 24, height: 32)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(family.displayName)
+                    .lineLimit(1)
+                Text("Wildcard · \(family.matchingDescription)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            Button("Add Wildcard", action: onSelect)
+                .controlSize(.small)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+    }
+}
+
 // MARK: - Suggestion Row
 
 /// A single game suggestion in the search dropdown.
@@ -557,7 +633,11 @@ struct GameTokensContainer: View {
                 GameTokenView(
                     preference: pref,
                     settings: settings,
-                    hasActiveDrops: activeDropGameNameSet.contains(pref.gameName.lowercased())
+                    hasActiveDrops: pref.gameFamily.map { family in
+                        minerManager.campaignStore.campaigns.contains {
+                            $0.isTimeActive && family.matches(gameName: $0.gameName)
+                        }
+                    } ?? activeDropGameNameSet.contains(pref.gameName.lowercased())
                 )
             }
         }
@@ -641,7 +721,11 @@ struct GameTokenView: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            if let stateIcon {
+            if preference.isWildcard {
+                Image(systemName: "repeat")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+            } else if let stateIcon {
                 Image(systemName: stateIcon)
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(stateColor)
@@ -672,32 +756,36 @@ struct GameTokenView: View {
         }
         .contentShape(Capsule())
         .onTapGesture {
-            settings.togglePreferenceState(for: preference)
+            if !preference.isWildcard {
+                settings.togglePreferenceState(for: preference)
+            }
         }
-        .help("\(preference.gameName) — \(stateLabel). Click to cycle preference state.")
+        .help(preference.isWildcard ? "\(preference.gameName) wildcard family" : "\(preference.gameName) — \(stateLabel). Click to cycle preference state.")
         .contextMenu {
-            Button {
-                settings.setPreferenceState(.preferred, for: preference)
-            } label: {
-                Label("Set Preferred", systemImage: "star.fill")
-            }
-            .disabled(preference.state == .preferred)
+            if !preference.isWildcard {
+                Button {
+                    settings.setPreferenceState(.preferred, for: preference)
+                } label: {
+                    Label("Set Preferred", systemImage: "star.fill")
+                }
+                .disabled(preference.state == .preferred)
 
-            Button {
-                settings.setPreferenceState(.excluded, for: preference)
-            } label: {
-                Label("Set Excluded", systemImage: "minus.circle.fill")
-            }
-            .disabled(preference.state == .excluded)
+                Button {
+                    settings.setPreferenceState(.excluded, for: preference)
+                } label: {
+                    Label("Set Excluded", systemImage: "minus.circle.fill")
+                }
+                .disabled(preference.state == .excluded)
 
-            Button {
-                settings.setPreferenceState(.neutral, for: preference)
-            } label: {
-                Label("Set Neutral", systemImage: "circle")
-            }
-            .disabled(preference.state == .neutral)
+                Button {
+                    settings.setPreferenceState(.neutral, for: preference)
+                } label: {
+                    Label("Set Neutral", systemImage: "circle")
+                }
+                .disabled(preference.state == .neutral)
 
-            Divider()
+                Divider()
+            }
 
             Button(role: .destructive) {
                 settings.removeGamePreference(preference)

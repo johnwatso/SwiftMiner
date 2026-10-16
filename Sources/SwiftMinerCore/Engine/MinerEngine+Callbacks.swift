@@ -52,7 +52,7 @@ extension MinerEngine {
         ignoredAccountLinkWarningGames: [String] = []
     ) async {
         self.priorityGames = priorityGames
-        await apiClient.setCampaignDiscoveryGames(priorityGames)
+        await apiClient.setCampaignDiscoveryGames(PriorityGameMatcher(priorityGames).discoveryGames)
         self.excludedGames = excludedGames
         self.enableBadgesEmotes = enableBadgesEmotes
         self.showClaimNotifications = showClaimNotifications
@@ -75,7 +75,7 @@ extension MinerEngine {
     public func updatePriorityGames(_ priorityGames: [String]) {
         self.priorityGames = priorityGames
         let apiClient = self.apiClient
-        Task { await apiClient.setCampaignDiscoveryGames(priorityGames) }
+        Task { await apiClient.setCampaignDiscoveryGames(PriorityGameMatcher(priorityGames).discoveryGames) }
         // Waking the engine might be desired, but periodic refresh will handle it too.
     }
 

@@ -1121,7 +1121,8 @@ public final class Settings {
                 gameName: trimmedName,
                 boxArtURL: preference.boxArtURL,
                 customArtworkURL: preference.customArtworkURL,
-                state: preference.state
+                state: preference.state,
+                match: preference.match
             )
 
             guard seen.insert(preferenceKey(for: normalized)).inserted else { continue }
@@ -1188,8 +1189,11 @@ public final class Settings {
             .localizedCaseInsensitiveCompare(gameName.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
     }
 
-    private func preferenceKey(for preference: GamePreference) -> String {
-        preferenceKey(gameId: preference.gameId, gameName: preference.gameName)
+    func preferenceKey(for preference: GamePreference) -> String {
+        if let family = preference.gameFamily {
+            return family.priorityToken
+        }
+        return preferenceKey(gameId: preference.gameId, gameName: preference.gameName)
     }
 
     private func failoverKey(for failover: GameFailoverStreamer) -> String {

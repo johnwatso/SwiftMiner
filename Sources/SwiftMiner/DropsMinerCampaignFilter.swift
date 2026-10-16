@@ -33,27 +33,9 @@ enum DropsMinerCampaignFilter {
     }
 
     private static func matchesPriority(_ campaign: CampaignViewData, priorityGames: [String]) -> Bool {
-        let gameId = campaign.gameId?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
-        let gameName = normalizedGameName(campaign.gameName)
-
-        return priorityGames.contains { priority in
-            let trimmed = priority.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return false }
-
-            if !gameId.isEmpty && trimmed.lowercased() == gameId {
-                return true
-            }
-
-            return normalizedGameName(trimmed) == gameName
-        }
-    }
-
-    private static func normalizedGameName(_ value: String) -> String {
-        value
-            .lowercased()
-            .unicodeScalars
-            .filter { CharacterSet.alphanumerics.contains($0) }
-            .map(String.init)
-            .joined()
+        PriorityGameMatcher(priorityGames).matches(
+            gameId: campaign.gameId ?? "",
+            gameName: campaign.gameName
+        )
     }
 }

@@ -35,8 +35,7 @@ extension MinerEngine {
         strategy: MiningStrategy,
         logSummary: Bool = true
     ) -> [Campaign] {
-        let priorityKeys = priorityGames.map { normalizedGameKey($0) }.filter { !$0.isEmpty }
-        let prioritySet = Set(priorityKeys)
+        let priorityMatcher = PriorityGameMatcher(priorityGames)
         let excludedSet = Set(excludedGames.map { normalizedGameKey($0) }.filter { !$0.isEmpty })
         var filteredOutReasons: [String: Int] = [:]
         let linkedGameKeys = Self.linkedGameKeys(in: campaigns)
@@ -104,8 +103,7 @@ extension MinerEngine {
                 && (linkedGameKeys.contains(gameName) || linkedGameKeys.contains(gameId))
             if !campaign.isAccountConnected
                 && !linkVouchedByGame
-                && !prioritySet.contains(gameName)
-                && !prioritySet.contains(gameId) {
+                && !priorityMatcher.matches(gameId: campaign.game.id, gameName: campaign.gameName) {
                 filteredOutReasons["unlinked_not_prioritised", default: 0] += 1
                 return false
             }
@@ -116,7 +114,7 @@ extension MinerEngine {
                 return false
             }
 
-            if strategy == .onlyPriority && !prioritySet.contains(gameName) && !prioritySet.contains(gameId) {
+            if strategy == .onlyPriority && !priorityMatcher.matches(gameId: campaign.game.id, gameName: campaign.gameName) {
                 filteredOutReasons["not_prioritised", default: 0] += 1
                 return false
             }
@@ -136,7 +134,7 @@ extension MinerEngine {
             return true
         }
 
-        let sorted = sortedCandidates(eligible, priorityKeys: priorityKeys, strategy: strategy)
+        let sorted = sortedCandidates(eligible, priorityKeys: priorityGames, strategy: strategy)
         let filterSummary = filteredOutReasons
             .sorted(by: { $0.key < $1.key })
             .map { "\($0.key)=\($0.value)" }
@@ -371,9 +369,9 @@ extension MinerEngine {
 
         let gameKey = normalizedGameSelectionKey(primary.gameName)
         let gameId = normalizedGameSelectionKey(primary.game.id)
-        let prioritySet = Set(priorityGames.map { normalizedGameSelectionKey($0) }.filter { !$0.isEmpty })
+        let priorityMatcher = PriorityGameMatcher(priorityGames)
         let excludedSet = Set(excludedGames.map { normalizedGameSelectionKey($0) }.filter { !$0.isEmpty })
-        let selectedGameIsPrioritised = prioritySet.contains(gameKey) || prioritySet.contains(gameId)
+        let selectedGameIsPrioritised = priorityMatcher.matches(gameId: primary.game.id, gameName: primary.gameName)
 
         var seen = Set(primaryCandidates.map(\.id))
         var expanded = primaryCandidates
@@ -433,9 +431,10 @@ extension MinerEngine {
     }
 
     private static func priorityIndex(for campaign: Campaign, priorityKeys: [String]) -> Int {
-        let gameName = normalizedGameSelectionKey(campaign.gameName)
-        let gameId = normalizedGameSelectionKey(campaign.game.id)
-        return priorityKeys.firstIndex { $0 == gameName || $0 == gameId } ?? Int.max
+        PriorityGameMatcher(priorityKeys).priorityIndex(
+            gameId: campaign.game.id,
+            gameName: campaign.gameName
+        )
     }
 
     func normalizedGameKey(_ value: String) -> String {
@@ -1064,12 +1063,11 @@ extension MinerEngine {
             // TDM PARITY: twitch.py line 758 uses reverse=True which sorts descending (highest first)
             let sortedChannels = liveChannels.sorted { a, b in
                 // Priority games check (highest priority first)
-                let aPriorityIndex = priorityGames.firstIndex(of: a.gameName ?? "")
-                let bPriorityIndex = priorityGames.firstIndex(of: b.gameName ?? "")
+                let matcher = PriorityGameMatcher(priorityGames)
+                let aPriorityIndex = matcher.priorityIndex(gameId: a.gameId ?? "", gameName: a.gameName ?? "")
+                let bPriorityIndex = matcher.priorityIndex(gameId: b.gameId ?? "", gameName: b.gameName ?? "")
                 if aPriorityIndex != bPriorityIndex {
-                    let aRank = aPriorityIndex ?? Int.max
-                    let bRank = bPriorityIndex ?? Int.max
-                    return aRank < bRank
+                    return aPriorityIndex < bPriorityIndex
                 }
 
                 // ACL-based check (ACL channels first)

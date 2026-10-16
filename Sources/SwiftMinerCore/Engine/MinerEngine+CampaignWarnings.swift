@@ -24,8 +24,8 @@ extension MinerEngine {
     func warnForUnlinkedPriorityCampaigns(in campaigns: [Campaign]) async {
         let isGlobalIgnore = ignoredAccountLinkWarningGames.contains("all")
         
-        let priorityGamesLower = Set(priorityGames.map { $0.lowercased() })
-        guard !priorityGamesLower.isEmpty else {
+        let priorityMatcher = PriorityGameMatcher(priorityGames)
+        guard !priorityMatcher.rules.isEmpty else {
             warnedUnlinkedPriorityGames.removeAll()
             return
         }
@@ -37,7 +37,7 @@ extension MinerEngine {
                 && !campaign.isAccountConnected
                 // Unknown is not unlinked: a TV account learns link state from inventory.
                 && !campaignsAwaitingLinkState.contains(campaign.id)
-                && priorityGamesLower.contains(campaign.gameName.lowercased())
+                && priorityMatcher.matches(gameId: campaign.game.id, gameName: campaign.gameName)
                 && campaign.drops.contains(where: { !$0.isClaimed })
         }
 
@@ -94,14 +94,13 @@ extension MinerEngine {
     /// Twitch returns made the Activity Log look like the miner was considering
     /// work outside the operator's configured priorities.
     func warnForSubscriptionRequiredCampaigns(in campaigns: [Campaign]) async {
-        let priorityKeys = Set(priorityGames.map { normalizedGameKey($0) }.filter { !$0.isEmpty })
-        guard !priorityKeys.isEmpty else { return }
+        let priorityMatcher = PriorityGameMatcher(priorityGames)
+        guard !priorityMatcher.rules.isEmpty else { return }
 
         let subscriptionCampaigns = campaigns.filter { campaign in
             campaign.isTimeActive
                 && !campaign.isLikelyInternalTestCampaign
-                && (priorityKeys.contains(normalizedGameKey(campaign.gameName))
-                    || priorityKeys.contains(normalizedGameKey(campaign.game.id)))
+                && priorityMatcher.matches(gameId: campaign.game.id, gameName: campaign.gameName)
                 && campaign.subscriptionRequiredDrops.contains(where: { !$0.isClaimed })
         }
 

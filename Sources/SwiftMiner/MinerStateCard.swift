@@ -1394,12 +1394,10 @@ struct MinerActivitySnapshot {
         priorityGames: [String],
         includesBadgeAndEmoteCampaigns: Bool = true
     ) -> Bool {
-        let priorityKeys = Set(priorityGames.map {
-            $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        })
+        let priorityMatcher = PriorityGameMatcher(priorityGames)
         let watchable = campaigns.filter { campaign in
             campaign.isTimeActive
-                && priorityKeys.contains(campaign.gameName.lowercased())
+                && priorityMatcher.matches(gameId: campaign.game.id, gameName: campaign.gameName)
                 && campaign.drops.contains { !$0.isSubscriptionRequired }
                 && (includesBadgeAndEmoteCampaigns || !campaign.hasOnlyBadgesOrEmotes)
         }
@@ -1604,7 +1602,7 @@ struct MinerActivitySnapshot {
         includesBadgeAndEmoteCampaigns: Bool
     ) -> [Campaign] {
         let priorityKeys = priorityGames.map(normalizedGameKey).filter { !$0.isEmpty }
-        let prioritySet = Set(priorityKeys)
+        let priorityMatcher = PriorityGameMatcher(priorityGames)
         let excludedSet = Set(excludedGames.map(normalizedGameKey).filter { !$0.isEmpty })
 
         let candidates = miner.allCampaigns.filter { campaign in
@@ -1616,7 +1614,7 @@ struct MinerActivitySnapshot {
 
             let gameName = normalizedGameKey(campaign.game.name)
             let gameId = normalizedGameKey(campaign.game.id)
-            let isPriority = prioritySet.contains(gameName) || prioritySet.contains(gameId)
+            let isPriority = priorityMatcher.matches(gameId: campaign.game.id, gameName: campaign.game.name)
             // Match the engine: an unlinked campaign is still schedulable when this miner
             // explicitly prioritises its game. The resulting item carries the link warning
             // rather than disappearing from "Up Next".
@@ -1706,7 +1704,7 @@ struct MinerActivitySnapshot {
         ignoredAccountLinkGameIds: [String]
     ) -> [MinerActivityItem] {
         let priorityKeys = priorityGames.map(normalizedGameKey).filter { !$0.isEmpty }
-        let prioritySet = Set(priorityKeys)
+        let priorityMatcher = PriorityGameMatcher(priorityGames)
         let excludedSet = Set(excludedGames.map(normalizedGameKey).filter { !$0.isEmpty })
 
         let activePriorityUnlinked = miner.allCampaigns.filter { campaign in
@@ -1723,7 +1721,7 @@ struct MinerActivitySnapshot {
             guard !excludedSet.contains(gameName), !excludedSet.contains(gameId) else { return false }
             
             // 2. Must be prioritized
-            guard prioritySet.contains(gameName) || prioritySet.contains(gameId) else { return false }
+            guard priorityMatcher.matches(gameId: campaign.game.id, gameName: campaign.game.name) else { return false }
             
             // 3. Must be UNLINKED
             guard !campaign.isAccountConnected else { return false }
@@ -1787,9 +1785,7 @@ struct MinerActivitySnapshot {
     }
 
     private static func priorityIndex(for campaign: Campaign, priorityKeys: [String]) -> Int {
-        let gameName = normalizedGameKey(campaign.game.name)
-        let gameId = normalizedGameKey(campaign.game.id)
-        return priorityKeys.firstIndex { $0 == gameName || $0 == gameId } ?? Int.max
+        PriorityGameMatcher(priorityKeys).priorityIndex(gameId: campaign.game.id, gameName: campaign.game.name)
     }
 
     private static func normalizedGameKey(_ value: String) -> String {

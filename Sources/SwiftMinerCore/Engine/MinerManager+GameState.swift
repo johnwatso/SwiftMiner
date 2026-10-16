@@ -22,6 +22,7 @@ extension MinerManager {
         // `gameChannelAvailability` is the durable record — it survives that cleanup and names
         // the campaign each game was last probed for.
         var gamesToEvaluate = priorityGames
+        let priorityMatcher = PriorityGameMatcher(priorityGames)
         var scheduledCampaignIds: [String] = []
         if let currentCampaignId = miner.currentCampaignId {
             scheduledCampaignIds.append(currentCampaignId)
@@ -36,10 +37,7 @@ extension MinerManager {
             guard let scheduled = miner.allCampaigns.first(where: { $0.id == campaignId }) else { continue }
             let scheduledName = scheduled.gameName.lowercased()
             let scheduledId = scheduled.game.id.lowercased()
-            let alreadyCovered = gamesToEvaluate.contains {
-                let key = $0.lowercased()
-                return key == scheduledName || key == scheduledId
-            }
+            let alreadyCovered = priorityMatcher.matches(gameId: scheduledId, gameName: scheduledName)
             if !alreadyCovered {
                 gamesToEvaluate.append(scheduled.gameName)
             }
@@ -52,14 +50,19 @@ extension MinerManager {
             let gameKey = priorityGame.lowercased()
             guard seenGames.insert(gameKey).inserted else { continue }
 
+            let family = GameFamily(priorityToken: priorityGame)
+
             // Gather all campaigns for this prioritised game (used for linkage check)
             let campaignsForGame = miner.allCampaigns.filter {
-                $0.gameName.lowercased() == gameKey || $0.game.id.lowercased() == gameKey
+                if let family {
+                    return family.matches(gameName: $0.gameName)
+                }
+                return $0.gameName.lowercased() == gameKey || $0.game.id.lowercased() == gameKey
             }
 
             // 1. Identify the stable game metadata
-            let gameId = campaignsForGame.first?.game.id ?? gameKey
-            let gameName = campaignsForGame.first?.game.name ?? priorityGame
+            let gameId = family?.priorityToken ?? campaignsForGame.first?.game.id ?? gameKey
+            let gameName = family?.displayName ?? campaignsForGame.first?.game.name ?? priorityGame
 
             // 2. Filter out irrelevant campaigns (no drops, Just Chatting)
             let relevant = campaignsForGame.filter { campaign in

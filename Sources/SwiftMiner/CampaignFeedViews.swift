@@ -122,6 +122,9 @@ struct CampaignRailItem: Identifiable {
     /// Whether this card stands for a stored priority preference. Only those can be
     /// reordered — an unpinned campaign has no slot in the saved order to move.
     var isPriorityPinned = false
+    /// A game-family rule such as Call of Duty. The card uses the current title's
+    /// artwork but remains visibly distinct from an ordinary game card.
+    var isWildcard = false
 }
 
 
@@ -184,6 +187,12 @@ struct CampaignFeedCard: View {
 
     private var currentPreference: GamePreference? {
         guard let game = item.game else { return nil }
+        if item.isWildcard {
+            return settings.gamePreferences.first {
+                $0.state == .preferred
+                    && $0.gameFamily?.priorityToken == game.id
+            }
+        }
         let matches = settings.gamePreferences.filter { preference in
             let idMatches = !game.id.isEmpty && preference.gameId == game.id
             let nameMatches = preference.gameName.localizedCaseInsensitiveCompare(game.name) == .orderedSame
@@ -215,7 +224,7 @@ struct CampaignFeedCard: View {
     }
 
     private var accessibilityTitle: String {
-        item.gameName
+        item.isWildcard ? "\(item.gameName), wildcard" : item.gameName
     }
 
     /// The drop status a queue card actually draws. Nothing to report means nothing
@@ -277,7 +286,7 @@ struct CampaignFeedCard: View {
                 // The artwork already names the game, so a queue card carries no title.
                 // Only a live drop status appears, and only then is there a short scrim
                 // under it — otherwise the artwork runs to the bottom edge.
-                if let dropState = queueDropState {
+                if item.isWildcard || queueDropState != nil {
                     LinearGradient(
                         stops: [
                             .init(color: .clear, location: 0),
@@ -292,7 +301,15 @@ struct CampaignFeedCard: View {
                     .allowsHitTesting(false)
                     .zIndex(1)
 
-                    PriorityQueueDropLabel(state: dropState)
+                    HStack(spacing: 6) {
+                        if item.isWildcard {
+                            WildcardQueueLabel()
+                        }
+
+                        if let dropState = queueDropState {
+                            PriorityQueueDropLabel(state: dropState)
+                        }
+                    }
                         .padding(PriorityQueueCardMarkings.inset)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                         .allowsHitTesting(false)
@@ -338,6 +355,7 @@ struct CampaignFeedCard: View {
                     )
                     .zIndex(3)
             }
+
         }
         .frame(width: prominence.size.width, height: prominence.size.height, alignment: .topLeading)
         .clipShape(RoundedRectangle(cornerRadius: GlassRadius.medium, style: .continuous))
@@ -373,25 +391,27 @@ struct CampaignFeedCard: View {
         }
         .contextMenu {
             if let game = item.game, !item.isPlaceholder {
-                Button {
-                    Settings.shared.setGamePreference(game, state: .preferred)
-                } label: {
-                    GameActionMenuLabel(
-                        title: "Prioritise Game",
-                        systemImage: "star"
-                    )
-                }
+                if !item.isWildcard {
+                    Button {
+                        Settings.shared.setGamePreference(game, state: .preferred)
+                    } label: {
+                        GameActionMenuLabel(
+                            title: "Prioritise Game",
+                            systemImage: "star"
+                        )
+                    }
 
-                Button {
-                    Settings.shared.setGamePreference(game, state: .excluded)
-                } label: {
-                    GameActionMenuLabel(
-                        title: "Exclude Game",
-                        systemImage: "minus.circle"
-                    )
-                }
+                    Button {
+                        Settings.shared.setGamePreference(game, state: .excluded)
+                    } label: {
+                        GameActionMenuLabel(
+                            title: "Exclude Game",
+                            systemImage: "minus.circle"
+                        )
+                    }
 
-                Divider()
+                    Divider()
+                }
 
                 if canRemoveFromPrioritised, let preference = currentPreference {
                     Button(role: .destructive) {
@@ -417,25 +437,27 @@ struct CampaignFeedCard: View {
                     }
                 }
 
-                Button {
-                    onUploadCustomArtwork(game)
-                } label: {
-                    GameActionMenuLabel(
-                        title: "Upload Custom Artwork",
-                        subtitle: "Cache a local image in Application Support for this game.",
-                        systemImage: "square.and.arrow.up"
-                    )
-                }
-
-                if hasCustomArtwork {
-                    Button(role: .destructive) {
-                        Settings.shared.removeCustomArtwork(for: game)
+                if !item.isWildcard {
+                    Button {
+                        onUploadCustomArtwork(game)
                     } label: {
                         GameActionMenuLabel(
-                            title: "Remove Custom Artwork",
-                            subtitle: "Return to the artwork Twitch supplies.",
-                            systemImage: SystemSymbolCompatibility.resolvedName(for: "photo.badge.minus")
+                            title: "Upload Custom Artwork",
+                            subtitle: "Cache a local image in Application Support for this game.",
+                            systemImage: "square.and.arrow.up"
                         )
+                    }
+
+                    if hasCustomArtwork {
+                        Button(role: .destructive) {
+                            Settings.shared.removeCustomArtwork(for: game)
+                        } label: {
+                            GameActionMenuLabel(
+                                title: "Remove Custom Artwork",
+                                subtitle: "Return to the artwork Twitch supplies.",
+                                systemImage: SystemSymbolCompatibility.resolvedName(for: "photo.badge.minus")
+                            )
+                        }
                     }
                 }
             }
@@ -1007,6 +1029,62 @@ struct PriorityQueueDropLabel: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(state.accessibilityDescription)
+    }
+}
+
+/// Identifies a franchise-wide priority rule while letting the adjacent drop label
+/// remain the primary operational signal. Its box matches `PriorityQueueDropLabel`;
+/// only the symbol and text carry a slow holographic rainbow sweep, like a rare foil card.
+private struct WildcardQueueLabel: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// One full colour cycle repeated twice so shifting by one label width loops seamlessly.
+    private static let holoColors: [Color] = {
+        let cycle = stride(from: 0.0, through: 1.0, by: 1.0 / 6.0).map {
+            Color(hue: $0, saturation: 0.55, brightness: 1.0)
+        }
+        return cycle + cycle.dropFirst()
+    }()
+
+    private var content: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "sparkles")
+            Text("Wildcard")
+        }
+        .font(.caption2.weight(.medium))
+        .lineLimit(1)
+    }
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: reduceMotion)) { context in
+            let phase = reduceMotion
+                ? 0.0
+                : context.date.timeIntervalSinceReferenceDate
+                    .truncatingRemainder(dividingBy: 4.0) / 4.0
+
+            content
+                .hidden()
+                .overlay {
+                    LinearGradient(
+                        colors: Self.holoColors,
+                        startPoint: UnitPoint(x: -phase, y: 0.2),
+                        endPoint: UnitPoint(x: 2.0 - phase, y: 0.8)
+                    )
+                    .mask { content }
+                }
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .background {
+                    RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
+                        .fill(Color.black.opacity(0.48))
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
+                }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Wildcard game family")
     }
 }
 

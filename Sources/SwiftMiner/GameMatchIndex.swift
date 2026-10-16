@@ -56,6 +56,8 @@ struct GameMatchIndex {
     private let preferred: Lookup
     private let excludedKeys: Set<String>
     private let priorityRankByKey: [String: Int]
+    private let priorityMatcher: PriorityGameMatcher
+    private let familyPreferences: [GamePreference]
     private let matchesFoldedNames: Bool
 
     /// Preferences in the `.preferred` state, in list order.
@@ -72,11 +74,12 @@ struct GameMatchIndex {
         matchesFoldedNames: Bool = true
     ) {
         self.matchesFoldedNames = matchesFoldedNames
-        all = Lookup(gamePreferences, matchesFoldedNames: matchesFoldedNames)
+        all = Lookup(gamePreferences.filter { !$0.isWildcard }, matchesFoldedNames: matchesFoldedNames)
         preferred = Lookup(
-            gamePreferences.filter { $0.state == .preferred },
+            gamePreferences.filter { $0.state == .preferred && !$0.isWildcard },
             matchesFoldedNames: matchesFoldedNames
         )
+        familyPreferences = gamePreferences.filter(\.isWildcard)
         excludedKeys = Set(excludedGames.compactMap { Self.caseInsensitiveKey($0) })
 
         var priorityRankByKey: [String: Int] = [:]
@@ -88,6 +91,7 @@ struct GameMatchIndex {
             }
         }
         self.priorityRankByKey = priorityRankByKey
+        priorityMatcher = PriorityGameMatcher(priorityGames)
     }
 
     /// Excluded games are listed by name, but some callers also compared the list
@@ -107,16 +111,22 @@ struct GameMatchIndex {
 
     /// Position in the priority list, or `Int.max` when the game is not pinned.
     func priorityRank(gameName: String) -> Int {
+        let familyRank = priorityMatcher.priorityIndex(gameId: "", gameName: gameName)
+        if familyRank != .max { return familyRank }
         guard let key = Self.caseInsensitiveKey(gameName) else { return .max }
         return priorityRankByKey[key] ?? .max
     }
 
     func hasPreferredMatch(gameId: String?, gameName: String) -> Bool {
         preferred.containsMatch(keys: keys(gameId: gameId, gameName: gameName))
+            || familyPreferences.contains { preference in
+                preference.state == .preferred && preference.gameFamily?.matches(gameName: gameName) == true
+            }
     }
 
     func matchedPreferences(gameId: String?, gameName: String) -> [GamePreference] {
         all.matches(keys: keys(gameId: gameId, gameName: gameName))
+            + familyPreferences.filter { $0.gameFamily?.matches(gameName: gameName) == true }
     }
 
     /// The preference a matching game should draw from: one carrying uploaded artwork wins

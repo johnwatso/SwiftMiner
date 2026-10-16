@@ -1117,9 +1117,9 @@ public actor MinerEngine {
         let rawProgress = try await dropsService.getOverallProgress()
         
         // Strict prioritisation contract: Filter progress to prioritised games only.
-        let prioritySet = Set(priorityGames.map { $0.lowercased() })
+        let priorityMatcher = PriorityGameMatcher(priorityGames)
         let filteredCampaigns = rawProgress.campaigns.filter { cp in
-            prioritySet.contains(cp.gameName.lowercased())
+            priorityMatcher.matches(gameId: "", gameName: cp.gameName)
         }
         
         // Re-calculate totals based on filtered set

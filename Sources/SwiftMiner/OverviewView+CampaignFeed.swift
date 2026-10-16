@@ -271,7 +271,37 @@ extension OverviewView {
         // Only built if some preferred game turns out to have no eligible campaign.
         var artworkIndex: OverviewArtworkResolver.ArtworkIndex?
 
-        for preference in context.preferences.preferredPreferences {
+        // Keep the persisted order, including family wildcards. `GameMatchIndex`
+        // intentionally leaves broad rules out of its exact-key lookup, but they
+        // still deserve a first-class slot in the queue.
+        for preference in preferredGames {
+            if let family = preference.gameFamily {
+                // A wildcard represents the franchise, not one permanently saved
+                // title. Use the newest eligible campaign it currently covers so
+                // the artwork always follows the latest game in Drops.
+                if let poolIndex = campaignPool.indices
+                    .filter({ index in
+                        !usedCampaignIds.contains(campaignPool[index].id)
+                            && family.matches(gameName: campaignPool[index].gameName)
+                    })
+                    .max(by: { campaignPool[$0].startDate < campaignPool[$1].startDate }) {
+                    let campaign = campaignPool[poolIndex]
+                    usedCampaignIds.insert(campaign.id)
+                    items.append(
+                        makeWildcardRailItem(
+                            preference,
+                            campaign: campaign,
+                            context: context
+                        )
+                    )
+                } else {
+                    let artwork = artworkIndex ?? makeArtworkIndex()
+                    artworkIndex = artwork
+                    items.append(makePreferredGameItem(preference, artwork: artwork, context: context))
+                }
+                continue
+            }
+
             let preferenceKeys = Set(
                 GameMatchIndex.keys(gameId: preference.gameId, gameName: preference.gameName)
             )
@@ -296,8 +326,16 @@ extension OverviewView {
             }
         }
 
+        let wildcardFamilies = preferredGames.compactMap(\.gameFamily)
         let unpinnedCampaigns = campaignPool
-            .filter { !usedCampaignIds.contains($0.id) }
+            // The wildcard card is the franchise's queue entry; do not append
+            // its individual games again as loose cards behind it.
+            .filter { campaign in
+                !usedCampaignIds.contains(campaign.id)
+                    && !wildcardFamilies.contains { family in
+                        family.matches(gameName: campaign.gameName)
+                    }
+            }
             .map { makeRailItem(for: $0, section: .prioritised, context: context) }
 
         items.append(contentsOf: unpinnedCampaigns)
@@ -343,6 +381,45 @@ extension OverviewView {
         )
     }
 
+    /// Turns the most recent matching campaign into a card for its *family* rule.
+    /// The underlying campaign still supplies live artwork, progress, and drop
+    /// state, while the card identity stays stable as new Call of Duty releases
+    /// take its place.
+    private func makeWildcardRailItem(
+        _ preference: GamePreference,
+        campaign: CampaignViewData,
+        context: CampaignFeedContext
+    ) -> CampaignRailItem {
+        let campaignItem = makeRailItem(
+            for: campaign,
+            section: .prioritised,
+            context: context,
+            isPriorityPinned: true
+        )
+        let family = preference.gameFamily!
+        return CampaignRailItem(
+            id: "preferred-family-\(family.rawValue)",
+            section: campaignItem.section,
+            gameName: preference.gameName,
+            campaignName: "Latest Drops: \(campaign.gameName)",
+            progressText: campaignItem.progressText,
+            progressPercent: campaignItem.progressPercent,
+            artworkURL: preference.customArtworkURL ?? campaignItem.artworkURL,
+            tint: campaignItem.tint,
+            hasOnlyBadgesOrEmotes: campaignItem.hasOnlyBadgesOrEmotes,
+            visualState: campaignItem.visualState,
+            watchers: campaignItem.watchers,
+            isDimmed: campaignItem.isDimmed,
+            isPlaceholder: false,
+            showsLiveMotion: campaignItem.showsLiveMotion,
+            usesCustomArtwork: preference.customArtworkURL != nil,
+            game: Game(id: family.priorityToken, name: preference.gameName, boxArtURL: campaignItem.artworkURL),
+            dropState: campaignItem.dropState,
+            isPriorityPinned: true,
+            isWildcard: true
+        )
+    }
+
     private func currentCampaign(for miner: MinerManager.ManagedMiner) -> CampaignViewData? {
         if let campaignId = miner.currentCampaignId {
             return campaigns.first(where: { $0.id == campaignId })
@@ -383,7 +460,7 @@ extension OverviewView {
             ?? preference.resolvedBoxArtURL
             ?? campaignArtwork
         return CampaignRailItem(
-            id: "preferred-\(preference.gameId.isEmpty ? preference.gameName : preference.gameId)",
+            id: "preferred-\(preference.gameFamily?.priorityToken ?? (preference.gameId.isEmpty ? preference.gameName : preference.gameId))",
             section: .prioritised,
             gameName: preference.gameName,
             campaignName: "",
@@ -398,12 +475,17 @@ extension OverviewView {
             isPlaceholder: false,
             showsLiveMotion: false,
             usesCustomArtwork: preference.customArtworkURL != nil,
-            game: Game(id: preference.gameId, name: preference.gameName, boxArtURL: artworkURL),
+            game: Game(
+                id: preference.gameFamily?.priorityToken ?? preference.gameId,
+                name: preference.gameName,
+                boxArtURL: artworkURL
+            ),
             dropState: context.dropStates.state(
                 gameId: preference.gameId,
                 gameName: preference.gameName
             ),
-            isPriorityPinned: true
+            isPriorityPinned: true,
+            isWildcard: preference.isWildcard
         )
     }
 
@@ -411,7 +493,13 @@ extension OverviewView {
         guard let game = item.game else { return }
         let preferred = preferredGames
         guard preferred.count > 1,
-              let sourceIndex = preferred.firstIndex(where: { preferenceMatches($0, game: game) }) else {
+              let sourceIndex = preferred.firstIndex(where: { preference in
+                  if item.isWildcard {
+                      return preference.isWildcard
+                          && preference.gameFamily?.priorityToken == game.id
+                  }
+                  return preferenceMatches(preference, game: game)
+              }) else {
             return
         }
 

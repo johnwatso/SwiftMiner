@@ -721,7 +721,51 @@ extension WebDashboardAssets {
       return (p.priorityGames || []).filter(g => !personalSet.has(g.toLowerCase()));
     }
 
+    /// A wildcard entry stands for a whole franchise. The list carries it as an
+    /// opaque token; the projection says what the token means.
+    function priorityFamily(p, rule) {
+      const families = p && p.priorityFamilies;
+      return families && families[rule] ? families[rule] : null;
+    }
+
+    function priorityLabel(p, rule) {
+      const family = priorityFamily(p, rule);
+      return family ? family.name : String(rule);
+    }
+
+    function normalizedTitle(name) {
+      return String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    }
+
+    /// Whether a list entry covers a game: a wildcard by franchise (the same
+    /// word-boundary rule the engine applies), anything else by exact name.
+    function priorityRuleMatches(p, rule, game) {
+      const family = priorityFamily(p, rule);
+      if (!family) return String(rule).toLowerCase() === String(game || '').toLowerCase();
+      const title = normalizedTitle(game);
+      return title === family.matchPrefix || title.startsWith(family.matchPrefix + ' ');
+    }
+
+    function priorityRuleIndex(p, rules, game) {
+      return (rules || []).findIndex(rule => priorityRuleMatches(p, rule, game));
+    }
+
+    function wildcardBadge(p, rule) {
+      const family = priorityFamily(p, rule);
+      if (!family) return '';
+      return `<span class="wildcard-badge" title="${esc(family.detail)}"><span class="wildcard-holo">&#10022; Wildcard</span></span>`;
+    }
+
+    /// Art for a wildcard: the franchise's current campaign, newest first.
+    function familyArtworkURL(p, rule) {
+      const matches = CAMPAIGNS
+        .filter(c => priorityRuleMatches(p, rule, c.game) && typeof c.boxArtURL === 'string' && c.boxArtURL.toLowerCase().startsWith('https://'))
+        .sort((a, b) => (b.status === 'available') - (a.status === 'available') || new Date(b.startsAt || 0) - new Date(a.startsAt || 0));
+      return matches.length ? matches[0].boxArtURL : '';
+    }
+
     function priorityArtworkURL(p, game) {
+      if (priorityFamily(p, game)) return familyArtworkURL(p, game);
       const key = String(game || '').trim().toLowerCase();
       const url = p && p.priorityGameArtwork ? p.priorityGameArtwork[key] : '';
       return typeof url === 'string' && url.toLowerCase().startsWith('https://') ? url : '';
@@ -788,7 +832,7 @@ extension WebDashboardAssets {
       let tiles = '';
       games.slice(0, wide).forEach((g, i) => {
         const cls = i < narrow ? '' : ' class="priority-art-wide"';
-        tiles += `<img${cls} alt="" data-game="${esc(g)}" data-art="${esc(priorityArtworkURL(p, g))}">`;
+        tiles += `<img${cls} alt="" data-game="${esc(priorityLabel(p, g))}" data-art="${esc(priorityArtworkURL(p, g))}">`;
       });
       const overflow = (limit, at) => {
         const extra = games.length - Math.min(limit, games.length);
@@ -842,10 +886,10 @@ extension WebDashboardAssets {
       let rows = '';
       games.forEach((game, index) => {
         rows += `<div class="campaign-row">
-          <img class="boxart" alt="" data-game="${esc(game)}" data-art="${esc(priorityArtworkURL(p, game))}">
+          <img class="boxart" alt="" data-game="${esc(priorityLabel(p, game))}" data-art="${esc(priorityArtworkURL(p, game))}">
           <div class="copy">
-            <div class="title">${esc(game)}</div>
-            <div class="details">Shared priority ${index + 1}</div>
+            <div class="title">${esc(priorityLabel(p, game))} ${wildcardBadge(p, game)}</div>
+            <div class="details">Shared priority ${index + 1}${priorityFamily(p, game) ? ' · ' + esc(priorityFamily(p, game).detail) : ''}</div>
           </div>
         </div>`;
       });
@@ -929,10 +973,10 @@ extension WebDashboardAssets {
         rows += `
           <li class="priority-row" data-i="${i}"${reorderable ? ' draggable="true"' : ''}>
             <span class="priority-rank">${i + 1}</span>
-            <img class="priority-row-art" alt="" data-game="${esc(g)}" data-art="${esc(personalArtworkURL(p, g))}">
-            <span class="priority-row-name">${esc(g)}</span>
+            <img class="priority-row-art" alt="" data-game="${esc(priorityLabel(p, g))}" data-art="${esc(personalArtworkURL(p, g))}">
+            <span class="priority-row-name">${esc(priorityLabel(p, g))}</span>${wildcardBadge(p, g)}
             <button class="priority-row-btn priority-row-menu-btn" type="button" data-menu-i="${i}"
-                    aria-label="Actions for ${esc(g)}" aria-haspopup="menu" aria-expanded="${personalMenuIndex === i}">
+                    aria-label="Actions for ${esc(priorityLabel(p, g))}" aria-haspopup="menu" aria-expanded="${personalMenuIndex === i}">
               <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"></circle><circle cx="12" cy="12" r="1.7"></circle><circle cx="19" cy="12" r="1.7"></circle></svg>
             </button>
             ${personalMenuIndex === i ? rowMenu(i, count) : ''}
@@ -1177,15 +1221,10 @@ extension WebDashboardAssets {
           .sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt))[0];
         return { kind: 'none', upcoming: upcoming || null };
       }
-      const ranking = new Map();
-      (p.priorityGames || []).forEach((g, i) => {
-        const key = String(g).toLowerCase();
-        if (!ranking.has(key)) ranking.set(key, i);
-      });
       let best = null;
       for (const c of eligible) {
-        const rank = ranking.get(String(c.game || '').toLowerCase());
-        if (rank === undefined) continue;
+        const rank = priorityRuleIndex(p, p.priorityGames, c.game);
+        if (rank < 0) continue;
         if (!best || rank < best.rank) best = { rank: rank, campaign: c };
       }
       if (!best) return { kind: 'unranked', count: eligible.length };
@@ -1196,7 +1235,7 @@ extension WebDashboardAssets {
     /// of only announcing it.
     function upNextReason(p, game) {
       const source = prioritySourceOf(p);
-      const isPersonal = (p.personalPriorityGames || []).some(g => String(g).toLowerCase() === String(game).toLowerCase());
+      const isPersonal = priorityRuleIndex(p, p.personalPriorityGames, game) >= 0;
       if (source === 'personal') return 'Your priority';
       if (source === 'globalAndPersonal' && isPersonal) return 'Your priority';
       return 'Shared priority';
@@ -1219,7 +1258,7 @@ extension WebDashboardAssets {
             <div class="title">${esc(c.game)}</div>
             <div class="details">${esc(c.dropCount || 0)} drops${gatedDetail}${when ? ' · ' + esc(when) : ''}</div>
           </div>
-          <button class="btn-secondary campaign-priority" data-game="${esc(c.game)}" ${accountId ? '' : 'disabled'}>${personal.some(g => g.toLowerCase() === String(c.game || '').toLowerCase()) ? 'Prioritised' : 'Prioritise'}</button>
+          <button class="btn-secondary campaign-priority" data-game="${esc(c.game)}" ${accountId ? '' : 'disabled'}>${priorityRuleIndex(p, personal, c.game) >= 0 ? 'Prioritised' : 'Prioritise'}</button>
         </div>`;
       }
       return `<div class="modal-backdrop" id="campaignsmodal">
@@ -1341,10 +1380,10 @@ extension WebDashboardAssets {
     /// nothing to narrow to, so the chooser disappears and everything shows.
     function completedDropsView(p) {
       const all = p.recentCompletedCampaigns || [];
-      const priorities = new Set(priorityPreviewGames(p).map(g => String(g).toLowerCase()));
-      if (!priorities.size) return { rows: all, filterable: false, prioritiesOnly: false };
+      const priorities = priorityPreviewGames(p);
+      if (!priorities.length) return { rows: all, filterable: false, prioritiesOnly: false };
       if (completedDropsFilter === 'all') return { rows: all, filterable: true, prioritiesOnly: false };
-      const rows = all.filter(c => priorities.has(String(c.game || '').toLowerCase()));
+      const rows = all.filter(c => priorityRuleIndex(p, priorities, c.game) >= 0);
       return { rows, filterable: true, prioritiesOnly: true };
     }
 
@@ -1810,7 +1849,7 @@ extension WebDashboardAssets {
     function addPersonalGame(name, placement) {
       name = String(name || '').trim();
       if (!name) return;
-      if (!personal.some(g => g.toLowerCase() === name.toLowerCase())) {
+      if (priorityRuleIndex(PROJ, personal, name) < 0) {
         // "Prioritise" means top of the queue; the picker appends, because the
         // reader chose a game, not a rank.
         if (placement === 'append') personal.push(name); else personal.unshift(name);

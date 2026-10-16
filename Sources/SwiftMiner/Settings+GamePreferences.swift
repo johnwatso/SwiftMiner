@@ -192,7 +192,9 @@ extension Settings {
 
     /// Priority game names derived from preferences (backward compat for MinerEngine)
     public var priorityGames: [String] {
-        gameNames(for: .preferred)
+        gamePreferences
+            .filter { $0.state == .preferred }
+            .map(\.priorityToken)
     }
 
     public var accountPriorityGames: [String: [String]] {
@@ -226,8 +228,8 @@ extension Settings {
     /// prioritised anywhere — that operation then stays unobservable, which is the
     /// pre-existing behaviour rather than a regression.
     public var firstPriorityGameCategorySlug: String? {
-        let names = accountPriorityGames.values.flatMap { $0 }
-        for name in names {
+        let rules = accountPriorityGames.values.flatMap { $0 } + priorityGames
+        for name in PriorityGameMatcher(rules).discoveryGames {
             if let slug = TwitchCompatibilityRecovery.categorySlug(from: name) {
                 return slug
             }
@@ -499,18 +501,35 @@ extension Settings {
     /// Add or update a game preference with the provided state.
     public func setGamePreference(_ game: Game, state: PreferenceState) {
         var prefs = gamePreferences
-        if let index = prefs.firstIndex(where: { preferenceMatches($0, gameId: game.id, gameName: game.name) }) {
+        if let index = prefs.firstIndex(where: {
+            $0.match == .exact && preferenceMatches($0, gameId: game.id, gameName: game.name)
+        }) {
             let old = prefs[index]
             prefs[index] = GamePreference(
                 gameId: game.id,
                 gameName: game.name,
                 boxArtURL: game.boxArtURL ?? old.boxArtURL,
                 customArtworkURL: old.customArtworkURL,
-                state: state
+                state: state,
+                match: .exact
             )
         } else {
             prefs.append(GamePreference(gameId: game.id, gameName: game.name, boxArtURL: game.boxArtURL, state: state))
         }
+        gamePreferences = prefs
+    }
+
+    /// Adds a curated game-family wildcard. Families are priorities only: a
+    /// broad exclusion would make a future Twitch title silently disappear.
+    public func addGameFamily(_ family: GameFamily) {
+        var prefs = gamePreferences
+        guard !prefs.contains(where: { $0.gameFamily == family }) else { return }
+        prefs.append(GamePreference(
+            gameId: "",
+            gameName: family.displayName,
+            state: .preferred,
+            match: .gameFamily
+        ))
         gamePreferences = prefs
     }
 
@@ -526,10 +545,12 @@ extension Settings {
     /// Remove a specific game preference.
     public func removeGamePreference(_ preference: GamePreference) {
         var prefs = gamePreferences
-        let removed = prefs.filter { preferenceMatches($0, gameId: preference.gameId, gameName: preference.gameName) }
-        prefs.removeAll { preferenceMatches($0, gameId: preference.gameId, gameName: preference.gameName) }
+        let removed = prefs.filter { preferenceKey(for: $0) == preferenceKey(for: preference) }
+        prefs.removeAll { preferenceKey(for: $0) == preferenceKey(for: preference) }
         gamePreferences = prefs
-        clearFailoverStreamer(for: preference)
+        if !preference.isWildcard {
+            clearFailoverStreamer(for: preference)
+        }
         removeCachedArtworkFiles(for: removed)
     }
 
@@ -567,6 +588,9 @@ extension Settings {
 
     /// Set a stored preference to a specific state.
     public func setPreferenceState(_ state: PreferenceState, for preference: GamePreference) {
+        // Family rules deliberately remain priorities; switching the rule to an
+        // exclusion would be far broader than the user-visible control says.
+        guard !preference.isWildcard else { return }
         var prefs = gamePreferences
         if let idx = prefs.firstIndex(where: { preferenceMatches($0, gameId: preference.gameId, gameName: preference.gameName) }) {
             let old = prefs[idx]
@@ -575,7 +599,8 @@ extension Settings {
                 gameName: old.gameName,
                 boxArtURL: old.boxArtURL,
                 customArtworkURL: old.customArtworkURL,
-                state: state
+                state: state,
+                match: old.match
             )
         }
         gamePreferences = prefs

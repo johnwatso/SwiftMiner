@@ -231,6 +231,7 @@ struct GamePreferenceManagementView: View {
             preference: preference,
             settings: settings,
             storedFallbackLogin: fallbacks[preference.id] ?? fallbacks[Self.nameKey(for: preference.gameName)],
+            campaigns: minerManager.campaignStore.campaigns,
             isExpanded: expandedBinding(for: preference)
         )
         .padding(.horizontal, 10)
@@ -331,6 +332,7 @@ private struct GameRuleRow: View {
     var settings: Settings
     /// Resolved by the sheet so each row does not re-decode the failover rules.
     let storedFallbackLogin: String?
+    let campaigns: [Campaign]
     @Binding var isExpanded: Bool
 
     @State private var resolvedArtworkURL: URL?
@@ -341,12 +343,26 @@ private struct GameRuleRow: View {
         preference.state == .preferred
     }
 
+    private var latestWildcardGame: String? {
+        guard let family = preference.gameFamily else { return nil }
+        return campaigns
+            .filter { $0.isTimeActive && $0.canAttemptMining && family.matches(gameName: $0.gameName) }
+            .max(by: { $0.startDate < $1.startDate })?
+            .gameName
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             summaryRow
 
             if isPrioritised && isExpanded {
-                fallbackEditor
+                Group {
+                    if preference.isWildcard {
+                        wildcardDetails
+                    } else {
+                        fallbackEditor
+                    }
+                }
                     .padding(.leading, 34)
                     .padding(.top, 8)
                     .padding(.bottom, 2)
@@ -423,7 +439,12 @@ private struct GameRuleRow: View {
             }
 
             // The absence of a fallback stays quiet; only a configured one earns a line.
-            if isPrioritised, let storedFallbackLogin {
+            if preference.isWildcard {
+                Text(latestWildcardGame.map { "Wildcard · Latest Drops: \($0)" } ?? "Wildcard · \(preference.gameFamily?.matchingDescription ?? "Matches future titles")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            } else if isPrioritised, let storedFallbackLogin {
                 Text("@\(storedFallbackLogin) fallback configured")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -447,11 +468,21 @@ private struct GameRuleRow: View {
     }
 
     private var artwork: some View {
-        AsyncImage(url: resolvedArtworkURL) { image in
+        Group {
+            if preference.isWildcard {
+                Image(systemName: "repeat")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.accentColor.opacity(0.12))
+            } else {
+                AsyncImage(url: resolvedArtworkURL) { image in
             image.resizable().aspectRatio(contentMode: .fill)
-        } placeholder: {
+                } placeholder: {
             RoundedRectangle(cornerRadius: GlassRadius.subtle, style: .continuous)
                 .fill(.quaternary)
+                }
+            }
         }
         .frame(width: 24, height: 32)
         .clipShape(RoundedRectangle(cornerRadius: GlassRadius.subtle, style: .continuous))
@@ -460,19 +491,45 @@ private struct GameRuleRow: View {
         }
     }
 
+    @ViewBuilder
     private var statePicker: some View {
-        Picker("", selection: Binding(
-            get: { preference.state },
-            set: { settings.setPreferenceState($0, for: preference) }
-        )) {
-            Text("Prioritised").tag(PreferenceState.preferred)
-            Text("Excluded").tag(PreferenceState.excluded)
+        if preference.isWildcard {
+            Label("Wildcard", systemImage: "repeat")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(Color.accentColor)
+        } else {
+            Picker("", selection: Binding(
+                get: { preference.state },
+                set: { settings.setPreferenceState($0, for: preference) }
+            )) {
+                Text("Prioritised").tag(PreferenceState.preferred)
+                Text("Excluded").tag(PreferenceState.excluded)
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .controlSize(.small)
+            .frame(width: 104)
+            .accessibilityLabel("Rule for \(preference.gameName)")
         }
-        .pickerStyle(.menu)
-        .labelsHidden()
-        .controlSize(.small)
-        .frame(width: 104)
-        .accessibilityLabel("Rule for \(preference.gameName)")
+    }
+
+    private var wildcardDetails: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("Game family")
+                .font(.subheadline.weight(.semibold))
+            Text("Any active Twitch category beginning with ‘\(preference.gameName)’ is prioritised.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if let latestWildcardGame {
+                Text("Latest Drops: \(latestWildcardGame)")
+                    .font(.caption)
+                    .foregroundStyle(Color.accentColor)
+            } else {
+                Text("No matching active Drops campaign right now. New matching titles are included automatically.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     // MARK: Fallback streamer

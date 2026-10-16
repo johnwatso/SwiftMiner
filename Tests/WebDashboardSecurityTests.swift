@@ -608,8 +608,10 @@ final class WebDashboardSecurityTests: XCTestCase {
         XCTAssertTrue(js.contains("let completedDropsFilter = readCompletedDropsFilter();"))
         XCTAssertTrue(js.contains("=== 'all' ? 'all' : 'priorities'"))
         // Filters against the same effective list the Priorities card previews.
-        XCTAssertTrue(js.contains("new Set(priorityPreviewGames(p).map(g => String(g).toLowerCase()))"))
-        XCTAssertTrue(js.contains("if (!priorities.size) return { rows: all, filterable: false, prioritiesOnly: false };"))
+        XCTAssertTrue(js.contains("const priorities = priorityPreviewGames(p);"))
+        XCTAssertTrue(js.contains("if (!priorities.length) return { rows: all, filterable: false, prioritiesOnly: false };"))
+        // Wildcard entries cover a whole franchise, so rows match by rule, not exact name.
+        XCTAssertTrue(js.contains("priorityRuleIndex(p, priorities, c.game) >= 0"))
         XCTAssertTrue(js.contains("data-completed-filter=\"${value}\" aria-pressed=\"${chosen}\""))
         XCTAssertTrue(js.contains("${option('priorities', 'Priorities')}${option('all', 'All games')}"))
         XCTAssertTrue(js.contains("No priority games completed yet."))
