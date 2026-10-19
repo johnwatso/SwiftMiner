@@ -418,7 +418,86 @@ final class LogExporterTests: XCTestCase {
         let date = Date(timeIntervalSince1970: 1_730_000_000)
         let name = LogExporter.defaultFilename(for: date)
         XCTAssertTrue(name.hasPrefix("SwiftMiner-logs-"))
-        XCTAssertTrue(name.hasSuffix(".txt"))
+        XCTAssertTrue(name.hasSuffix(".zip"))
+        // The report inside the zip carries the same timestamp, so the unzipped file
+        // still identifies the export it came from.
+        XCTAssertEqual(
+            LogExporter.reportFilename(for: date),
+            name.replacingOccurrences(of: ".zip", with: ".txt")
+        )
+    }
+
+    // MARK: - Archive
+
+    /// Unzips `archive` the way Finder does and returns the files it holds, by name.
+    private func unzip(_ archive: Data) throws -> [String: Data] {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("LogExporterTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let zipURL = directory.appendingPathComponent("archive.zip")
+        let outURL = directory.appendingPathComponent("out", isDirectory: true)
+        try archive.write(to: zipURL)
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+        process.arguments = ["-x", "-k", zipURL.path, outURL.path]
+        try process.run()
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0)
+
+        var files: [String: Data] = [:]
+        for name in try FileManager.default.contentsOfDirectory(atPath: outURL.path) {
+            files[name] = try Data(contentsOf: outURL.appendingPathComponent(name))
+        }
+        return files
+    }
+
+    func testArchiveUnzipsToTheSameReadableReport() throws {
+        let report = LogExporter.buildReport(snapshot(events: [
+            event("Watch heartbeat sent for streamer → ok", miner: "m1"),
+            event("Bearer abcdefghij1234567890abcdefghij is gone", level: "error", offset: 30)
+        ]))
+        let date = Date(timeIntervalSince1970: 1_730_000_500)
+        let archive = try LogExporter.makeArchive(
+            report: report,
+            filename: LogExporter.reportFilename(for: date)
+        )
+
+        XCTAssertEqual(archive.prefix(4), Data([0x50, 0x4B, 0x03, 0x04]), "expected a zip local file header")
+        let files = try unzip(archive)
+        XCTAssertEqual(Array(files.keys), [LogExporter.reportFilename(for: date)])
+        let unzipped = try XCTUnwrap(files.values.first.map { String(decoding: $0, as: UTF8.self) })
+        XCTAssertEqual(unzipped, report)
+        // Redaction happens before zipping, so the archive never holds the secret.
+        XCTAssertFalse(unzipped.contains("abcdefghij1234567890abcdefghij"))
+    }
+
+    /// A week of activity log runs to tens of megabytes of plain text, past GitHub's 25 MB
+    /// attachment limit. The zip has to land well under it.
+    func testArchiveOfLargeReportFitsGitHubAttachmentLimit() throws {
+        let channels = ["hadi_ow", "jambre", "marvelrivals", "lady_k", "pikaboo", "stodeh"]
+        let campaigns = ["Hardware XP", "Standard Pack", "Tier 2", "Tier 3"]
+        let miners = (0..<5).map { _ in UUID().uuidString }
+        var events: [LogExporter.Snapshot.Event] = []
+        events.reserveCapacity(240_000)
+        for index in 0..<240_000 {
+            let miner = miners[index % miners.count]
+            let message: String
+            switch index % 4 {
+            case 0: message = "Watch heartbeat sent for \(channels[index % channels.count]) (broadcast \(index * 7919))"
+            case 1: message = "Progress +1 min on \(campaigns[index % campaigns.count]) (\(index % 240)/240 min)"
+            case 2: message = "[CampaignSelect] Smart: \(index % 90) total, \(index % 12) eligible, chose campaign id=\(UUID().uuidString)"
+            default: message = "[Perf] cycle no-candidates: total=\(index % 997)ms gql=\(index % 211)ms inventory=\(index % 83)ms"
+            }
+            events.append(event(message, miner: miner, offset: TimeInterval(index)))
+        }
+        let report = LogExporter.buildReport(snapshot(events: events))
+        XCTAssertGreaterThan(report.utf8.count, 30_000_000, "fixture should match the size users report")
+
+        let archive = try LogExporter.makeArchive(report: report, filename: "report.txt")
+        XCTAssertLessThan(archive.count, 25_000_000)
+        XCTAssertLessThan(archive.count, report.utf8.count / 4)
     }
 
     func testDiagnosticExportDefaultsToDesktop() {
