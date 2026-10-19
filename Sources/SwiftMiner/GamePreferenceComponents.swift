@@ -61,18 +61,27 @@ struct GameSearchField: View {
         searchQuery.lowercased()
     }
 
-    /// Families are curated rules, not Twitch search results. Keeping them
-    /// separate lets the picker explain that one choice will cover future
-    /// categories, instead of making it look like another title named Call of
-    /// Duty.
-    private var matchingFamilies: [GameFamily] {
-        GameFamily.matching(searchQuery: searchQuery).filter { family in
-            !settings.gamePreferences.contains(where: { $0.gameFamily == family })
+    /// Wildcards are rules, not Twitch search results. Known franchises get a
+    /// tailored suggestion; any other deliberate series term becomes a safe
+    /// title-prefix wildcard (for example, "NBA" covers annual NBA 2K titles).
+    private var matchingWildcards: [GameWildcard] {
+        let curated = GameFamily.matching(searchQuery: searchQuery)
+            .map(GameWildcard.init(family:))
+        let suggestions: [GameWildcard]
+        if curated.isEmpty, let wildcard = GameWildcard(searchQuery: searchQuery) {
+            suggestions = [wildcard]
+        } else {
+            suggestions = curated
+        }
+        return suggestions.filter { wildcard in
+            !settings.gamePreferences.contains {
+                $0.wildcard?.priorityToken == wildcard.priorityToken
+            }
         }
     }
 
     private var hasVisibleSuggestions: Bool {
-        !matchingFamilies.isEmpty || !allSuggestions.isEmpty
+        !matchingWildcards.isEmpty || !allSuggestions.isEmpty
     }
 
     /// Track campaign feed updates from the shared store so search stays in sync
@@ -259,11 +268,11 @@ struct GameSearchField: View {
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) {
-                            if !matchingFamilies.isEmpty {
-                                suggestionSectionTitle("Game Families")
-                                ForEach(matchingFamilies, id: \.rawValue) { family in
-                                    GameFamilySuggestionRow(family: family) {
-                                        settings.addGameFamily(family)
+                            if !matchingWildcards.isEmpty {
+                                suggestionSectionTitle("Wildcards")
+                                ForEach(matchingWildcards) { wildcard in
+                                    GameFamilySuggestionRow(wildcard: wildcard) {
+                                        settings.addWildcard(wildcard)
                                         searchText = ""
                                         showSuggestions = false
                                         twitchSearchResults = []
@@ -271,7 +280,7 @@ struct GameSearchField: View {
                                 }
                             }
 
-                            if !matchingFamilies.isEmpty && !allSuggestions.isEmpty {
+                            if !matchingWildcards.isEmpty && !allSuggestions.isEmpty {
                                 Divider().padding(.vertical, 3)
                             }
 
@@ -514,24 +523,24 @@ struct GameSearchField: View {
     }
 }
 
-/// A clearly-labelled family result. Its `repeat` icon is intentionally kept
-/// on both the searchable result and the saved rule so the broad match is never
-/// mistaken for a one-off Twitch category.
+/// A clearly-labelled wildcard result. Its sparkle icon is repeated on the
+/// searchable result and saved card so the broad match is never mistaken for a
+/// one-off Twitch category.
 private struct GameFamilySuggestionRow: View {
-    let family: GameFamily
+    let wildcard: GameWildcard
     let onSelect: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "repeat")
+            Image(systemName: "sparkles")
                 .font(.body.weight(.semibold))
                 .foregroundStyle(Color.accentColor)
                 .frame(width: 24, height: 32)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(family.displayName)
+                Text(wildcard.displayName)
                     .lineLimit(1)
-                Text("Wildcard · \(family.matchingDescription)")
+                Text("Wildcard · \(wildcard.matchingDescription)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -633,9 +642,9 @@ struct GameTokensContainer: View {
                 GameTokenView(
                     preference: pref,
                     settings: settings,
-                    hasActiveDrops: pref.gameFamily.map { family in
+                    hasActiveDrops: pref.wildcard.map { wildcard in
                         minerManager.campaignStore.campaigns.contains {
-                            $0.isTimeActive && family.matches(gameName: $0.gameName)
+                            $0.isTimeActive && wildcard.matches(gameName: $0.gameName)
                         }
                     } ?? activeDropGameNameSet.contains(pref.gameName.lowercased())
                 )

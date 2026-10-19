@@ -187,7 +187,10 @@ public struct TokenResponse: Codable, Sendable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         accessToken = try container.decode(String.self, forKey: .accessToken)
-        refreshToken = try container.decode(String.self, forKey: .refreshToken)
+        // Some first-party device clients return a usable access token without a refresh
+        // grant. Keep that account connectable; TwitchAuthService already revalidates these
+        // tokens directly instead of attempting a refresh with an empty value.
+        refreshToken = (try? container.decodeIfPresent(String.self, forKey: .refreshToken)) ?? ""
         tokenType = (try? container.decode(String.self, forKey: .tokenType)) ?? "bearer"
         
         // expires_in might be missing - default to 0 (no expiry)

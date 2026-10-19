@@ -50,19 +50,19 @@ extension MinerManager {
             let gameKey = priorityGame.lowercased()
             guard seenGames.insert(gameKey).inserted else { continue }
 
-            let family = GameFamily(priorityToken: priorityGame)
+            let wildcard = GameWildcard(priorityToken: priorityGame)
 
             // Gather all campaigns for this prioritised game (used for linkage check)
             let campaignsForGame = miner.allCampaigns.filter {
-                if let family {
-                    return family.matches(gameName: $0.gameName)
+                if let wildcard {
+                    return wildcard.matches(gameName: $0.gameName)
                 }
                 return $0.gameName.lowercased() == gameKey || $0.game.id.lowercased() == gameKey
             }
 
             // 1. Identify the stable game metadata
-            let gameId = family?.priorityToken ?? campaignsForGame.first?.game.id ?? gameKey
-            let gameName = family?.displayName ?? campaignsForGame.first?.game.name ?? priorityGame
+            let gameId = wildcard?.priorityToken ?? campaignsForGame.first?.game.id ?? gameKey
+            let gameName = wildcard?.displayName ?? campaignsForGame.first?.game.name ?? priorityGame
 
             // 2. Filter out irrelevant campaigns (no drops, Just Chatting)
             let relevant = campaignsForGame.filter { campaign in

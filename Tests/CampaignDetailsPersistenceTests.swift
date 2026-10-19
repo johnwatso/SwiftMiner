@@ -280,4 +280,95 @@ final class CampaignDetailsPersistenceTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: expected.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: "/etc/swiftminerpersistencetest.json"))
     }
+
+    // MARK: - DropCampaignDetails account variable
+
+    func testDetailsRequestIdentifiesTheAccountByNumericID() {
+        XCTAssertEqual(
+            TwitchAPIClient.dropCampaignDetailsUserVariable(accountId: "193463407", userLogin: "jonwatso"),
+            "193463407"
+        )
+        // No usable ID: the login is the only thing left to send.
+        XCTAssertEqual(
+            TwitchAPIClient.dropCampaignDetailsUserVariable(accountId: nil, userLogin: "jonwatso"),
+            "jonwatso"
+        )
+        XCTAssertEqual(
+            TwitchAPIClient.dropCampaignDetailsUserVariable(accountId: "", userLogin: "jonwatso"),
+            "jonwatso"
+        )
+        XCTAssertEqual(
+            TwitchAPIClient.dropCampaignDetailsUserVariable(accountId: "user123", userLogin: "jonwatso"),
+            "jonwatso"
+        )
+    }
+
+    /// Twitch answers a login in `channelLogin` with `user: null` and no error. Before the
+    /// variable carried the ID, that failure cached nothing, so every refresh re-sent the
+    /// whole fan-out. A resolvable request must be cached and answer the next lookup.
+    func testDetailsFetchedByAccountIDAreCachedForTheNextLookup() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer {
+            MockURLProtocol.requestHandler = nil
+            MockURLProtocol.lastRequest = nil
+        }
+
+        let accountId = "193463407"
+        let detailsRequests = LockedCounter()
+        MockURLProtocol.requestHandler = { request in
+            let ok = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            if request.url?.path == "/integrity" {
+                return (ok, Data(#"{"token":"integrity","expiration":4102444800000}"#.utf8))
+            }
+            let body = request.httpBody.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            let variables = body?["variables"] as? [String: Any]
+            detailsRequests.increment()
+            guard variables?["channelLogin"] as? String == accountId else {
+                return (ok, Data(#"{"data":{"user":null}}"#.utf8))
+            }
+            return (ok, Data(#"""
+            {"data":{"user":{"id":"193463407","dropCampaign":{"id":"campaign-1","name":"Season 4 Launch","status":"ACTIVE","timeBasedDrops":[]}}}}
+            """#.utf8))
+        }
+
+        let client = TwitchAPIClient(
+            authService: TwitchAuthService(
+                clientId: TwitchClientIDs.android,
+                tokenStore: InMemoryTokenStore(),
+                urlSession: session
+            ),
+            clientId: TwitchClientIDs.android,
+            session: session,
+            persistsCampaignCaches: false
+        )
+        await client.setAccountId(accountId)
+        await client.setUserLogin(login)
+        await client.updateAccessToken("token")
+
+        let first = try await client.fetchCampaignDetails(campaignId: "campaign-1", userLogin: login)
+        let second = try await client.fetchCampaignDetails(campaignId: "campaign-1", userLogin: login)
+
+        XCTAssertEqual(first.id, "campaign-1")
+        XCTAssertEqual(second.id, "campaign-1")
+        XCTAssertEqual(detailsRequests.value, 1, "the second lookup must be a cache hit")
+    }
+}
+
+private final class LockedCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    var value: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return count
+    }
+
+    func increment() {
+        lock.lock()
+        count += 1
+        lock.unlock()
+    }
 }

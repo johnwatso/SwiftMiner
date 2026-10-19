@@ -275,14 +275,14 @@ extension OverviewView {
         // intentionally leaves broad rules out of its exact-key lookup, but they
         // still deserve a first-class slot in the queue.
         for preference in preferredGames {
-            if let family = preference.gameFamily {
+            if let wildcard = preference.wildcard {
                 // A wildcard represents the franchise, not one permanently saved
                 // title. Use the newest eligible campaign it currently covers so
                 // the artwork always follows the latest game in Drops.
                 if let poolIndex = campaignPool.indices
                     .filter({ index in
                         !usedCampaignIds.contains(campaignPool[index].id)
-                            && family.matches(gameName: campaignPool[index].gameName)
+                            && wildcard.matches(gameName: campaignPool[index].gameName)
                     })
                     .max(by: { campaignPool[$0].startDate < campaignPool[$1].startDate }) {
                     let campaign = campaignPool[poolIndex]
@@ -326,14 +326,14 @@ extension OverviewView {
             }
         }
 
-        let wildcardFamilies = preferredGames.compactMap(\.gameFamily)
+        let wildcards = preferredGames.compactMap(\.wildcard)
         let unpinnedCampaigns = campaignPool
             // The wildcard card is the franchise's queue entry; do not append
             // its individual games again as loose cards behind it.
             .filter { campaign in
                 !usedCampaignIds.contains(campaign.id)
-                    && !wildcardFamilies.contains { family in
-                        family.matches(gameName: campaign.gameName)
+                    && !wildcards.contains { wildcard in
+                        wildcard.matches(gameName: campaign.gameName)
                     }
             }
             .map { makeRailItem(for: $0, section: .prioritised, context: context) }
@@ -396,9 +396,9 @@ extension OverviewView {
             context: context,
             isPriorityPinned: true
         )
-        let family = preference.gameFamily!
+        let wildcard = preference.wildcard!
         return CampaignRailItem(
-            id: "preferred-family-\(family.rawValue)",
+            id: "preferred-wildcard-\(wildcard.id)",
             section: campaignItem.section,
             gameName: preference.gameName,
             campaignName: "Latest Drops: \(campaign.gameName)",
@@ -413,7 +413,7 @@ extension OverviewView {
             isPlaceholder: false,
             showsLiveMotion: campaignItem.showsLiveMotion,
             usesCustomArtwork: preference.customArtworkURL != nil,
-            game: Game(id: family.priorityToken, name: preference.gameName, boxArtURL: campaignItem.artworkURL),
+            game: Game(id: wildcard.priorityToken, name: preference.gameName, boxArtURL: campaignItem.artworkURL),
             dropState: campaignItem.dropState,
             isPriorityPinned: true,
             isWildcard: true
@@ -460,7 +460,7 @@ extension OverviewView {
             ?? preference.resolvedBoxArtURL
             ?? campaignArtwork
         return CampaignRailItem(
-            id: "preferred-\(preference.gameFamily?.priorityToken ?? (preference.gameId.isEmpty ? preference.gameName : preference.gameId))",
+            id: "preferred-\(preference.wildcard?.priorityToken ?? (preference.gameId.isEmpty ? preference.gameName : preference.gameId))",
             section: .prioritised,
             gameName: preference.gameName,
             campaignName: "",
@@ -476,7 +476,7 @@ extension OverviewView {
             showsLiveMotion: false,
             usesCustomArtwork: preference.customArtworkURL != nil,
             game: Game(
-                id: preference.gameFamily?.priorityToken ?? preference.gameId,
+                id: preference.wildcard?.priorityToken ?? preference.gameId,
                 name: preference.gameName,
                 boxArtURL: artworkURL
             ),
@@ -496,7 +496,7 @@ extension OverviewView {
               let sourceIndex = preferred.firstIndex(where: { preference in
                   if item.isWildcard {
                       return preference.isWildcard
-                          && preference.gameFamily?.priorityToken == game.id
+                          && preference.wildcard?.priorityToken == game.id
                   }
                   return preferenceMatches(preference, game: game)
               }) else {

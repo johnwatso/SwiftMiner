@@ -656,6 +656,18 @@ public actor TwitchAuthService {
             case userId = "user_id"
             case expiresIn = "expires_in"
         }
+
+        // Invitations request no scopes, and Twitch can answer such a token with
+        // `"scopes": null` or without `expires_in`. Only the identity is required; a
+        // strict decode failed the whole sign-in with "the data is missing".
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            clientId = (try? container.decodeIfPresent(String.self, forKey: .clientId)) ?? ""
+            login = try container.decode(String.self, forKey: .login)
+            scopes = (try? container.decodeIfPresent([String].self, forKey: .scopes)) ?? []
+            userId = try container.decode(String.self, forKey: .userId)
+            expiresIn = (try? container.decodeIfPresent(Int.self, forKey: .expiresIn)) ?? 0
+        }
     }
 }
 

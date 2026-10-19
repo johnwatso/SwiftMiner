@@ -216,6 +216,16 @@ final class TwitchAuthServiceTests: XCTestCase {
 
     // MARK: - Account Model
 
+    func testTokenResponseAllowsADeviceTokenWithoutRefreshGrant() throws {
+        let data = Data(#"{"access_token":"tv-token","expires_in":14400,"scope":[],"token_type":"bearer"}"#.utf8)
+
+        let response = try JSONDecoder().decode(TokenResponse.self, from: data)
+
+        XCTAssertEqual(response.accessToken, "tv-token")
+        XCTAssertEqual(response.refreshToken, "")
+        XCTAssertEqual(response.expiresIn, 14_400)
+    }
+
     func testAccountIsTokenValidRespects5MinuteBuffer() {
         let justValid = makeAccount(expiresIn: 301)
         XCTAssertTrue(justValid.isTokenValid, "301s remaining should be valid (buffer is 300s)")
@@ -405,6 +415,21 @@ final class TwitchAuthServiceTests: XCTestCase {
         XCTAssertEqual(identity.userId, "u1")
         XCTAssertEqual(identity.login, "miner")
         XCTAssertEqual(MockURLProtocol.lastRequest?.value(forHTTPHeaderField: "Authorization"), "OAuth secret-token")
+    }
+
+    func testValidateTokenAcceptsNullScopesAndMissingExpiry() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            let data = #"{"client_id":"test_client_id","login":"friend","scopes":null,"user_id":"u2"}"#.data(using: .utf8)!
+            return (response, data)
+        }
+
+        let identity = try await service.validateToken("tv-token")
+
+        XCTAssertEqual(identity.userId, "u2")
+        XCTAssertEqual(identity.login, "friend")
     }
 
     func testValidateTokenMapsUnauthorizedResponseToAuthenticationFailure() async {

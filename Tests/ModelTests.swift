@@ -151,6 +151,18 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(matcher.discoveryGames, ["Call of Duty", "Rust"])
     }
 
+    func testGenericWildcardMatchesAnnualTitlesAndRoundTripsItsPriorityToken() throws {
+        let wildcard = try XCTUnwrap(GameWildcard(searchQuery: "NBA"))
+        let restored = try XCTUnwrap(GameWildcard(priorityToken: wildcard.priorityToken))
+        let matcher = PriorityGameMatcher([wildcard.priorityToken])
+
+        XCTAssertEqual(restored.displayName, "NBA")
+        XCTAssertTrue(restored.matches(gameName: "NBA 2K26"))
+        XCTAssertTrue(matcher.matches(gameId: "", gameName: "NBA 2K25"))
+        XCTAssertFalse(restored.matches(gameName: "WNBA 2K26"))
+        XCTAssertEqual(matcher.discoveryGames, ["NBA"])
+    }
+
     func testManagedMinerNormalizesStreamOverrideLogin() {
         XCTAssertEqual(MinerManager.ManagedMiner.normalizedStreamOverrideLogin("  @Flats "), "flats")
         XCTAssertNil(MinerManager.ManagedMiner.normalizedStreamOverrideLogin("   "))

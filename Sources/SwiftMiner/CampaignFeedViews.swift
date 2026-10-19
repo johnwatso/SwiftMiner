@@ -190,7 +190,7 @@ struct CampaignFeedCard: View {
         if item.isWildcard {
             return settings.gamePreferences.first {
                 $0.state == .preferred
-                    && $0.gameFamily?.priorityToken == game.id
+                    && $0.wildcard?.priorityToken == game.id
             }
         }
         let matches = settings.gamePreferences.filter { preference in
@@ -1034,54 +1034,46 @@ struct PriorityQueueDropLabel: View {
 
 /// Identifies a franchise-wide priority rule while letting the adjacent drop label
 /// remain the primary operational signal. Its box matches `PriorityQueueDropLabel`;
-/// only the symbol and text carry a slow holographic rainbow sweep, like a rare foil card.
+/// the border carries a slow rotating multicolour glow (the old SwiftBot
+/// "Intelligence" treatment) while the text stays plain.
 private struct WildcardQueueLabel: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// One full colour cycle repeated twice so shifting by one label width loops seamlessly.
-    private static let holoColors: [Color] = {
-        let cycle = stride(from: 0.0, through: 1.0, by: 1.0 / 6.0).map {
-            Color(hue: $0, saturation: 0.55, brightness: 1.0)
-        }
-        return cycle + cycle.dropFirst()
-    }()
-
-    private var content: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "sparkles")
-            Text("Wildcard")
-        }
-        .font(.caption2.weight(.medium))
-        .lineLimit(1)
-    }
+    private static let glowColors: [Color] = [.purple, .pink, .blue, .cyan, .orange, .purple]
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: reduceMotion)) { context in
-            let phase = reduceMotion
+            let degrees = reduceMotion
                 ? 0.0
                 : context.date.timeIntervalSinceReferenceDate
-                    .truncatingRemainder(dividingBy: 4.0) / 4.0
+                    .truncatingRemainder(dividingBy: 4.0) / 4.0 * 360.0
+            let gradient = AngularGradient(
+                colors: Self.glowColors,
+                center: .center,
+                angle: .degrees(degrees)
+            )
+            let shape = RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
 
-            content
-                .hidden()
-                .overlay {
-                    LinearGradient(
-                        colors: Self.holoColors,
-                        startPoint: UnitPoint(x: -phase, y: 0.2),
-                        endPoint: UnitPoint(x: 2.0 - phase, y: 0.8)
-                    )
-                    .mask { content }
+            HStack(spacing: 5) {
+                Image(systemName: "sparkles")
+                Text("Wildcard")
+            }
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(.white.opacity(0.92))
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background { shape.fill(Color.black.opacity(0.48)) }
+            .overlay {
+                ZStack {
+                    shape.stroke(gradient, lineWidth: 1.5)
+                    shape.stroke(gradient, lineWidth: 4)
+                        .blur(radius: 4)
+                        .opacity(0.5)
                 }
-                .padding(.horizontal, 7)
-                .padding(.vertical, 4)
-                .background {
-                    RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
-                        .fill(Color.black.opacity(0.48))
-                }
-                .overlay {
-                    RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
-                }
+                .blendMode(.plusLighter)
+                .allowsHitTesting(false)
+            }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Wildcard game family")

@@ -519,22 +519,23 @@ enum WebDashboardAssets {
           border: 1px solid var(--glass-stroke); background: var(--field);
         }
         .priority-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 600; }
-        /* Rare-card foil: a slow rainbow sweep through the symbol and text. */
+        /* Multicolour glowing border: a conic gradient rotates behind the badge,
+           and a blurred copy of it gives the soft outer glow. */
+        @property --wildcard-angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
         .wildcard-badge {
-          display: inline-flex; align-items: center; flex: none; vertical-align: middle;
-          padding: 2px 7px; border-radius: 7px; margin-left: 6px;
-          font-size: 11px; font-weight: 600; line-height: 1.3;
-          background: rgba(0,0,0,0.48); border: 1px solid rgba(255,255,255,0.14);
+          position: relative; display: inline-flex; align-items: center; flex: none; vertical-align: middle;
+          padding: 1.5px; border-radius: 7px; margin-left: 6px;
+          font-size: 11px; font-weight: 600; line-height: 1.3; isolation: isolate;
         }
-        .wildcard-holo {
-          color: transparent; white-space: nowrap;
-          background-image: linear-gradient(100deg, #ff9fb2, #ffd89f, #f4ff9f, #9fffc0, #9fe0ff, #c39fff, #ff9fb2);
-          background-size: 200% 100%;
-          -webkit-background-clip: text; background-clip: text;
-          animation: wildcard-holo 4s linear infinite;
+        .wildcard-badge::before, .wildcard-badge::after {
+          content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
+          background: conic-gradient(from var(--wildcard-angle), #a855f7, #ec4899, #3b82f6, #22d3ee, #fb923c, #a855f7);
+          animation: wildcard-spin 4s linear infinite;
         }
-        @keyframes wildcard-holo { from { background-position: 0 0; } to { background-position: -200% 0; } }
-        @media (prefers-reduced-motion: reduce) { .wildcard-holo { animation: none; } }
+        .wildcard-badge::after { filter: blur(6px); opacity: 0.55; }
+        .wildcard-holo { color: rgba(255,255,255,0.92); white-space: nowrap; padding: 1px 6px; border-radius: 5.5px; background: #0d0d12; }
+        @keyframes wildcard-spin { to { --wildcard-angle: 360deg; } }
+        @media (prefers-reduced-motion: reduce) { .wildcard-badge::before, .wildcard-badge::after { animation: none; } }
         .priority-row-btn {
           flex: none; display: inline-grid; width: 26px; height: 26px; place-items: center;
           padding: 0; border: 0; border-radius: 7px; cursor: pointer;

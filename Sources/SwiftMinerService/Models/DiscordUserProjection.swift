@@ -89,7 +89,7 @@ public struct DiscordUserProjection: Codable, Sendable {
         static func catalog(for rules: [String]) -> [String: PriorityFamily]? {
             var families: [String: PriorityFamily] = [:]
             for rule in rules {
-                guard let family = GameFamily(priorityToken: rule) else { continue }
+                guard let family = GameWildcard(priorityToken: rule) else { continue }
                 families[rule] = PriorityFamily(
                     name: family.displayName,
                     detail: family.matchingDescription,

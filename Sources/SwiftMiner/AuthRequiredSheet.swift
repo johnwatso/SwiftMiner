@@ -348,7 +348,10 @@ struct AuthRequiredSheet: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Button("Twitch Drops") { browserLoginService.load() }
+                    Button("Twitch Drops") {
+                        browserLoginService.load()
+                        browserLoginService.recheckSignIn()
+                    }
                 }
             case .verifying:
                 inlineProgress("Verifying the Twitch identity, campaign dashboard and inventory…")

@@ -96,7 +96,8 @@ extension TwitchAPIClient {
         await traceGQLDebug { "[TwitchAPIClient] fetchDropCampaigns: \(activeCampaigns.count) active campaigns, fetching details" }
 
         // Fetch campaign details with a concurrency cap of 10 to avoid socket exhaustion.
-        // userLogin (e.g. "john") is required — DropCampaignDetails uses user(login:) not user(id:)
+        // The details request identifies the account by numeric user ID; see
+        // `dropCampaignDetailsUserVariable`. `userLogin` still keys the per-account cache.
         var enrichedActive = activeCampaigns
         if !activeCampaigns.isEmpty {
             let maxConcurrent = 10
@@ -503,6 +504,19 @@ extension TwitchAPIClient {
         await PerformanceDiagnostics.shared.incrementCounter("DropCampaignDetails.\(path)")
     }
 
+    /// The value sent as `DropCampaignDetails`'s `channelLogin`. Despite its name, the persisted
+    /// document resolves it as the numeric user ID — TwitchDropsMiner, the authoritative source
+    /// for this hash, sends the ID. Twitch used to fall back to a login there; since 2026-10 it
+    /// answers a login with `user: null` and no error, which took every account's campaign
+    /// details offline and turned each refresh into a full uncached re-fetch (~545k requests
+    /// in 21h on John's five accounts). The login is only a fallback for a client with no ID.
+    nonisolated static func dropCampaignDetailsUserVariable(accountId: String?, userLogin: String) -> String {
+        if let accountId, !accountId.isEmpty, accountId.allSatisfy(\.isNumber) {
+            return accountId
+        }
+        return userLogin
+    }
+
     private func fetchCampaignDetailsFromNetwork(
         campaignId: String,
         userLogin: String
@@ -512,10 +526,10 @@ extension TwitchAPIClient {
             for: .dropCampaignDetails,
             variables: [
                 "dropID": campaignId,
-                "channelLogin": userLogin  // Login name (e.g. "john"), not numeric ID
+                "channelLogin": Self.dropCampaignDetailsUserVariable(accountId: accountId, userLogin: userLogin)
             ]
         )
-        
+
         let data = try await makeGraphQLRequest(request: request)
 
         await traceGQLResponse("DropCampaignDetails raw", data: data, maxCharacters: 3000)
@@ -523,9 +537,18 @@ extension TwitchAPIClient {
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
 
         guard let jsonDict = json,
-              let responseData = jsonDict["data"] as? [String: Any],
-              let user = responseData["user"] as? [String: Any],
-              let dropCampaign = user["dropCampaign"] as? [String: Any] else {
+              let responseData = jsonDict["data"] as? [String: Any] else {
+            throw TwitchMinerError.invalidResponse
+        }
+        // `user: null` with no error is how Twitch answers a `channelLogin` it cannot resolve.
+        // Nothing is cached on that path, so every refresh repeats the whole fan-out; count it
+        // where a diagnostic export can see it rather than only in `Logger.api`.
+        guard let user = responseData["user"] as? [String: Any] else {
+            await recordCampaignDetailsPath("invalid.noUser")
+            throw TwitchMinerError.invalidResponse
+        }
+        guard let dropCampaign = user["dropCampaign"] as? [String: Any] else {
+            await recordCampaignDetailsPath("invalid.noCampaign")
             throw TwitchMinerError.invalidResponse
         }
 

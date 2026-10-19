@@ -1190,8 +1190,8 @@ public final class Settings {
     }
 
     func preferenceKey(for preference: GamePreference) -> String {
-        if let family = preference.gameFamily {
-            return family.priorityToken
+        if let wildcard = preference.wildcard {
+            return wildcard.priorityToken
         }
         return preferenceKey(gameId: preference.gameId, gameName: preference.gameName)
     }

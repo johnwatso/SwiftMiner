@@ -279,7 +279,8 @@ public actor TwitchAPIClient {
     /// case Twitch re-registers the hash.
     private static let persistedQueryRetrySuppression: TimeInterval = 1_800
 
-    /// Authenticated user's login name — used as channelLogin in DropCampaignDetails
+    /// Authenticated user's login name — keys the per-account campaign caches, and is the
+    /// `DropCampaignDetails` fallback when no numeric account ID is known.
     var userLogin: String = ""
 
     /// Broadcaster login -> numeric channel ID cache for stream directory results that
