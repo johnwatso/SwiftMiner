@@ -162,7 +162,6 @@ struct AdvancedSettingsView: View {
     var body: some View {
         Form {
             apiConfigurationSection
-            ruruMonitoringSection
             twitchCompatibilitySection
             backupSection
             diagnosticsSection
@@ -216,22 +215,6 @@ struct AdvancedSettingsView: View {
             SettingsSecondaryText("By default, SwiftMiner uses a built-in Twitch client. Only change this if you know what you are doing.")
         } header: {
             Text("API Configuration")
-        }
-    }
-
-    private var ruruMonitoringSection: some View {
-        Section {
-            Picker("Share status with Ruru", selection: $settings.ruruStatusExposure) {
-                Text("Off").tag(RuruMonitoringStatus.Exposure.off)
-                Text("Local network only").tag(RuruMonitoringStatus.Exposure.localNetwork)
-                Text("Everywhere").tag(RuruMonitoringStatus.Exposure.everywhere)
-            }
-
-            SettingsSecondaryText(settings.ruruStatusExposure == .everywhere
-                ? "Anyone who can reach SwiftMiner, including through your public dashboard address, can read its version, uptime and account counts at /.well-known/ruru. No account names or games are included."
-                : "Lets a Ruru monitor show SwiftMiner's version, miner health and account counts from /.well-known/ruru. Local network only refuses requests through the Cloudflare tunnel. No account names or games are included.")
-        } header: {
-            Text("Ruru Monitoring")
         }
     }
 

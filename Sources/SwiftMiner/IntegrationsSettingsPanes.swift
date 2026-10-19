@@ -56,6 +56,9 @@ struct WebDashboardSettingsView: View {
                 localAccessSection
                 oauthSections
             }
+
+            // Served by the same local server whether or not the dashboard is on.
+            ruruMonitoringSection
         }
         .formStyle(.grouped)
         .padding(.horizontal, 24)
@@ -74,6 +77,33 @@ struct WebDashboardSettingsView: View {
             guard settings.swiftBotEnabled else { return }
             await navigation.checkSwiftBotConnection()
             await loadSwiftBotTunnelInfo()
+        }
+    }
+
+    // MARK: - Ruru Monitoring
+
+    private var ruruMonitoringSection: some View {
+        Section {
+            Toggle("Share status with Ruru", isOn: Binding(
+                get: { settings.ruruStatusExposure != .off },
+                // Turning it on starts with the narrower choice.
+                set: { settings.ruruStatusExposure = $0 ? .localNetwork : .off }
+            ))
+
+            if settings.ruruStatusExposure != .off {
+                Picker("Allow from", selection: $settings.ruruStatusExposure) {
+                    Text("Local network only").tag(RuruMonitoringStatus.Exposure.localNetwork)
+                    Text("Everywhere").tag(RuruMonitoringStatus.Exposure.everywhere)
+                }
+            }
+
+            SettingsSecondaryText(settings.ruruStatusExposure == .everywhere
+                ? "Anyone who can reach SwiftMiner, including through your public dashboard address, can read its version, uptime and account counts at /.well-known/ruru. No account names or games are included."
+                : settings.ruruStatusExposure == .localNetwork
+                    ? "Ruru monitors on your network can read SwiftMiner's version, miner health and account counts at /.well-known/ruru. Requests through the Cloudflare tunnel are refused. No account names or games are included."
+                    : "Lets a Ruru monitor show SwiftMiner's version, miner health and account counts from /.well-known/ruru. Off by default; while off, the address answers as if it did not exist.")
+        } header: {
+            Text("Ruru Monitoring")
         }
     }
 
