@@ -17,6 +17,20 @@ extension Settings {
     // needs a Discord OAuth app (for sign-in) and a public origin. Disabled by
     // default; the in-process HTTP server registers its routes only when enabled.
 
+    /// Who may read `/.well-known/ruru`, the status document Ruru's monitors use.
+    /// Off by default: the route is unauthenticated, like `/health`.
+    public var ruruStatusExposure: RuruMonitoringStatus.Exposure {
+        get {
+            access(keyPath: \.ruruStatusExposure)
+            return RuruMonitoringStatus.Exposure(rawValue: Self.read("ruruStatusExposure", default: "off")) ?? .off
+        }
+        set {
+            withMutation(keyPath: \.ruruStatusExposure) {
+                Self.write("ruruStatusExposure", newValue.rawValue)
+            }
+        }
+    }
+
     /// Whether the self-service web dashboard is enabled
     public var webDashboardEnabled: Bool {
         get {

@@ -10,13 +10,18 @@ public struct HTTPRequest: Sendable {
     public let headers: [String: String]
     public let body: Data
     public let queryParams: [String: String]
+    /// The connection's peer IP address. A tunnel or proxy connects from its own
+    /// address, so this alone never proves a request is local.
+    public let remoteAddress: String?
 
-    public init(method: String, path: String, headers: [String: String], body: Data, queryParams: [String: String] = [:]) {
+    public init(method: String, path: String, headers: [String: String], body: Data, queryParams: [String: String] = [:],
+                remoteAddress: String? = nil) {
         self.method = method
         self.path = path
         self.headers = headers
         self.body = body
         self.queryParams = queryParams
+        self.remoteAddress = remoteAddress
     }
 
     public func header(_ name: String) -> String? {
@@ -449,7 +454,8 @@ public actor HTTPAPIServer {
             }
         }
 
-        let request = HTTPRequest(method: method, path: path, headers: headers, body: body, queryParams: queryParams)
+        let request = HTTPRequest(method: method, path: path, headers: headers, body: body, queryParams: queryParams,
+                                  remoteAddress: Self.peerAddress(of: connection))
 
         // Auth check for Bot endpoints. `/health` and any explicitly-registered
         // public prefix (web dashboard OAuth + session routes) bypass the shared
@@ -466,12 +472,24 @@ public actor HTTPAPIServer {
         await sendResponse(connection, response)
     }
 
+    private static func peerAddress(of connection: NWConnection) -> String? {
+        guard case .hostPort(let host, _) = connection.endpoint else { return nil }
+        switch host {
+        case .ipv4(let address): return "\(address)"
+        case .ipv6(let address): return "\(address)"
+        case .name(let name, _): return name
+        @unknown default: return nil
+        }
+    }
+
     private func isPublicPath(_ path: String) -> Bool {
         Self.isPublicPath(path, prefixes: publicPathPrefixes, exactPaths: publicExactPaths)
     }
 
     public static func isPublicPath(_ path: String, prefixes: [String], exactPaths: Set<String>) -> Bool {
         if path == "/health" || path.hasPrefix("/health/") { return true }
+        // Ruru's enhanced-monitoring status: counts and states only, never account data.
+        if path == RuruMonitoringStatus.path { return true }
         if exactPaths.contains(path) { return true }
         for prefix in prefixes where path == prefix || path.hasPrefix(prefix + "/") {
             return true
