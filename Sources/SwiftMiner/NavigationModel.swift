@@ -289,6 +289,25 @@ public final class NavigationModel {
                 prioritySource: prioritySource
             )
         }
+        await routes.setOnRuruStatus { [weak self] in
+            await MainActor.run {
+                let info = Bundle.main.infoDictionary
+                let version = info?["CFBundleShortVersionString"] as? String ?? SwiftMinerCore.version
+                let build = info?["CFBundleVersion"] as? String
+                let exposure = Settings.shared.ruruStatusExposure
+                guard let self else { return .init(version: version, build: build, miners: [], swiftBot: nil, exposure: exposure) }
+                let miners = self.minerManager.miners.map { miner in
+                    RuruMonitoringStatus.Inputs.Miner(
+                        isMining: miner.isRunning && miner.currentCampaignId != nil && !miner.needsAuth
+                            && miner.status != .error && miner.status != .blockedAccountNotLinked,
+                        needsSignIn: miner.needsAuth,
+                        hasError: miner.status == .error,
+                        dropsClaimed: miner.dropsClaimed)
+                }
+                return .init(version: version, build: build, miners: miners,
+                             swiftBot: Settings.shared.swiftBotEnabled ? self.swiftBotState : nil, exposure: exposure)
+            }
+        }
         await routes.setOnKnownGames { [weak self] in
             guard let self else { return [] }
             return await MainActor.run {

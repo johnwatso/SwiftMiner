@@ -290,6 +290,24 @@ public actor DiscordAPIRoutes {
         self.onRemoveMinerByAccount = handler
     }
 
+    /// Inputs for Ruru's enhanced-monitoring status document (`/.well-known/ruru`).
+    public var onRuruStatus: (@Sendable () async -> RuruMonitoringStatus.Inputs)?
+    private let startedAt = ContinuousClock.now
+
+    public func setOnRuruStatus(_ handler: @escaping @Sendable () async -> RuruMonitoringStatus.Inputs) {
+        self.onRuruStatus = handler
+    }
+
+    /// Unauthenticated, like `/health`: counts and states only. It answers 404
+    /// unless the user's exposure setting allows this request, and always in the
+    /// standalone service, which has no miner data to report.
+    public func ruruStatus(_ request: HTTPRequest) async -> HTTPResponse {
+        guard let inputs = await onRuruStatus?(),
+              inputs.exposure.allows(headers: request.headers, remoteAddress: request.remoteAddress) else { return .notFound }
+        let uptime = startedAt.duration(to: .now).components.seconds
+        return HTTPResponse.json(RuruMonitoringStatus(inputs, uptimeSeconds: Int(uptime)))
+    }
+
     /// Known campaign game names, for the web dashboard's add-game autocomplete.
     public var onKnownGames: (@Sendable () async -> [String])?
     /// Active/upcoming campaign summaries for the web dashboard browser.
@@ -323,6 +341,11 @@ public actor DiscordAPIRoutes {
         // Health check (no auth)
         await router.register(HTTPRoute(method: "GET", pattern: "/health") { _, _ in
             HTTPResponse.json(["status": "ok"])
+        })
+
+        // Ruru enhanced monitoring (no auth)
+        await router.register(HTTPRoute(method: "GET", pattern: RuruMonitoringStatus.path) { request, _ in
+            await routes.ruruStatus(request)
         })
 
         // Projection endpoint
@@ -1241,5 +1264,153 @@ public struct MinerControlResponse: Codable, Sendable {
         self.state = state
         self.twitchUsername = twitchUsername
         self.message = message
+    }
+}
+
+// MARK: - Ruru enhanced monitoring
+
+/// The status document Ruru's enhanced HTTP(S) monitors read from
+/// `GET /.well-known/ruru` (Ruru: Documentation/ENHANCED_MONITORING.md, schema v1).
+/// It is unauthenticated like `/health`, so it carries only the app version,
+/// machine-coded states and counts — never account names, games, Discord IDs,
+/// hostnames or error text. It is monitoring only: no pairing, token or lease.
+public struct RuruMonitoringStatus: Encodable, Sendable, Equatable {
+    public static let path = "/.well-known/ruru"
+
+    public enum State: String, Encodable, Sendable { case ready, synchronizing, outdated, degraded, unknown }
+
+    /// Who may read the document. Mirrors `RuruStatusExposure` in Ruru's RuruClient
+    /// package (Ruru: Documentation/APP_STATUS.md).
+    public enum Exposure: String, CaseIterable, Sendable {
+        /// The route answers 404. The default.
+        case off
+        /// Direct requests from loopback or private addresses only; anything that
+        /// came through a proxy or the Cloudflare tunnel is refused.
+        case localNetwork
+        /// Anyone who can reach the server, including the public dashboard domain.
+        case everywhere
+
+        static let forwardingHeaders: Set<String> = [
+            "forwarded", "x-forwarded-for", "x-forwarded-host", "x-real-ip",
+            "cf-connecting-ip", "cf-ray", "true-client-ip", "fly-client-ip"
+        ]
+
+        public func allows(headers: [String: String], remoteAddress: String?) -> Bool {
+            switch self {
+            case .off: return false
+            case .everywhere: return true
+            case .localNetwork:
+                // The tunnel connects from loopback, so its headers decide.
+                guard Set(headers.keys.map { $0.lowercased() }).isDisjoint(with: Self.forwardingHeaders) else { return false }
+                guard let remoteAddress else { return false }
+                return Self.isLocalAddress(remoteAddress)
+            }
+        }
+
+        /// Loopback, RFC 1918, carrier-grade NAT (Tailscale), IPv6 unique-local and link-local.
+        public static func isLocalAddress(_ text: String) -> Bool {
+            var address = text.trimmingCharacters(in: CharacterSet(charactersIn: "[] ")).lowercased()
+            if let zone = address.firstIndex(of: "%") { address = String(address[..<zone]) }
+            if address.hasPrefix("::ffff:"), address.contains(".") { address = String(address.dropFirst(7)) }
+            let parts = address.split(separator: ".", omittingEmptySubsequences: false)
+            let octets = parts.compactMap { UInt8($0) }
+            if parts.count == 4, octets.count == 4 {
+                let a = octets[0], b = octets[1]
+                return a == 127 || a == 10 || (a == 172 && (16...31).contains(b)) || (a == 192 && b == 168)
+                    || (a == 100 && (64...127).contains(b)) || (a == 169 && b == 254)
+            }
+            guard address.contains(":") else { return false }
+            if address == "::1" { return true }
+            guard let group = address.split(separator: ":", omittingEmptySubsequences: false).first.flatMap({ UInt16($0, radix: 16) })
+            else { return false }
+            return (group & 0xFE00) == 0xFC00 || (group & 0xFFC0) == 0xFE80
+        }
+    }
+
+    /// What the app knows, gathered on the main actor per request.
+    public struct Inputs: Sendable, Equatable {
+        public struct Miner: Sendable, Equatable {
+            public var isMining: Bool
+            public var needsSignIn: Bool
+            public var hasError: Bool
+            public var dropsClaimed: Int
+            public init(isMining: Bool, needsSignIn: Bool, hasError: Bool, dropsClaimed: Int) {
+                self.isMining = isMining; self.needsSignIn = needsSignIn; self.hasError = hasError; self.dropsClaimed = dropsClaimed
+            }
+        }
+        public var version: String
+        public var build: String?
+        public var miners: [Miner]
+        /// nil when the SwiftBot integration is switched off.
+        public var swiftBot: SwiftBotConnectionState?
+        public var exposure: Exposure
+        public init(version: String, build: String?, miners: [Miner], swiftBot: SwiftBotConnectionState?, exposure: Exposure) {
+            self.version = version; self.build = build; self.miners = miners; self.swiftBot = swiftBot; self.exposure = exposure
+        }
+    }
+
+    public struct App: Encodable, Sendable, Equatable {
+        public let id: String
+        public let name: String
+        public let version: String?
+        public let build: String?
+    }
+
+    public struct Component: Encodable, Sendable, Equatable {
+        public let id: String
+        public let name: String
+        public let state: State
+        public let reasonCode: String?
+    }
+
+    public struct Metric: Encodable, Sendable, Equatable {
+        public let id: String
+        public let name: String
+        public let value: Double
+        public let unit: String?
+    }
+
+    public let ruru = 1
+    public let app: App
+    public let state: State
+    public let reasonCode: String?
+    public let uptimeSeconds: Int?
+    public let components: [Component]
+    public let metrics: [Metric]
+
+    public init(_ inputs: Inputs, uptimeSeconds: Int?) {
+        // Ruru accepts 1–32 characters of display text for version and build.
+        app = App(id: "app.swiftminer", name: "SwiftMiner",
+                  version: Self.bounded(inputs.version), build: inputs.build.flatMap(Self.bounded))
+        self.uptimeSeconds = uptimeSeconds.map { max(0, $0) }
+
+        let needSignIn = inputs.miners.filter(\.needsSignIn).count
+        let errored = inputs.miners.filter(\.hasError).count
+        var components = [Component(
+            id: "miners", name: "Drop miners",
+            state: needSignIn > 0 || errored > 0 ? .degraded : .ready,
+            reasonCode: needSignIn > 0 ? "account_needs_sign_in" : errored > 0 ? "miner_error" : nil)]
+        if let swiftBot = inputs.swiftBot, swiftBot != .notConfigured {
+            components.append(Component(
+                id: "swiftbot", name: "SwiftBot connection",
+                state: swiftBot == .connected ? .ready : .degraded,
+                reasonCode: swiftBot == .connected ? nil : swiftBot == .unpaired ? "swiftbot_unpaired" : "swiftbot_disconnected"))
+        }
+        self.components = components
+        let firstProblem = components.first { $0.state != .ready }
+        state = firstProblem == nil ? .ready : .degraded
+        reasonCode = firstProblem?.reasonCode
+
+        metrics = [
+            Metric(id: "accounts", name: "Accounts", value: Double(inputs.miners.count), unit: "count"),
+            Metric(id: "mining", name: "Mining now", value: Double(inputs.miners.filter(\.isMining).count), unit: "count"),
+            Metric(id: "needs_sign_in", name: "Need sign-in", value: Double(needSignIn), unit: "count"),
+            Metric(id: "drops_claimed", name: "Drops claimed", value: Double(inputs.miners.reduce(0) { $0 + max(0, $1.dropsClaimed) }), unit: "count")
+        ]
+    }
+
+    private static func bounded(_ text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : String(trimmed.prefix(32))
     }
 }

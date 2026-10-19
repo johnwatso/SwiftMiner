@@ -522,11 +522,17 @@ extension Settings {
     /// Adds a curated game-family wildcard. Families are priorities only: a
     /// broad exclusion would make a future Twitch title silently disappear.
     public func addGameFamily(_ family: GameFamily) {
+        addWildcard(GameWildcard(family: family))
+    }
+
+    /// Adds a broad, prefix-matched game rule. The token is stored as the
+    /// preference ID so the same rule survives title releases and app restarts.
+    public func addWildcard(_ wildcard: GameWildcard) {
         var prefs = gamePreferences
-        guard !prefs.contains(where: { $0.gameFamily == family }) else { return }
+        guard !prefs.contains(where: { $0.wildcard?.priorityToken == wildcard.priorityToken }) else { return }
         prefs.append(GamePreference(
-            gameId: "",
-            gameName: family.displayName,
+            gameId: wildcard.priorityToken,
+            gameName: wildcard.displayName,
             state: .preferred,
             match: .gameFamily
         ))

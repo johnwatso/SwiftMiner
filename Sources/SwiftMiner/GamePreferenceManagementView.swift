@@ -344,9 +344,9 @@ private struct GameRuleRow: View {
     }
 
     private var latestWildcardGame: String? {
-        guard let family = preference.gameFamily else { return nil }
+        guard let wildcard = preference.wildcard else { return nil }
         return campaigns
-            .filter { $0.isTimeActive && $0.canAttemptMining && family.matches(gameName: $0.gameName) }
+            .filter { $0.isTimeActive && $0.canAttemptMining && wildcard.matches(gameName: $0.gameName) }
             .max(by: { $0.startDate < $1.startDate })?
             .gameName
     }
@@ -440,7 +440,7 @@ private struct GameRuleRow: View {
 
             // The absence of a fallback stays quiet; only a configured one earns a line.
             if preference.isWildcard {
-                Text(latestWildcardGame.map { "Wildcard · Latest Drops: \($0)" } ?? "Wildcard · \(preference.gameFamily?.matchingDescription ?? "Matches future titles")")
+                Text(latestWildcardGame.map { "Wildcard · Latest Drops: \($0)" } ?? "Wildcard · \(preference.wildcard?.matchingDescription ?? "Matches future titles")")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

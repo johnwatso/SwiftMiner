@@ -101,6 +101,30 @@ final class OperatorBrowserLoginTests: XCTestCase {
         XCTAssertEqual(attempts, 0)
     }
 
+    func testRecheckDetectsLoginOnlyWhileSigningIn() async throws {
+        let store = WKWebsiteDataStore.nonPersistent()
+        let navigation = BlockNavigation()
+        let verified = expectation(description: "Recheck validation")
+        var attempts = 0
+        let expectedAccount = account()
+        let service = OperatorBrowserLoginService(dataStore: store) {
+            attempts += 1
+            verified.fulfill()
+            return expectedAccount
+        }
+        service.webView.navigationDelegate = navigation
+        await store.httpCookieStore.setCookie(cookie())
+        service.recheckSignIn()
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(attempts, 0)
+        service.start()
+        service.recheckSignIn()
+        await fulfillment(of: [verified], timeout: 3)
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(attempts, 1)
+        service.cancel()
+    }
+
     func testCancelledValidationCannotComplete() async throws {
         let started = expectation(description: "Verification started")
         var resume: CheckedContinuation<Account, Never>?

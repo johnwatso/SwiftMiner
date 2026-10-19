@@ -120,13 +120,13 @@ struct GameMatchIndex {
     func hasPreferredMatch(gameId: String?, gameName: String) -> Bool {
         preferred.containsMatch(keys: keys(gameId: gameId, gameName: gameName))
             || familyPreferences.contains { preference in
-                preference.state == .preferred && preference.gameFamily?.matches(gameName: gameName) == true
+                preference.state == .preferred && preference.wildcard?.matches(gameName: gameName) == true
             }
     }
 
     func matchedPreferences(gameId: String?, gameName: String) -> [GamePreference] {
         all.matches(keys: keys(gameId: gameId, gameName: gameName))
-            + familyPreferences.filter { $0.gameFamily?.matches(gameName: gameName) == true }
+            + familyPreferences.filter { $0.wildcard?.matches(gameName: gameName) == true }
     }
 
     /// The preference a matching game should draw from: one carrying uploaded artwork wins

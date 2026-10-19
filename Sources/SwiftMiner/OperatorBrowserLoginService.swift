@@ -30,6 +30,8 @@ final class OperatorBrowserLoginService {
     private let integrityIssuer: TwitchBrowserIntegrityIssuer
     private var verificationTask: Task<Void, Never>?
     private var cookieObserver: OperatorLoginCookieObserver?
+    private var pageObservations: [NSKeyValueObservation] = []
+    private var signInPollTask: Task<Void, Never>?
     private var observationID: UUID?
     private var lastAttemptedToken: String?
     private let validateAccount: (@MainActor () async throws -> Account)?
@@ -46,6 +48,19 @@ final class OperatorBrowserLoginService {
         configuration.websiteDataStore = self.dataStore
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         webView = WKWebView(frame: .zero, configuration: configuration)
+        // Page changes are a second sign-in signal. Observing the web view, rather than
+        // owning its navigation delegate, also catches Twitch's in-page route changes.
+        pageObservations = [
+            webView.observe(\.url) { [weak self] _, _ in
+                Task { @MainActor in self?.recheckSignIn() }
+            },
+            webView.observe(\.isLoading) { [weak self] _, _ in
+                Task { @MainActor in
+                    guard let self, !self.webView.isLoading else { return }
+                    self.recheckSignIn()
+                }
+            },
+        ]
     }
 
     func start() {
@@ -134,10 +149,29 @@ final class OperatorBrowserLoginService {
         cookieObserver = observer
         dataStore.httpCookieStore.add(observer)
         checkForSignIn(observationID: id)
+        // Last-resort signal: additional accounts use a non-persistent store, whose cookie
+        // notifications macOS 14 can skip entirely, and Twitch may set the cookie without
+        // a page change. A slow poll guarantees the login is noticed.
+        signInPollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                guard let self, self.observationID == id else { return }
+                self.checkForSignIn(observationID: id)
+            }
+        }
+    }
+
+    /// Checks the cookie store without waiting for a cookie notification. WebKit does not
+    /// deliver those reliably for every data store, which left sign-in waiting forever.
+    func recheckSignIn() {
+        guard let observationID else { return }
+        checkForSignIn(observationID: observationID)
     }
 
     private func stopObservingSignIn() {
         observationID = nil
+        signInPollTask?.cancel()
+        signInPollTask = nil
         if let cookieObserver {
             dataStore.httpCookieStore.remove(cookieObserver)
         }

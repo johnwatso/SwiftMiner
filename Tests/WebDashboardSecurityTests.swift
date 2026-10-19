@@ -1459,3 +1459,82 @@ private actor ExclusionsRecorder {
         updates.append((accountId, games))
     }
 }
+
+/// Ruru's enhanced-monitoring status is public like `/health`, so it must hold
+/// only counts and machine-coded states.
+final class RuruMonitoringStatusTests: XCTestCase {
+    func testStatusPathIsPublicWithoutTheWebDashboard() {
+        XCTAssertTrue(HTTPAPIServer.isPublicPath("/.well-known/ruru", prefixes: [], exactPaths: []))
+        XCTAssertFalse(HTTPAPIServer.isPublicPath("/.well-known/ruru/x", prefixes: [], exactPaths: []))
+        XCTAssertFalse(HTTPAPIServer.isPublicPath("/.well-known/rurux", prefixes: [], exactPaths: []))
+        XCTAssertFalse(HTTPAPIServer.isPublicPath("/.well-known", prefixes: [], exactPaths: []))
+    }
+
+    func testDocumentReportsCountsAndDegradedComponents() throws {
+        let inputs = RuruMonitoringStatus.Inputs(version: "1.45.0", build: "2026101912", miners: [
+            .init(isMining: true, needsSignIn: false, hasError: false, dropsClaimed: 4),
+            .init(isMining: false, needsSignIn: true, hasError: false, dropsClaimed: 1)
+        ], swiftBot: .disconnected, exposure: .everywhere)
+        let status = RuruMonitoringStatus(inputs, uptimeSeconds: 90)
+        XCTAssertEqual(status.state, .degraded)
+        XCTAssertEqual(status.reasonCode, "account_needs_sign_in")
+        XCTAssertEqual(status.components.map(\.reasonCode), ["account_needs_sign_in", "swiftbot_disconnected"])
+        XCTAssertEqual(status.metrics.map(\.value), [2, 1, 1, 5])
+
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(status)) as? [String: Any])
+        XCTAssertEqual(json["ruru"] as? Int, 1)
+        XCTAssertEqual((json["app"] as? [String: Any])?["version"] as? String, "1.45.0")
+        XCTAssertEqual(Set(json.keys), ["ruru", "app", "state", "reasonCode", "uptimeSeconds", "components", "metrics"])
+    }
+
+    func testHealthyAppWithoutSwiftBotIsReady() {
+        let status = RuruMonitoringStatus(.init(version: "1.45.0", build: nil, miners: [
+            .init(isMining: true, needsSignIn: false, hasError: false, dropsClaimed: 0)
+        ], swiftBot: nil, exposure: .everywhere), uptimeSeconds: nil)
+        XCTAssertEqual(status.state, .ready)
+        XCTAssertNil(status.reasonCode)
+        XCTAssertEqual(status.components.map(\.id), ["miners"])
+    }
+
+    func testRouteIsNotFoundWithoutAnAppProvider() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("RuruStatus-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let manager = SQLiteManager(databaseURL: folder.appendingPathComponent("test.db"))
+        try await manager.open()
+        let routes = DiscordAPIRoutes(manager: manager, projectionBuilder: DiscordProjectionBuilder(manager: manager),
+                                      apiKey: String(repeating: "k", count: 40))
+        let router = HTTPRouter()
+        await routes.configure(router)
+        let missing = await router.handle(HTTPRequest(method: "GET", path: "/.well-known/ruru", headers: [:], body: Data()))
+        XCTAssertEqual(missing.statusCode, 404)
+
+        func get(_ exposure: RuruMonitoringStatus.Exposure, headers: [String: String] = [:], from address: String?) async -> Int {
+            await routes.setOnRuruStatus { .init(version: "1.45.0", build: "1", miners: [], swiftBot: nil, exposure: exposure) }
+            return await router.handle(HTTPRequest(method: "GET", path: "/.well-known/ruru", headers: headers, body: Data(),
+                                                   remoteAddress: address)).statusCode
+        }
+        let offStatus = await get(.off, from: "127.0.0.1")
+        XCTAssertEqual(offStatus, 404, "Off by default")
+        let lan = await get(.localNetwork, from: "192.168.1.20")
+        XCTAssertEqual(lan, 200)
+        let tunnel = await get(.localNetwork, headers: ["cf-connecting-ip": "203.0.113.9"], from: "127.0.0.1")
+        XCTAssertEqual(tunnel, 404, "The tunnel connects from loopback but is public")
+        let internet = await get(.localNetwork, from: "203.0.113.9")
+        XCTAssertEqual(internet, 404)
+        let unknownPeer = await get(.localNetwork, from: nil)
+        XCTAssertEqual(unknownPeer, 404)
+        let everywhere = await get(.everywhere, headers: ["cf-connecting-ip": "203.0.113.9"], from: "127.0.0.1")
+        XCTAssertEqual(everywhere, 200)
+    }
+
+    func testExposureDefaultsOffAndAddressesClassify() {
+        XCTAssertEqual(RuruMonitoringStatus.Exposure(rawValue: "off"), .off)
+        for address in ["127.0.0.1", "10.11.1.40", "172.20.0.1", "192.168.0.2", "100.100.1.1", "fd12::1", "fe80::1%en0", "::1"] {
+            XCTAssertTrue(RuruMonitoringStatus.Exposure.isLocalAddress(address), address)
+        }
+        for address in ["8.8.8.8", "172.32.0.1", "2606:4700::1", "localhost.example.com"] {
+            XCTAssertFalse(RuruMonitoringStatus.Exposure.isLocalAddress(address), address)
+        }
+    }
+}

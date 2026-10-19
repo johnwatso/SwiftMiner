@@ -85,6 +85,93 @@ public enum GameFamily: String, Codable, CaseIterable, Sendable {
     }
 }
 
+/// A saved broad-match rule. Curated families keep their stable legacy tokens,
+/// while a user can create a safe prefix wildcard from any game-series search
+/// such as "NBA" or "FIFA".
+public struct GameWildcard: Codable, Hashable, Sendable, Identifiable {
+    private static let tokenPrefix = "swiftminer:wildcard:"
+
+    public let displayName: String
+    public let matchPrefix: String
+    private let family: GameFamily?
+
+    public var id: String { priorityToken }
+
+    public init(family: GameFamily) {
+        self.displayName = family.displayName
+        self.matchPrefix = Self.normalized(family.displayName)
+        self.family = family
+    }
+
+    private init(displayName: String, matchPrefix: String, family: GameFamily?) {
+        self.displayName = displayName
+        self.matchPrefix = matchPrefix
+        self.family = family
+    }
+
+    /// Makes a prefix wildcard from a deliberate search term. Very short terms
+    /// are too broad to be a useful rule (for example, "A").
+    public init?(searchQuery: String) {
+        let displayName = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = Self.normalized(displayName)
+        guard normalized.count >= 2 else { return nil }
+
+        if let family = GameFamily.allCases.first(where: {
+            Self.normalized($0.displayName) == normalized
+        }) {
+            self.init(family: family)
+            return
+        }
+
+        self.init(displayName: displayName, matchPrefix: normalized, family: nil)
+    }
+
+    /// Reads both the original curated token and the generic wildcard token so
+    /// existing Call of Duty priorities remain compatible.
+    public init?(priorityToken: String) {
+        if let family = GameFamily(priorityToken: priorityToken) {
+            self.init(family: family)
+            return
+        }
+
+        guard priorityToken.hasPrefix(Self.tokenPrefix),
+              let data = Data(base64Encoded: String(priorityToken.dropFirst(Self.tokenPrefix.count))),
+              let displayName = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        self.init(searchQuery: displayName)
+    }
+
+    public var priorityToken: String {
+        if let family { return family.priorityToken }
+        return Self.tokenPrefix + Data(displayName.utf8).base64EncodedString()
+    }
+
+    public var matchingDescription: String {
+        family?.matchingDescription ?? "Matches game titles beginning with \(displayName)"
+    }
+
+    public func matches(gameName: String) -> Bool {
+        if let family { return family.matches(gameName: gameName) }
+        let name = Self.normalized(gameName)
+        return name == matchPrefix || name.hasPrefix(matchPrefix + " ")
+    }
+
+    private static func normalized(_ value: String) -> String {
+        value.lowercased()
+            .unicodeScalars
+            .map { CharacterSet.alphanumerics.contains($0) ? Character($0) : " " }
+            .reduce(into: "") { result, character in
+                if character == " " {
+                    if result.last != " " { result.append(character) }
+                } else {
+                    result.append(character)
+                }
+            }
+            .trimmingCharacters(in: .whitespaces)
+    }
+}
+
 /// One parsing and matching point for the legacy `[String]` priority pipeline.
 /// Family tokens are only ever persisted by `GamePreference`; ordinary strings
 /// remain exact game IDs or names exactly as they behaved before this feature.
@@ -99,8 +186,8 @@ public struct PriorityGameMatcher: Sendable {
         let normalizedID = Self.normalized(gameId)
         let normalizedName = Self.normalized(gameName)
         return rules.firstIndex { rule in
-            if let family = GameFamily(priorityToken: rule) {
-                return family.matches(gameName: gameName)
+            if let wildcard = GameWildcard(priorityToken: rule) {
+                return wildcard.matches(gameName: gameName)
             }
             let key = Self.normalized(rule)
             return !key.isEmpty && (key == normalizedID || key == normalizedName)
@@ -117,7 +204,7 @@ public struct PriorityGameMatcher: Sendable {
     public var discoveryGames: [String] {
         var seen = Set<String>()
         return rules.compactMap { rule in
-            let value = GameFamily(priorityToken: rule)?.displayName ?? rule
+            let value = GameWildcard(priorityToken: rule)?.displayName ?? rule
             let key = Self.normalized(value)
             return !key.isEmpty && seen.insert(key).inserted ? value : nil
         }
@@ -146,10 +233,19 @@ public struct GamePreference: Codable, Sendable, Identifiable, Equatable {
         return GameFamily.allCases.first { $0.displayName.caseInsensitiveCompare(gameName) == .orderedSame }
     }
 
-    public var isWildcard: Bool { gameFamily != nil }
+    /// Includes both the original curated family and a wildcard the user made
+    /// from a series search term.
+    public var wildcard: GameWildcard? {
+        guard match == .gameFamily else { return nil }
+        if let wildcard = GameWildcard(priorityToken: gameId) { return wildcard }
+        guard let family = gameFamily else { return nil }
+        return GameWildcard(family: family)
+    }
+
+    public var isWildcard: Bool { wildcard != nil }
 
     public var priorityToken: String {
-        gameFamily?.priorityToken ?? gameName
+        wildcard?.priorityToken ?? gameName
     }
 
     public init(
