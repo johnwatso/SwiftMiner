@@ -57,8 +57,10 @@ struct WebDashboardSettingsView: View {
                 oauthSections
             }
 
+            #if DEBUG
             // Served by the same local server whether or not the dashboard is on.
             ruruMonitoringSection
+            #endif
         }
         .formStyle(.grouped)
         .padding(.horizontal, 24)
@@ -82,6 +84,7 @@ struct WebDashboardSettingsView: View {
 
     // MARK: - Ruru Monitoring
 
+    #if DEBUG
     private var ruruMonitoringSection: some View {
         Section {
             Toggle("Share status with Ruru", isOn: Binding(
@@ -106,6 +109,7 @@ struct WebDashboardSettingsView: View {
             Text("Ruru Monitoring")
         }
     }
+    #endif
 
     // MARK: - Local Access
 
