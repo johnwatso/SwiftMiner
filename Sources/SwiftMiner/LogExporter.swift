@@ -5,8 +5,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// Builds a single plain-text diagnostic report covering app version,
-/// per-miner state, settings, and the seven retained daily event logs. Designed
-/// to be attached to a GitHub issue when reporting a problem.
+/// per-miner state, settings, and the seven retained daily event logs, and saves it
+/// zipped. Designed to be attached to a GitHub issue or discussion when reporting a problem.
 enum LogExporter {
 
     static let defaultExportDirectory: FileManager.SearchPathDirectory = .desktopDirectory
@@ -740,12 +740,65 @@ enum LogExporter {
         DiagnosticExportSession.shared.begin(navigation: navigation)
     }
 
+    /// The name the save dialog offers: the zip that holds the report.
     static func defaultFilename(for date: Date) -> String {
+        "\(baseFilename(for: date)).zip"
+    }
+
+    /// The name of the plain-text report inside the zip.
+    static func reportFilename(for date: Date) -> String {
+        "\(baseFilename(for: date)).txt"
+    }
+
+    private static func baseFilename(for date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
         formatter.dateFormat = "yyyy-MM-dd-HHmmss"
-        return "SwiftMiner-logs-\(formatter.string(from: date)).txt"
+        return "SwiftMiner-logs-\(formatter.string(from: date))"
+    }
+
+    /// Zips the report as a single `filename` entry. A week of activity log runs to tens
+    /// of megabytes, past GitHub's 25 MB attachment limit, and the repetitive log lines
+    /// compress well over ten to one. `ditto` writes the same archive Finder's Compress
+    /// does, so the zip opens with a double-click and needs no dependency.
+    static func makeArchive(report: String, filename: String) throws -> Data {
+        let fileManager = FileManager.default
+        let workDirectory = fileManager.temporaryDirectory
+            .appendingPathComponent("SwiftMiner-diagnostics-\(UUID().uuidString)", isDirectory: true)
+        try fileManager.createDirectory(at: workDirectory, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: workDirectory) }
+
+        let reportURL = workDirectory.appendingPathComponent(filename)
+        let archiveURL = workDirectory.appendingPathComponent("report.zip")
+        try Data(report.utf8).write(to: reportURL)
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+        process.arguments = [
+            "-c", "-k", "--norsrc", "--noextattr", "--noacl",
+            reportURL.path, archiveURL.path
+        ]
+        let errorPipe = Pipe()
+        process.standardError = errorPipe
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            let detail = String(decoding: errorPipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            throw ArchiveError(status: process.terminationStatus, detail: detail)
+        }
+        return try Data(contentsOf: archiveURL)
+    }
+
+    struct ArchiveError: LocalizedError {
+        let status: Int32
+        let detail: String
+
+        var errorDescription: String? {
+            let reason = detail.isEmpty ? "exit status \(status)" : detail
+            return "The diagnostic report couldn't be compressed (\(reason))."
+        }
     }
 }
 
@@ -781,13 +834,23 @@ final class DiagnosticExportSession {
             // stays animated while redaction and string formatting run.
             await Task.yield()
             let snapshot = await LogExporter.makeSnapshot(navigation: navigation)
-            let report = await Task.detached(priority: .userInitiated) {
-                LogExporter.buildReport(snapshot)
+            let archive = await Task.detached(priority: .userInitiated) {
+                Result {
+                    try LogExporter.makeArchive(
+                        report: LogExporter.buildReport(snapshot),
+                        filename: LogExporter.reportFilename(for: snapshot.generatedAt)
+                    )
+                }
             }.value
-            self.report = DiagnosticReportFile(text: report)
-            filename = LogExporter.defaultFilename(for: snapshot.generatedAt)
             isPreparing = false
-            isExporterPresented = true
+            switch archive {
+            case .success(let data):
+                report = DiagnosticReportFile(data: data)
+                filename = LogExporter.defaultFilename(for: snapshot.generatedAt)
+                isExporterPresented = true
+            case .failure(let error):
+                fail(error)
+            }
         }
     }
 
@@ -807,13 +870,13 @@ final class DiagnosticExportSession {
     }
 }
 
-/// The finished report as the save dialog writes it: UTF-8 plain text.
+/// The finished report as the save dialog writes it: a zip holding the UTF-8 plain-text report.
 struct DiagnosticReportFile: Transferable {
-    let text: String
+    let data: Data
 
     static var transferRepresentation: some TransferRepresentation {
-        DataRepresentation(exportedContentType: .plainText) { file in
-            Data(file.text.utf8)
+        DataRepresentation(exportedContentType: .zip) { file in
+            file.data
         }
     }
 }
@@ -842,7 +905,7 @@ private struct DiagnosticExportPresenter: ViewModifier {
             .fileExporter(
                 isPresented: $session.isExporterPresented,
                 item: session.report,
-                contentTypes: [.plainText],
+                contentTypes: [.zip],
                 defaultFilename: session.filename
             ) { result in
                 switch result {
@@ -852,7 +915,7 @@ private struct DiagnosticExportPresenter: ViewModifier {
             } onCancellation: {
                 session.cancel()
             }
-            .fileDialogMessage("Save a redacted diagnostic report you can attach to a GitHub issue.")
+            .fileDialogMessage("Save a redacted, zipped diagnostic report you can attach to a GitHub issue or discussion.")
             .fileDialogDefaultDirectory(
                 FileManager.default.urls(for: LogExporter.defaultExportDirectory, in: .userDomainMask).first
             )
