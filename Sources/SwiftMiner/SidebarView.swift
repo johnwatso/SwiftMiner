@@ -17,8 +17,13 @@ struct SidebarView: View {
 
     private static let dragCoordinateSpace = "sidebarSelectorDrag"
 
+    /// Counted over the miners the UI presents, so a screenshot fixture's fleet
+    /// and its badge agree. Outside DEBUG that is the real list, reordered.
     private var minerAttentionCount: Int {
-        MinerAttention.attentionCount(miners: navigation.minerManager.miners, settings: settings)
+        MinerAttention.attentionCount(
+            miners: SwiftMinerFleet.displayedMiners(from: navigation.minerManager.miners),
+            settings: settings
+        )
     }
 
     fileprivate var sidebarItems: [SidebarItemSpec] {

@@ -26,12 +26,22 @@ struct WebDashboardSettingsView: View {
     @State private var draftTwitchClientID = ""
     @State private var draftTwitchClientSecret = ""
 
+    /// The SwiftBot state these panes draw. The screenshot fixture presents it
+    /// paired; everywhere else it is the live state.
+    private var displayedSwiftBotState: SwiftBotConnectionState {
+#if DEBUG
+        return MarketingScreenshotFixture.swiftBotState(navigation.swiftBotState)
+#else
+        return navigation.swiftBotState
+#endif
+    }
+
     private var swiftBotIsConnected: Bool {
-        settings.swiftBotEnabled && navigation.swiftBotState == .connected
+        settings.swiftBotEnabled && displayedSwiftBotState == .connected
     }
 
     private var swiftBotUnavailableReason: String {
-        switch navigation.swiftBotState {
+        switch displayedSwiftBotState {
         case .connected:
             return "SwiftBot is connected"
         case .disconnected:
@@ -880,7 +890,7 @@ struct IntegrationsSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                if navigation.swiftBotState != .connected {
+                if displayedSwiftBotState != .connected {
                     Divider()
                         .padding(.vertical, 2)
 
@@ -939,8 +949,18 @@ struct IntegrationsSettingsView: View {
         }
     }
 
+    /// The SwiftBot state these panes draw. The screenshot fixture presents it
+    /// paired; everywhere else it is the live state.
+    private var displayedSwiftBotState: SwiftBotConnectionState {
+#if DEBUG
+        return MarketingScreenshotFixture.swiftBotState(navigation.swiftBotState)
+#else
+        return navigation.swiftBotState
+#endif
+    }
+
     private var statusTitle: String {
-        switch navigation.swiftBotState {
+        switch displayedSwiftBotState {
         case .connected: return "Connected to SwiftBot"
         case .notConfigured: return "Discord Integration"
         case .disconnected: return "Not Connected"
@@ -949,7 +969,7 @@ struct IntegrationsSettingsView: View {
     }
 
     private var statusSubtitle: String {
-        switch navigation.swiftBotState {
+        switch displayedSwiftBotState {
         case .connected: return "Messages will be delivered to Discord"
         case .notConfigured: return "Enable Discord integration to get started"
         case .disconnected: return "SwiftBot is not responding"
@@ -958,7 +978,7 @@ struct IntegrationsSettingsView: View {
     }
 
     private var statusIcon: String {
-        switch navigation.swiftBotState {
+        switch displayedSwiftBotState {
         case .connected: return "checkmark.circle.fill"
         case .notConfigured: return "app.badge.checkmark"
         case .disconnected: return "exclamationmark.triangle.fill"
@@ -967,7 +987,7 @@ struct IntegrationsSettingsView: View {
     }
 
     private var statusColor: Color {
-        switch navigation.swiftBotState {
+        switch displayedSwiftBotState {
         case .connected: return .green
         case .notConfigured: return .secondary
         case .disconnected: return .orange

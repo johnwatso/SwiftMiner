@@ -765,10 +765,14 @@ extension WebDashboardAssets {
     }
 
     function priorityArtworkURL(p, game) {
-      if (priorityFamily(p, game)) return familyArtworkURL(p, game);
       const key = String(game || '').trim().toLowerCase();
       const url = p && p.priorityGameArtwork ? p.priorityGameArtwork[key] : '';
-      return typeof url === 'string' && url.toLowerCase().startsWith('https://') ? url : '';
+      const projected = typeof url === 'string' && url.toLowerCase().startsWith('https://') ? url : '';
+      // A wildcard prefers a live campaign it covers, then the newest title
+      // the app resolved for it. Never the bare series name: Twitch's art for
+      // that category belongs to an old game.
+      if (priorityFamily(p, game)) return familyArtworkURL(p, game) || projected;
+      return projected;
     }
 
     function prioritySourceOf(p) {
@@ -832,7 +836,7 @@ extension WebDashboardAssets {
       let tiles = '';
       games.slice(0, wide).forEach((g, i) => {
         const cls = i < narrow ? '' : ' class="priority-art-wide"';
-        tiles += `<img${cls} alt="" data-game="${esc(priorityLabel(p, g))}" data-art="${esc(priorityArtworkURL(p, g))}">`;
+        tiles += `<img${cls} alt="" data-game="${esc(priorityLabel(p, g))}"${priorityFamily(p, g) ? ' data-family="1"' : ''} data-art="${esc(priorityArtworkURL(p, g))}">`;
       });
       const overflow = (limit, at) => {
         const extra = games.length - Math.min(limit, games.length);
@@ -886,7 +890,7 @@ extension WebDashboardAssets {
       let rows = '';
       games.forEach((game, index) => {
         rows += `<div class="campaign-row">
-          <img class="boxart" alt="" data-game="${esc(priorityLabel(p, game))}" data-art="${esc(priorityArtworkURL(p, game))}">
+          <img class="boxart" alt="" data-game="${esc(priorityLabel(p, game))}"${priorityFamily(p, game) ? ' data-family="1"' : ''} data-art="${esc(priorityArtworkURL(p, game))}">
           <div class="copy">
             <div class="title">${esc(priorityLabel(p, game))} ${wildcardBadge(p, game)}</div>
             <div class="details">Shared priority ${index + 1}${priorityFamily(p, game) ? ' · ' + esc(priorityFamily(p, game).detail) : ''}</div>
@@ -973,7 +977,7 @@ extension WebDashboardAssets {
         rows += `
           <li class="priority-row" data-i="${i}"${reorderable ? ' draggable="true"' : ''}>
             <span class="priority-rank">${i + 1}</span>
-            <img class="priority-row-art" alt="" data-game="${esc(priorityLabel(p, g))}" data-art="${esc(personalArtworkURL(p, g))}">
+            <img class="priority-row-art" alt="" data-game="${esc(priorityLabel(p, g))}"${priorityFamily(p, g) ? ' data-family="1"' : ''} data-art="${esc(personalArtworkURL(p, g))}">
             <span class="priority-row-name">${esc(priorityLabel(p, g))}</span>${wildcardBadge(p, g)}
             <button class="priority-row-btn priority-row-menu-btn" type="button" data-menu-i="${i}"
                     aria-label="Actions for ${esc(priorityLabel(p, g))}" aria-haspopup="menu" aria-expanded="${personalMenuIndex === i}">
@@ -1630,13 +1634,15 @@ extension WebDashboardAssets {
     function hydrateArt(root = document) {
       root.querySelectorAll('img[data-game]').forEach(img => {
         const real = img.dataset.art;
-        const guess = boxart(img.dataset.game);
+        // A wildcard's label is a series name, and Twitch's art for that bare
+        // category is an old title, so it never gets a guessed URL.
+        const guess = img.dataset.family ? '' : boxart(img.dataset.game);
         img.addEventListener('error', () => {
           // Real URL failed (or guess failed): fall back once, then hide.
-          if (real && img.src !== guess) { img.src = guess; }
+          if (real && guess && img.src !== guess) { img.src = guess; }
           else { img.removeAttribute('src'); }
         });
-        img.src = real || guess;
+        if (real || guess) img.src = real || guess;
       });
     }
 

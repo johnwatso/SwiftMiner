@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftMinerCore
+import SwiftMinerService
 import AppKit
 
 #if DEBUG
@@ -140,6 +141,13 @@ enum MarketingScreenshotFixture {
         return result
     }
 
+    /// SwiftBot as the settings panes present it: paired and connected, the
+    /// state an operator reaches by pairing, so captures never show the
+    /// offline warning of a machine that simply is not running SwiftBot.
+    static func swiftBotState(_ real: SwiftBotConnectionState) -> SwiftBotConnectionState {
+        isEnabled ? .connected : real
+    }
+
     static func discordID(forAccountId accountId: String) -> String? {
         guard let index = profileIndex(forAccountId: accountId) else { return nil }
         return String(100_000_000_000_000_001 + index)
@@ -158,6 +166,7 @@ enum MarketingScreenshotFixture {
         return avatarImages[url]
     }
 
+    @MainActor
     static func miners(from realMiners: [MinerManager.ManagedMiner]) -> [MinerManager.ManagedMiner] {
         guard isEnabled, !realMiners.isEmpty else { return realMiners }
 
@@ -207,34 +216,110 @@ enum MarketingScreenshotFixture {
     }
 
     /// Prefer recognisable, real campaigns in a stable order so successive
-    /// captures do not reshuffle. Extra slots draw from other cached campaigns
-    /// with real reward data and one campaign per game.
+    /// captures do not reshuffle. Only games on the operator's priority list
+    /// qualify, so every card matches the Priority Queue on the same screen;
+    /// THE FINALS and ARC Raiders lead, the rest follow priority order with one
+    /// campaign per game. Fewer games than miners simply repeats the pool.
+    @MainActor
     private static func selectedCampaigns(from campaigns: [Campaign], count: Int) -> [Campaign] {
-        let preferredGames = [
-            "THE FINALS",
-            "ARC Raiders",
-            "Battlefield 6",
-            "Halo Infinite",
-            "Call of Duty: Modern Warfare 4"
-        ]
-        var selected: [Campaign] = []
-        var selectedGames = Set<String>()
-
-        for gameName in preferredGames {
-            guard let campaign = campaigns.first(where: {
-                $0.game.name.localizedCaseInsensitiveCompare(gameName) == .orderedSame
-                    && !$0.drops.isEmpty
-            }) else { continue }
-            selected.append(campaign)
-            selectedGames.insert(campaign.game.name.lowercased())
+        let leadGames = ["THE FINALS", "ARC Raiders"]
+        let settings = Settings.shared
+        let index = GameMatchIndex(
+            gamePreferences: settings.gamePreferences,
+            priorityGames: settings.priorityGames,
+            excludedGames: settings.excludedGames
+        )
+        func rank(_ campaign: Campaign) -> Int {
+            if let lead = leadGames.firstIndex(where: {
+                $0.localizedCaseInsensitiveCompare(campaign.game.name) == .orderedSame
+            }) {
+                return lead - leadGames.count
+            }
+            return index.priorityRank(gameName: campaign.game.name)
         }
 
-        for campaign in campaigns where selected.count < count && !campaign.drops.isEmpty {
+        var selected: [Campaign] = []
+        var selectedGames = Set<String>()
+        let candidates = campaigns
+            .filter { !$0.drops.isEmpty && index.priorityRank(gameName: $0.game.name) != .max }
+            .enumerated()
+            .sorted { (rank($0.element), $0.offset) < (rank($1.element), $1.offset) }
+            .map(\.element)
+        for campaign in candidates where selected.count < count {
             guard selectedGames.insert(campaign.game.name.lowercased()).inserted else { continue }
             selected.append(campaign)
         }
 
         return selected
+    }
+
+    /// The Drops list in capture mode. The live feed only holds what the real
+    /// accounts can mine this minute, which is often a single campaign, so this
+    /// re-dates real cached campaigns into the current window instead: Twitch's
+    /// names, artwork and rewards, newest campaign per game. Priority-list games
+    /// lead (THE FINALS and ARC Raiders first); other games with complete
+    /// artwork fill the rest. Paid-sub and art-less campaigns are skipped, and
+    /// per-account states are cleared so no real username reaches a row.
+    @MainActor
+    static func dropsFeed(from campaigns: [CampaignViewData]) -> [CampaignViewData] {
+        guard isEnabled else { return campaigns }
+
+        let leadGames = ["THE FINALS", "ARC Raiders"]
+        let settings = Settings.shared
+        let index = GameMatchIndex(
+            gamePreferences: settings.gamePreferences,
+            priorityGames: settings.priorityGames,
+            excludedGames: settings.excludedGames
+        )
+        func rank(_ campaign: CampaignViewData) -> Int {
+            if let lead = leadGames.firstIndex(where: {
+                $0.localizedCaseInsensitiveCompare(campaign.gameName) == .orderedSame
+            }) {
+                return lead - leadGames.count
+            }
+            return index.priorityRank(gameName: campaign.gameName)
+        }
+
+        var newestByGame: [String: CampaignViewData] = [:]
+        for campaign in campaigns
+        where campaign.artworkURL != nil
+            && !campaign.drops.isEmpty
+            && campaign.drops.allSatisfy({ $0.imageURL != nil && !$0.isSubscriptionRequired })
+            && !index.isExcluded(gameName: campaign.gameName) {
+            let key = campaign.gameName.lowercased()
+            if let existing = newestByGame[key], existing.endDate >= campaign.endDate { continue }
+            newestByGame[key] = campaign
+        }
+
+        let ordered = newestByGame.values.sorted {
+            let lhs = rank($0), rhs = rank($1)
+            if lhs != rhs { return lhs < rhs }
+            return $0.endDate > $1.endDate
+        }
+
+        let now = Date()
+        return ordered.prefix(8).enumerated().map { offset, source in
+            let isPriority = rank(source) != .max
+            return CampaignViewData(
+                id: "marketing-feed-\(source.id)",
+                gameId: source.gameId,
+                gameName: source.gameName,
+                campaignName: source.campaignName,
+                artworkURL: source.artworkURL,
+                progress: source.progress,
+                isClaimed: source.isClaimed,
+                dropsClaimed: source.dropsClaimed,
+                totalDrops: source.totalDrops,
+                status: "ACTIVE",
+                miningStatus: source.isClaimed ? .claimed : (source.progress > 0 ? .inProgress : .available),
+                isAccountConnected: true,
+                relevance: isPriority ? .prioritised : .active,
+                startDate: now.addingTimeInterval(-2 * 24 * 60 * 60),
+                endDate: now.addingTimeInterval(Double(3 + offset) * 24 * 60 * 60),
+                drops: source.drops,
+                accountStates: []
+            )
+        }
     }
 
     private static func makeLiveCampaign(

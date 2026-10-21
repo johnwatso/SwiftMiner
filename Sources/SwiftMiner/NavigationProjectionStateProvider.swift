@@ -218,7 +218,10 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
     }
 
     @MainActor
-    private static func priorityGameArtwork(for miner: MinerManager.ManagedMiner) -> [String: String] {
+    private static func priorityGameArtwork(
+        for miner: MinerManager.ManagedMiner,
+        knownCampaigns: [CampaignViewData]
+    ) -> [String: String] {
         var artworkByGame = [String: String]()
 
         func addArtwork(_ url: URL?, for gameName: String) {
@@ -231,6 +234,18 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
 
         for preference in Settings.shared.gamePreferences where preference.state == .preferred {
             addArtwork(preference.resolvedBoxArtURL, for: preference.gameName)
+            // The dashboard looks a wildcard up by its token, not its display
+            // name. Give it the franchise's newest known title, as the app's
+            // queue does, so the page never falls back to guessing art from
+            // the bare series name (Twitch's dated "Call of Duty" category).
+            if let wildcard = preference.wildcard {
+                let newest = knownCampaigns
+                    .filter { wildcard.matches(gameName: $0.gameName) && $0.artworkURL?.scheme?.lowercased() == "https" }
+                    .max { $0.startDate < $1.startDate }?
+                    .artworkURL
+                addArtwork(newest ?? preference.resolvedBoxArtURL, for: wildcard.priorityToken)
+                addArtwork(preference.customArtworkURL, for: wildcard.priorityToken)
+            }
         }
         for campaign in miner.allCampaigns {
             let key = campaign.game.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -266,7 +281,10 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
         unresolvedGames: [String]
     ) {
         guard let model, let miner = model.minerForAccount(accountId) else { return ([:], []) }
-        let artwork = Self.priorityGameArtwork(for: miner)
+        let artwork = Self.priorityGameArtwork(
+            for: miner,
+            knownCampaigns: model.minerManager.dataCoordinator.lastKnownAllCampaigns
+        )
         let preferredNames = Set(
             Settings.shared.gamePreferences
                 .filter { $0.state == .preferred }

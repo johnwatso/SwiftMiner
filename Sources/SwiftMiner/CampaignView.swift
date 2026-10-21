@@ -42,9 +42,15 @@ struct DropsListView: View {
         selectedMinerFilterId == Self.allMinersFilterId ? nil : selectedMinerFilterId
     }
     private var availableCampaigns: [CampaignViewData] {
-        campaigns.isEmpty
+        let available = campaigns.isEmpty
             ? navigation.minerManager.dataCoordinator.lastKnownAllCampaigns
             : campaigns
+#if DEBUG
+        if MarketingScreenshotFixture.isEnabled {
+            return MarketingScreenshotFixture.dropsFeed(from: available)
+        }
+#endif
+        return available
     }
     private var accountSignature: String {
         miners

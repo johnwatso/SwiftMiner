@@ -52,9 +52,10 @@ struct AccountSettingsView: View {
     @State private var draggingAccountId: String?
 
     /// The fleet in its arranged order — the same order Overview and the Miners
-    /// tab show, since this pane is where that order is edited.
+    /// tab show, since this pane is where that order is edited. Read through
+    /// `SwiftMinerFleet` so a screenshot fixture's sample accounts appear here too.
     private var miners: [MinerManager.ManagedMiner] {
-        settings.orderedMiners(navigation.minerManager.miners)
+        SwiftMinerFleet.displayedMiners(from: navigation.minerManager.miners)
     }
 
     var body: some View {
@@ -302,7 +303,12 @@ struct AccountSettingsAccountRow: View {
     }
 
     private var avatarURL: URL? {
-        avatarSource.resolve(discord: discordAvatarURL, twitch: twitchAvatarURL)
+#if DEBUG
+        if let url = MarketingScreenshotFixture.avatarURL(forAccountId: miner.accountId) {
+            return url
+        }
+#endif
+        return avatarSource.resolve(discord: discordAvatarURL, twitch: twitchAvatarURL)
     }
 
     /// Whether a Discord picture is reachable at all: the account has to be linked

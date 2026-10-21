@@ -220,8 +220,9 @@ enum WebDashboardAssets {
           background: linear-gradient(135deg, var(--bg-c), var(--bg-b));
         }
         .global-priority-artwork { display: flex; flex-wrap: wrap; gap: 8px; }
+        /* Twitch box art is 3:4; matching it keeps covers uncropped. */
         .global-priority-artwork img, .priority-art-more {
-          width: 56px; height: 56px; flex: none; border-radius: 13px; object-fit: cover;
+          width: 48px; height: 64px; flex: none; border-radius: 10px; object-fit: cover;
           border: 1px solid var(--glass-stroke); background: var(--field);
         }
         .priority-art-more {
@@ -515,7 +516,7 @@ enum WebDashboardAssets {
           font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
         }
         .priority-row-art {
-          width: 30px; height: 30px; flex: none; border-radius: 8px; object-fit: cover;
+          width: 30px; height: 40px; flex: none; border-radius: 7px; object-fit: cover;
           border: 1px solid var(--glass-stroke); background: var(--field);
         }
         .priority-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 600; }

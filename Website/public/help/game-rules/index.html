@@ -125,6 +125,40 @@
                     <p>It changes preference and visibility; it does not bypass Twitch eligibility, campaign dates, channel restrictions, subscription requirements, or publisher linking.</p>
                 </div>
 
+                <h2 id="wildcards">Wildcards: Prioritise a Whole Series</h2>
+                <p>Some series release a new Twitch category for every game. A <strong>wildcard</strong> prioritises the whole series in one entry, including titles that do not exist yet, so a new release is covered the day its Drops start without you adding it.</p>
+
+                <h3>How to add one</h3>
+                <ol class="steps-list">
+                    <li><strong>Search for the series.</strong> Type its name into <em>Search games to add&hellip;</em> in the Game Rules sheet, for example <em>Call of Duty</em> or <em>Battlefield</em>.</li>
+                    <li><strong>Choose Add Wildcard.</strong> The <em>Wildcards</em> section at the top of the results offers the series itself, above the individual games.</li>
+                    <li><strong>Drag it into place.</strong> A wildcard sits in the Prioritised list like any other game, and its position sets its priority.</li>
+                </ol>
+                <div class="screenshot-wrap">
+                    <picture>
+                        <source srcset="../assets/img/game-rules-add-wildcard-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img src="../assets/img/game-rules-add-wildcard-light.webp" alt="Game Rules search for Battlefield, with an Add Wildcard option above the individual Battlefield games" loading="lazy" decoding="async">
+                    </picture>
+                    <div class="screenshot-caption">Searching a series offers a wildcard above the individual games. Here a Call of Duty wildcard is already in the list.</div>
+                </div>
+
+                <h3>What a wildcard matches</h3>
+                <p>A wildcard covers every Twitch category whose name begins with the series name as whole words. <em>Battlefield</em> matches <em>Battlefield 6</em> and <em>Battlefield REDSEC</em>, but a wildcard never matches part of a word. Search terms need at least two characters.</p>
+                <div class="screenshot-wrap">
+                    <picture>
+                        <source srcset="../assets/img/game-rules-wildcard-dark.webp" media="(prefers-color-scheme: dark)">
+                        <img src="../assets/img/game-rules-wildcard-light.webp" alt="The Call of Duty wildcard expanded in Game Rules, explaining that any active Twitch category beginning with Call of Duty is prioritised" loading="lazy" decoding="async">
+                    </picture>
+                    <div class="screenshot-caption">Expand a wildcard to see what it matches and whether a matching campaign is live.</div>
+                </div>
+                <ul>
+                    <li><strong>It is marked as a wildcard everywhere.</strong> The repeat symbol and a <em>Wildcard</em> label appear in Game Rules, on the Overview queue and in the Web Dashboard, so a series rule is never mistaken for a single game.</li>
+                    <li><strong>The artwork follows the newest game.</strong> The queue card shows the newest Drops title in the series, not an old cover.</li>
+                    <li><strong>Normal rules still apply.</strong> Matching titles follow your priority order, mining strategy, <em>Only prioritised games</em> mode and publisher-link checks, exactly as a single game would.</li>
+                    <li><strong>Exclusions still win.</strong> Excluding one title, such as an older game in the series, keeps it out of mining even while the wildcard covers the rest.</li>
+                    <li><strong>Wildcards only prioritise.</strong> To stop mining a game, exclude that title on its own.</li>
+                </ul>
+
                 <h2 id="account-priorities">Global and Account-Specific Priorities</h2>
                 <p>The Game Rules window manages the global priority list. By default, every miner inherits that list. Individual miners can also have their own priority list, set through the Web Dashboard or SwiftBot and reviewed or adjusted from the Miners view.</p>
                 <ul>
@@ -267,6 +301,7 @@
                     <ul class="toc-list">
                         <li><a href="#how-selection-works" class="toc-link">How selection works</a></li>
                         <li><a href="#prioritised-games" class="toc-link">Prioritised games</a></li>
+                        <li><a href="#wildcards" class="toc-link">Wildcards</a></li>
                         <li><a href="#account-priorities" class="toc-link">Account priorities</a></li>
                         <li><a href="#excluded-games" class="toc-link">Excluded games</a></li>
                         <li><a href="#failover-streamers" class="toc-link">Fallback streamers</a></li>
