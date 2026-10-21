@@ -315,6 +315,13 @@ public final class NavigationModel {
                 return Array(Set(names)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
             }
         }
+        await routes.setOnSearchGames { [weak self] query in
+            await Task { @MainActor [weak self] () -> [Game]? in
+                // Searching needs a Twitch account's API client.
+                guard let self, !self.minerManager.miners.isEmpty else { return nil }
+                return try? await self.minerManager.dataCoordinator.searchCategories(query: query)
+            }.value
+        }
         await routes.setOnCampaignSummaries { [weak self] accountId in
             guard let self else { return [] }
             return await MainActor.run {

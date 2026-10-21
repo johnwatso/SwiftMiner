@@ -321,6 +321,15 @@ public actor DiscordAPIRoutes {
         self.onCampaignSummaries = handler
     }
 
+    /// Searches Twitch's game directory, so SwiftBot can check a game name is
+    /// real before following its Drops. Returns nil when no signed-in Twitch
+    /// account can run the search.
+    public var onSearchGames: (@Sendable (String) async -> [Game]?)?
+
+    public func setOnSearchGames(_ handler: @escaping @Sendable (String) async -> [Game]?) {
+        self.onSearchGames = handler
+    }
+
     /// Game names with active campaigns — feeds the dashboard's autocomplete.
     public func webKnownGames() async -> HTTPResponse {
         struct Games: Encodable { let games: [String] }
@@ -405,9 +414,37 @@ public actor DiscordAPIRoutes {
         await router.register(HTTPRoute(method: "PUT", pattern: "/v1/users/:discordUserId/miners/:accountId/priorities") { request, params in
             await routes.handleSetPriorities(request: request, params: params)
         })
+
+        await router.register(HTTPRoute(method: "GET", pattern: "/v1/games/search") { request, _ in
+            await routes.handleSearchGames(request: request)
+        })
     }
 
     // MARK: - Handlers
+
+    private func handleSearchGames(request: HTTPRequest) async -> HTTPResponse {
+        struct Result: Encodable {
+            let id: String
+            let name: String
+            let boxArtURL: String?
+        }
+        struct Results: Encodable { let games: [Result] }
+
+        let query = (request.queryParams["q"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard query.count >= 2, query.count <= 100 else {
+            return .error(code: "invalid_query", message: "Search for 2 to 100 characters.", statusCode: 400)
+        }
+        guard let games = await onSearchGames?(query) else {
+            return .error(
+                code: "search_unavailable",
+                message: "SwiftMiner needs a signed-in Twitch account to search games.",
+                statusCode: 503
+            )
+        }
+        return HTTPResponse.json(Results(games: games.map {
+            Result(id: $0.id, name: $0.name, boxArtURL: $0.boxArtURL?.absoluteString)
+        }))
+    }
 
     private func handleGetUsers(request: HTTPRequest, params: [String: String]) async -> HTTPResponse {
         let users = await adminLinkingService.getAllUsers()

@@ -81,6 +81,7 @@
 
     <!-- Site styles (custom components, layout, animations) -->
     <link rel="stylesheet" href="./assets/css/site.css">
+    <link rel="stylesheet" href="./assets/css/landing.css">
 
     <script>
         // Apply the system theme immediately to prevent layout flashing.
@@ -104,6 +105,7 @@
     </script>
 </head>
 <body class="antialiased selection:bg-brand-cyan selection:text-brand-dark relative">
+    <a class="refresh-skip-link" href="#main">Skip to content</a>
 
     <!-- Inline icon sprite: only the icons actually used on this page (replaces the Phosphor web-font CDN). -->
     <svg width="0" height="0" aria-hidden="true" style="position:absolute" focusable="false">
@@ -137,69 +139,51 @@
     <canvas id="particles" class="fixed inset-0 w-full h-full z-0 pointer-events-none opacity-30"></canvas>
 
     <!-- Main Content (Scroll Snapping Container) -->
-    <main class="snap-scroller z-10 relative">
+    <main id="main" tabindex="-1" class="snap-scroller z-10 relative">
 
-        <!-- Hero Section -->
-        <section class="hero-section min-h-[100dvh] flex items-center relative py-24 lg:py-0 overflow-hidden">
-            <div class="hero-shell mx-auto px-4 sm:px-6 lg:px-8 w-full">
-                <div class="flex flex-col items-center">
-                    
-                    <!-- Hero Text -->
-                    <div class="hero-copy text-center reveal">
-                        <div class="flex items-center justify-center gap-3 mb-4">
-                            <img src="./assets/landing/web-logo-dark.png" width="152" height="152" decoding="async" alt="" class="brand-logo-dark" style="width:60px;height:60px;">
-                            <img src="./assets/landing/web-logo-light.png" width="152" height="152" decoding="async" alt="" class="brand-logo-light" style="width:60px;height:60px;">
-                            <span class="font-display font-bold text-4xl tracking-tight text-slate-900 dark:text-white">SwiftMiner</span>
-                        </div>
-                        <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight mb-4 leading-[1.05] text-slate-900 dark:text-white drop-shadow-2xl">
-                            <span class="hero-title-line"><span class="text-gradient">Twitch Drops Miner</span> for macOS.</span>
-                        </h1>
-                        
-                        <p class="text-lg sm:text-xl text-slate-600 dark:text-gray-400 mb-6 max-w-3xl mx-auto leading-relaxed font-light">
-                            Set it once. SwiftMiner finds eligible streams, tracks campaign progress, and claims rewards across all your accounts—right from your Mac.
-                        </p>
-                        
-                        <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
-                            <a href="./download/" data-latest-download class="hero-cta w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-4 bg-gradient-to-br from-brand-purple to-brand-violet rounded-xl text-white font-bold text-lg hover:shadow-[0_8px_30px_rgba(147,51,234,0.4)] hover:-translate-y-1 transition-all">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" class="w-5 h-5"><use href="#i-download"/></svg>
-                                Download for Mac
-                            </a>
-                            <a href="https://github.com/johnwatso/SwiftMiner" class="hero-cta w-full sm:w-auto px-5 py-4 glass-panel rounded-xl text-slate-900 dark:text-white font-bold text-lg hover:bg-black/5 dark:hover:bg-white/10 hover:-translate-y-1 transition-all flex items-center justify-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
-                                    <use href="#i-github"/>
-                                </svg>
-                                View on GitHub
-                            </a>
-                        </div>
-                        <p class="mt-4 text-xs text-slate-500 dark:text-gray-500 font-medium">
-                            Latest release: <span data-latest-version>v1.40.1</span> · Requires macOS 14.0 or later
-                        </p>
+    <header class="refresh site-header">
+        <nav class="navigation shell" aria-label="Main navigation">
+            <a class="wordmark" href="./" aria-label="SwiftMiner home">
+                <img src="./assets/landing/web-logo-dark.png" width="152" height="152" alt="">
+                <span>SwiftMiner</span>
+            </a>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#how-it-works">How it works</a>
+                <a href="#security">Security</a>
+            </div>
+            <a class="button button-secondary button-small nav-github" href="https://github.com/johnwatso/SwiftMiner">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-github"/></svg>
+                GitHub
+            </a>
+        </nav>
+    </header>
 
-                    </div>
-
-                    <!-- Hero Image -->
-                    <div class="hero-screenshot reveal" style="transition-delay: 200ms;">
-                        <div class="screenshot-frame">
-                            <img src="./assets/landing/overview-dark.webp" data-screenshot="overview" width="1580" height="880" fetchpriority="high" decoding="async" alt="SwiftMiner Twitch Drops miner dashboard showing active campaigns on macOS" class="w-full">
-                        </div>
-                    </div>
-
-                    <div class="trust-strip reveal" style="transition-delay: 280ms;">
-                        <span class="trust-badge">
-                            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" class="text-brand-cyan">
-                                <use href="#i-github"/>
-                            </svg>
-                            Free &amp; Open Source
-                        </span>
-                        <span class="trust-badge"><svg class="ph-icon text-brand-purple" aria-hidden="true"><use href="#i-seal-check-bold"/></svg>Signed &amp; Notarized by Apple</span>
-                        <span class="trust-badge">
-                            <svg viewBox="0 0 340 268" fill="none" aria-hidden="true">
-                                <path fill="#2560ff" d="M334,110.1c-8.3-5.6-30.2-8-46.1-3.7-.9-15.8-9-29.2-24-40.8l-5.5-3.7-3.7,5.6c-7.2,11-10.3,25.7-9.2,39,.8,8.2,3.7,17.4,9.2,24.1-20.7,12-39.8,9.3-124.3,9.3H0c-.4,19.1,2.7,55.8,26,85.6,2.6,3.3,5.4,6.5,8.5,9.6,19,19,47.6,32.9,90.5,33,65.4,0,121.4-35.3,155.5-120.8,11.2.2,40.8,2,55.3-26,.4-.5,3.7-7.4,3.7-7.4l-5.5-3.7h0ZM85.2,92.7h-36.7v36.7h36.7v-36.7ZM132.6,92.7h-36.7v36.7h36.7v-36.7ZM179.9,92.7h-36.7v36.7h36.7v-36.7ZM227.3,92.7h-36.7v36.7h36.7v-36.7ZM37.8,92.7H1.1v36.7h36.7v-36.7ZM85.2,46.3h-36.7v36.7h36.7v-36.7ZM132.6,46.3h-36.7v36.7h36.7v-36.7ZM179.9,46.3h-36.7v36.7h36.7v-36.7ZM179.9,0h-36.7v36.7h36.7V0Z"/>
-                            </svg>
-                            No Docker or Python
-                        </span>
-                    </div>
+        <section class="refresh-hero" aria-labelledby="hero-title">
+            <div class="refresh hero shell">
+            <div class="hero-copy">
+                <p class="eyebrow">Twitch Drops Miner for macOS</p>
+                <h1 id="hero-title">Your Twitch Drops.<br>On autopilot.</h1>
+                <p class="hero-description">SwiftMiner automatically finds eligible streams, tracks campaign progress, and claims rewards across your Twitch accounts — right from your Mac.</p>
+                <div class="hero-actions">
+                    <a class="button" href="./download/" data-latest-download>
+                        <svg class="icon" viewBox="0 0 384 512" aria-hidden="true"><use href="#i-apple"/></svg>
+                        Download for Mac
+                    </a>
                 </div>
+                <p class="release-info"><a href="./release-notes/">Latest release: <span data-latest-version>v1.45.1</span></a><span class="release-divider" aria-hidden="true">·</span><span>Requires macOS 14.0 or later</span></p>
+            </div>
+            <figure class="hero-product">
+                <div class="hero-window product-window">
+                    <img src="./assets/landing/overview-dark.webp" width="3160" height="1760" fetchpriority="high" decoding="async" alt="SwiftMiner on macOS: two Twitch accounts mining ARC Raiders and Overwatch, with reward progress and a queue of prioritised games including a Call of Duty wildcard.">
+                </div>
+                <figcaption class="product-caption"><span>The Mac app. Everything in one place.</span><span>Accounts, campaigns &amp; the next reward.</span></figcaption>
+            </figure>
+            <ul class="product-facts" aria-label="At a glance">
+                <li>Free &amp; open source</li>
+                <li>Signed &amp; notarised</li>
+                <li>Apple silicon &amp; Intel</li>
+            </ul>
             </div>
         </section>
 

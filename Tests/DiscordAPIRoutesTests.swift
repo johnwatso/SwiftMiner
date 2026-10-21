@@ -205,6 +205,32 @@ final class DiscordAPIRoutesTests: XCTestCase {
         XCTAssertEqual(payload["priority_games"] as? [String], ["Black Ops 7", "THE FINALS"])
     }
 
+    func testGameSearchReturnsTwitchGamesAndRejectsShortQueries() async throws {
+        let harness = try await RouteHarness()
+        let search = { (query: String) in
+            await harness.router.handle(HTTPRequest(
+                method: "GET", path: "/v1/games/search", headers: [:], body: Data(), queryParams: ["q": query]
+            ))
+        }
+
+        let unavailable = await search("the finals")
+        XCTAssertEqual(unavailable.statusCode, 503)
+
+        await harness.routes.setOnSearchGames { query in
+            XCTAssertEqual(query, "the finals")
+            return [Game(id: "1234", name: "THE FINALS", boxArtURL: URL(string: "https://cdn.example.com/finals.jpg"))]
+        }
+        let found = await search("  the finals ")
+        XCTAssertEqual(found.statusCode, 200)
+        let games = try XCTUnwrap(try decodeJSON(found.body)["games"] as? [[String: Any]])
+        XCTAssertEqual(games.first?["id"] as? String, "1234")
+        XCTAssertEqual(games.first?["name"] as? String, "THE FINALS")
+        XCTAssertEqual(games.first?["boxArtURL"] as? String, "https://cdn.example.com/finals.jpg")
+
+        let tooShort = await search("t")
+        XCTAssertEqual(tooShort.statusCode, 400)
+    }
+
     func testWebCampaignsReturnsConfiguredCampaignSummaries() async throws {
         let harness = try await RouteHarness()
         let start = Date(timeIntervalSince1970: 1_800_000_000)
