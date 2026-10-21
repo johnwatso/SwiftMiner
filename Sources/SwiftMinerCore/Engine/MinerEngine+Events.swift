@@ -73,59 +73,44 @@ extension MinerEngine {
     }
 
     func handleDropClaim(_ event: DropClaimEvent) async {
-        let campaignId = session?.currentCampaignId
+        configureClaimHistory()
+        let campaign = allCampaigns.first { $0.drops.contains { $0.id == event.dropId } }
+        let campaignId = campaign?.id ?? session?.currentCampaignId
         log("Drop claim event received: dropInstanceId=\(event.dropInstanceId)")
 
         guard !isLikelyInternalTestDropEvent(dropId: event.dropId, campaignId: campaignId) else {
             log("Skipped auto-claim for internal/test drop event: \(event.dropId)")
             return
         }
+        repeatClaimGuard.allowRetryAfterLinking(event.dropInstanceId, accountConnected: campaign?.isAccountConnected)
+        guard repeatClaimGuard.beginClaim(event.dropInstanceId) else { return }
+        defer { repeatClaimGuard.endClaim(event.dropInstanceId) }
 
-        // Use the dropInstanceId directly from PubSub event for claiming
         do {
-            // The drop id identifies the claimed campaign exactly; the session's current
-            // campaign need not be the one this PubSub drop belongs to.
             let response = try await apiClient.claimDrop(
                 dropInstanceId: event.dropInstanceId,
                 dropId: event.dropId
             )
-
-            if response.status == "CLAIMED" || response.status == "SUCCESS" {
-                let dropName = dropLabel(for: event.dropId, campaignId: campaignId)
-                let trackerResult = progressEventTracker.markClaimed(
-                    campaignId: campaignId,
+            if ClaimService.successfulClaimStatuses.contains(response.status.uppercased()) {
+                let drop = campaign?.drops.first { $0.id == event.dropId }
+                let progress = Progress(
+                    id: event.dropInstanceId,
                     dropId: event.dropId,
-                    dropLabel: dropName
+                    dropName: dropLabel(for: event.dropId, campaignId: campaignId),
+                    campaignId: campaignId ?? "",
+                    currentMinutes: drop?.requiredMinutes ?? 0,
+                    requiredMinutes: drop?.requiredMinutes ?? 0
                 )
-                log("Auto-claimed drop from PubSub: \(event.dropInstanceId)")
-                if let message = formatProgressTransition(trackerResult.transition) {
-                    log(message)
-                }
-
-                // Try to find drop info for the callback
-                let inventory = try? await dropsService.fetchInventory()
-                if let progress = inventory?.first(where: { $0.dropId == event.dropId }) {
-                    let drop = Drop(
-                        id: event.dropId,
-                        name: progress.dropName,
-                        requiredMinutes: progress.requiredMinutes
-                    )
-                    recordActivityEvent(.dropClaimed, "Claimed \(drop.name)")
-                    onDropClaimed?(drop)
-
-                    // Send local notification if enabled
-                    if showClaimNotifications, let notificationService = notificationService {
-                        // Find campaign name for notification
-                        let campaign = try? await dropsService.getCampaign(id: progress.campaignId)
-                        await notificationService.notifyDropClaimed(
-                            campaignName: campaign?.name ?? "Unknown Campaign",
-                            dropName: progress.dropName
-                        )
-                    }
-                }
-
-                session?.dropsClaimed += 1
-            } else {                log("Warning: Drop claim returned status: \(response.status)")
+                repeatClaimGuard.recordAcceptedClaim(
+                    event.dropInstanceId, progress: progress, accountConnected: campaign?.isAccountConnected
+                )
+                log("Claim accepted from PubSub: \(event.dropInstanceId); awaiting inventory confirmation")
+                let inventoryService = await dropsService.getInventoryService()
+                let snapshot = try await inventoryService.fetchInventory(forceRefresh: true)
+                syncCampaigns(with: snapshot)
+                await confirmPendingClaims(in: snapshot)
+            } else {
+                log("Warning: Drop claim returned status: \(response.status)")
             }
         } catch {
             log("Failed to auto-claim drop: \(error.localizedDescription)")

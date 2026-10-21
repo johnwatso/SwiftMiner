@@ -1038,11 +1038,12 @@ struct PriorityQueueDropLabel: View {
 /// "Intelligence" treatment) while the text stays plain.
 private struct WildcardQueueLabel: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.controlActiveState) private var controlActiveState
 
     private static let glowColors: [Color] = [.purple, .pink, .blue, .cyan, .orange, .purple]
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: reduceMotion)) { context in
+        TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: reduceMotion || controlActiveState == .inactive)) { context in
             let degrees = reduceMotion
                 ? 0.0
                 : context.date.timeIntervalSinceReferenceDate

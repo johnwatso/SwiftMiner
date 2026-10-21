@@ -1206,7 +1206,7 @@ public final class NavigationModel {
     }
 
     private func processLogMessage(minerId: String, message: String) {
-        let level = eventLevel(forLogMessage: message)
+        let level = Self.eventLevel(forLogMessage: message)
         guard Self.shouldRecordActivityLogMessage(message, level: level) else { return }
         
         // Transform common logs into readable events
@@ -1220,7 +1220,7 @@ public final class NavigationModel {
         logEvent(message: displayMessage, level: level, minerId: minerId, rawMessage: message)
     }
 
-    private func eventLevel(forLogMessage message: String) -> EventLevel {
+    nonisolated static func eventLevel(forLogMessage message: String) -> EventLevel {
         let lowercased = message.lowercased()
         if lowercased.contains("\u{26A0}\u{FE0F}")
             || lowercased.hasPrefix("warning")
@@ -1232,11 +1232,15 @@ public final class NavigationModel {
             return .warning
         }
 
+        // A streamer name such as always_a_failure_ is data, not severity.
+        let mentionsFailure = lowercased.range(
+            of: #"(?<![\p{L}\p{N}_])failure(?![\p{L}\p{N}_])"#, options: .regularExpression
+        ) != nil
         if lowercased.contains("\u{274C}")
             || lowercased.hasPrefix("error")
             || lowercased.contains(" error:")
             || lowercased.contains("failed to")
-            || lowercased.contains("failure") {
+            || mentionsFailure {
             return .error
         }
 

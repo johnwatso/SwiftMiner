@@ -961,9 +961,11 @@ private struct DiagnosticExportProgressCard: View {
 /// diagnostics report is prepared, making long exports feel visibly active.
 private struct ActivityLogSymbolCycler: View {
     private static let filters = EventFilter.allCases
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.controlActiveState) private var controlActiveState
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 0.65)) { context in
+        TimelineView(.animation(minimumInterval: 0.65, paused: reduceMotion || controlActiveState == .inactive)) { context in
             let filter = Self.filters[
                 Int(context.date.timeIntervalSinceReferenceDate / 0.65) % Self.filters.count
             ]

@@ -5,33 +5,108 @@ import Foundation
 //
 // Split out of MinerEngine.swift, which had grown past the point where one file could be read.
 
-/// Remembers drop instances whose claim Twitch accepted but which inventory keeps listing as
-/// unclaimed (seen with an account not linked to the game: one account re-claimed the same seven
-/// drops every five minutes for ~39 hours). After `maxAcceptedClaims` accepted claims for one
-/// instance the engine stops trying, so the claim counter, notifications and per-cycle claim time
-/// stop being inflated by a claim that never sticks.
+/// Keeps accepted-but-unconfirmed claims bounded across restarts. Confirmation and
+/// notification history is scoped to the account and the exact Twitch drop instance.
 struct RepeatClaimGuard {
     static let maxAcceptedClaims = 2
 
-    private var acceptedClaims: [String: Int] = [:]
+    private struct Entry: Codable {
+        var attempts = 0
+        var reportedClaim = false
+        var progress: Progress?
+        var accountConnected: Bool?
+    }
+
+    private var entries: [String: Entry] = [:]
     private var reportedSuppressed: Set<String> = []
+    private var inFlight: Set<String> = []
+    private let fileURL: URL?
+
+    init(fileURL: URL? = nil) {
+        self.fileURL = fileURL
+        guard let fileURL, FileManager.default.fileExists(atPath: fileURL.path) else { return }
+        do {
+            entries = try JSONDecoder().decode([String: Entry].self, from: Data(contentsOf: fileURL))
+        } catch {
+            Logger.storage.error("Could not load claim history: \(error.localizedDescription)")
+        }
+    }
+
+    static func fileURL(accountId: String) -> URL {
+        // Account IDs are identities, never arbitrary paths.
+        let filename = Data(accountId.utf8).map { String(format: "%02x", $0) }.joined()
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("com.swiftminer/claim-history", isDirectory: true)
+            .appendingPathComponent("\(filename).json")
+    }
 
     func isSuppressed(_ instanceId: String) -> Bool {
-        acceptedClaims[instanceId, default: 0] >= Self.maxAcceptedClaims
+        guard let entry = entries[instanceId] else { return false }
+        return entry.reportedClaim || entry.attempts >= Self.maxAcceptedClaims
     }
 
-    mutating func recordAcceptedClaim(_ instanceId: String) {
-        acceptedClaims[instanceId, default: 0] += 1
+    mutating func beginClaim(_ instanceId: String) -> Bool {
+        !isSuppressed(instanceId) && inFlight.insert(instanceId).inserted
     }
 
-    /// True only the first time an instance is reported as suppressed, so the warning is logged once.
+    mutating func endClaim(_ instanceId: String) {
+        inFlight.remove(instanceId)
+    }
+
+    mutating func recordAcceptedClaim(_ instanceId: String, progress: Progress? = nil, accountConnected: Bool? = nil) {
+        var entry = entries[instanceId] ?? Entry()
+        entry.attempts += 1
+        if let progress { entry.progress = progress }
+        if let accountConnected { entry.accountConnected = accountConnected }
+        entries[instanceId] = entry
+        persist()
+    }
+
+    /// Linking the game repairs the original failure. Allow another bounded attempt
+    /// without forgetting that a confirmed reward was already reported.
+    mutating func allowRetryAfterLinking(_ instanceId: String, accountConnected: Bool?) {
+        guard accountConnected == true, var entry = entries[instanceId],
+              entry.accountConnected == false else { return }
+        entry.attempts = 0
+        entry.accountConnected = true
+        entries[instanceId] = entry
+        reportedSuppressed.remove(instanceId)
+        persist()
+    }
+
+    var pendingClaims: [Progress] {
+        entries.values.filter { !$0.reportedClaim }.compactMap(\.progress)
+    }
+
+    mutating func markClaimReported(_ progress: Progress) -> Bool {
+        var entry = entries[progress.id] ?? Entry()
+        guard !entry.reportedClaim else { return false }
+        entry.reportedClaim = true
+        entry.progress = progress
+        entries[progress.id] = entry
+        // Persist before callbacks: a second transport or a restart must not notify again.
+        persist()
+        return true
+    }
+
     mutating func markReported(_ instanceId: String) -> Bool {
         reportedSuppressed.insert(instanceId).inserted
+    }
+
+    private func persist() {
+        guard let fileURL else { return }
+        do {
+            try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try JSONEncoder().encode(entries).write(to: fileURL, options: .atomic)
+        } catch {
+            Logger.storage.error("Could not save claim history: \(error.localizedDescription)")
+        }
     }
 }
 
 extension MinerEngine {
     func claimReadyDrops(forceInventoryRefresh: Bool = false) async -> Bool {
+        configureClaimHistory()
         let nowTick = runtimeClock.nowNanoseconds()
         guard Self.shouldRefreshClaimInventory(
             lastCheck: lastClaimInventoryCheckTick,
@@ -55,6 +130,13 @@ extension MinerEngine {
             onOperationalEvent?(.successfulPoll)
             onOperationalEvent?(.inventoryRefresh)
             syncCampaigns(with: snapshot)
+            await confirmPendingClaims(in: snapshot)
+            for progress in snapshot.progress {
+                repeatClaimGuard.allowRetryAfterLinking(
+                    progress.id,
+                    accountConnected: allCampaigns.first { $0.id == progress.campaignId }?.isAccountConnected
+                )
+            }
 
             let claimedDropIds = Set(
                 allCampaigns
@@ -77,7 +159,7 @@ extension MinerEngine {
                 let linkHint = newlySuppressed.contains { progress in
                     allCampaigns.first(where: { $0.id == progress.campaignId })?.isAccountConnected == false
                 } ? " The account does not appear to be linked to the game." : ""
-                log("Warning: Twitch accepted the claim for \(names) but inventory still lists it as unclaimed.\(linkHint) Not retrying it again this run.")
+                log("Warning: Twitch accepted the claim for \(names) but inventory still lists it as unclaimed.\(linkHint) Not retrying it again unless the game account becomes linked.")
             }
             let newlySkippedInternalTestDrops = snapshot.progress.filter {
                 $0.isComplete
@@ -103,33 +185,20 @@ extension MinerEngine {
             }
 
             for progress in claimable {
+                guard repeatClaimGuard.beginClaim(progress.id) else { continue }
+                defer { repeatClaimGuard.endClaim(progress.id) }
                 let result = await claimService.claimDrop(progress)
                 if result.success {
-                    let confirmation = result.confirmedByInventory ? " (confirmed by fresh inventory)" : ""
-                    log("Claimed drop: \(result.dropName)\(confirmation)")
-                    repeatClaimGuard.recordAcceptedClaim(progress.id)
-
-                    let drop = Drop(
-                        id: progress.dropId,
-                        name: progress.dropName,
-                        requiredMinutes: progress.requiredMinutes
+                    repeatClaimGuard.recordAcceptedClaim(
+                        progress.id,
+                        progress: progress,
+                        accountConnected: allCampaigns.first { $0.id == progress.campaignId }?.isAccountConnected
                     )
-                    _ = progressEventTracker.markClaimed(
-                        campaignId: progress.campaignId,
-                        dropId: progress.dropId,
-                        dropLabel: progress.dropName.isEmpty ? dropLabel(for: progress.dropId, campaignId: progress.campaignId) : progress.dropName
-                    )
-                    recordActivityEvent(.dropClaimed, "Claimed \(result.dropName)")
-                    onDropClaimed?(drop)
-                    session?.dropsClaimed += 1
                     didClaimAnyDrop = true
-
-                    // Send local notification if enabled
-                    if showClaimNotifications, let notificationService = notificationService {
-                        await notificationService.notifyDropClaimed(
-                            campaignName: result.campaignName,
-                            dropName: result.dropName
-                        )
+                    if result.confirmedByInventory {
+                        await reportConfirmedClaim(progress)
+                    } else {
+                        log("Claim accepted for drop: \(result.dropName); awaiting inventory confirmation")
                     }
                 } else {
                     let reason = result.error.map { " (\($0))" } ?? ""
@@ -150,12 +219,49 @@ extension MinerEngine {
                 onOperationalEvent?(.successfulPoll)
                 onOperationalEvent?(.inventoryRefresh)
                 syncCampaigns(with: refreshedSnapshot)
+                await confirmPendingClaims(in: refreshedSnapshot)
             }
         } catch {
             log("Error fetching claimable drops: \(error.localizedDescription)")
         }
 
         return didClaimAnyDrop
+    }
+
+    func configureClaimHistory() {
+        guard let accountId = currentAccount?.id, repeatClaimGuardAccountId != accountId else { return }
+        repeatClaimGuard = RepeatClaimGuard(fileURL: RepeatClaimGuard.fileURL(accountId: accountId))
+        repeatClaimGuardAccountId = accountId
+    }
+
+    /// Only pending attempts are counted here, never historical rewards discovered on login.
+    func confirmPendingClaims(in snapshot: InventorySnapshot) async {
+        for progress in repeatClaimGuard.pendingClaims {
+            let inventoryConfirms = snapshot.progress.contains { $0.id == progress.id && $0.isClaimed }
+            let campaignConfirms = allCampaigns.first { $0.id == progress.campaignId }?
+                .drops.contains { $0.id == progress.dropId && $0.isClaimed } == true
+            if inventoryConfirms || campaignConfirms {
+                await reportConfirmedClaim(progress)
+            }
+        }
+    }
+
+    func reportConfirmedClaim(_ progress: Progress) async {
+        guard repeatClaimGuard.markClaimReported(progress) else { return }
+        log("Claimed drop: \(progress.dropName) (confirmed by fresh inventory)")
+        _ = progressEventTracker.markClaimed(
+            campaignId: progress.campaignId,
+            dropId: progress.dropId,
+            dropLabel: progress.dropName
+        )
+        let drop = Drop(id: progress.dropId, name: progress.dropName, requiredMinutes: progress.requiredMinutes)
+        recordActivityEvent(.dropClaimed, "Claimed \(progress.dropName)")
+        onDropClaimed?(drop)
+        session?.dropsClaimed += 1
+        if showClaimNotifications, let notificationService {
+            let campaignName = allCampaigns.first { $0.id == progress.campaignId }?.name ?? "Unknown Campaign"
+            await notificationService.notifyDropClaimed(campaignName: campaignName, dropName: progress.dropName)
+        }
     }
 
     private func isLikelyInternalTestProgress(_ progress: Progress) -> Bool {

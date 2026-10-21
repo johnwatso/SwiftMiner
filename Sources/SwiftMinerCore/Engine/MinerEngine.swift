@@ -453,6 +453,7 @@ public actor MinerEngine {
     var hasLoggedNoClaimableDrops = false
     /// Stops re-claiming an instance Twitch accepts but inventory never marks claimed.
     var repeatClaimGuard = RepeatClaimGuard()
+    var repeatClaimGuardAccountId: String?
 
     /// Cache of all campaigns fetched during the last check
     public internal(set) var allCampaigns: [Campaign] = []

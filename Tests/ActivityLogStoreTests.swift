@@ -5,6 +5,20 @@ import SQLite3
 @testable import SwiftMinerCore
 
 final class ActivityLogStoreTests: XCTestCase {
+
+    func testStreamerNamesDoNotTurnChannelVerificationIntoErrors() {
+        let messages = [
+            "[ChannelSelect]     Verified: DbD October of Horror III active on always_a_failure_",
+            "[ChannelSelect]   Verification summary: checked=30, noMatch=30, noMatchEvidence=[always_a_failure_: Twitch reports no active Drops campaigns]"
+        ]
+        for message in messages {
+            XCTAssertEqual(NavigationModel.eventLevel(forLogMessage: message), .info)
+        }
+        XCTAssertEqual(NavigationModel.eventLevel(forLogMessage: "Temporary Twitch failure; will retry..."), .error)
+        XCTAssertEqual(NavigationModel.eventLevel(forLogMessage: "Failed to start PubSub watching: Not connected"), .error)
+        XCTAssertEqual(NavigationModel.eventLevel(forLogMessage: "Error: Network unavailable"), .error)
+        XCTAssertEqual(NavigationModel.eventLevel(forLogMessage: "Warning: Could not refresh inventory"), .warning)
+    }
     func testOpenRepairsMissingAuditCategorySchemaWhenMigrationIsRecorded() async throws {
         let databaseURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("SwiftMinerActivityLogMigration-\(UUID().uuidString).sqlite")

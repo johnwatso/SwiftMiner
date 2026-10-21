@@ -1028,6 +1028,7 @@ struct DropsListRenderContext {
 
 struct DropsLoadingSplash: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.controlActiveState) private var controlActiveState
 
     var body: some View {
         VStack(spacing: 18) {
@@ -1040,7 +1041,7 @@ struct DropsLoadingSplash: View {
                     .strokeBorder(Color.green.opacity(0.18), lineWidth: 1)
                     .frame(width: 84, height: 84)
 
-                if reduceMotion {
+                if reduceMotion || controlActiveState == .inactive {
                     loadingSymbol
                 } else {
                     loadingSymbol
