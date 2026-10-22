@@ -76,7 +76,7 @@
                 </div>
 
                 <h2 id="enable">Enable the Dashboard</h2>
-                <p>Follow these steps to turn on the embedded web server:</p>
+                <p>You can enable the Web Dashboard with a single miner or multiple miners. Follow these steps to turn on the embedded web server:</p>
                 <div class="screenshot-wrap">
                     <picture>
                         <source srcset="../assets/img/settings-web-dark.webp" media="(prefers-color-scheme: dark)">
@@ -102,11 +102,11 @@
                 <p>To update these details later, choose <strong>Change Credentials</strong>. Enter a new password only when you want to replace it; leaving the new-password field blank keeps the current password.</p>
 
                 <h2 id="internet-access">Internet Access & Twitch OAuth</h2>
-                <p>If you are mining for multiple people or running the SwiftBot Discord integration, you can expose the Web Dashboard over the internet using a secure connection. This lets your friends log in using their own Twitch accounts, enter device activation codes, and check their miners without needing direct access to your Mac.</p>
+                <p>You can expose the Web Dashboard over the internet using a secure connection, including on a server with only one miner. This lets you and your friends log in using your own Twitch accounts, enter device activation codes, and check your miners without needing direct access to your Mac.</p>
 
                 <div class="callout warning">
-                    <strong>Eligibility Requirements</strong>
-                    <p>Internet Access is only offered when the Discord/SwiftBot integration is enabled or you have configured more than one miner. This ensures that exposing the server is reserved for setups that require self-service capabilities.</p>
+                    <strong>Public Address</strong>
+                    <p>Use your own custom domain for internet access. You can register a dashboard subdomain on your paired SwiftBot's existing Cloudflare tunnel, or configure your own tunnel or reverse proxy. A single miner is enough; the Discord/SwiftBot integration is only needed when using SwiftBot's tunnel or Discord sign-in.</p>
                 </div>
 
                 <h3>Step 1: Set up a Twitch Developer App</h3>
@@ -117,7 +117,7 @@
                     <li>Set the following values:
                         <ul>
                             <li><strong>Name:</strong> <code>SwiftMiner [Your Server Name]</code></li>
-                            <li><strong>OAuth Redirect URLs:</strong> Add the redirect URL shown in SwiftMiner's Web settings page. It will look like <code>https://[your-tunnel-subdomain].swiftbot.dev/oauth/callback</code>.</li>
+                            <li><strong>OAuth Redirect URLs:</strong> Add the exact redirect URL shown in SwiftMiner's Web settings page, using your custom domain (e.g. <code>https://swiftminer.example.com/oauth/callback</code>).</li>
                             <li><strong>Category:</strong> <code>Application Integration</code></li>
                         </ul>
                     </li>
@@ -132,16 +132,16 @@
                 </ol>
 
                 <h3>Step 3: Register the secure tunnel</h3>
-                <p>Exposing a local web server usually requires complex router port-forwarding and dynamic DNS configuration. SwiftMiner simplifies this by integrating a secure tunnel client:</p>
+                <p>If you use SwiftBot, first finish Internet Access setup in SwiftBot with your own custom domain. SwiftMiner can then register the dashboard on SwiftBot's existing Cloudflare tunnel:</p>
                 <ol class="steps-list">
-                    <li>In the Web settings tab under <em>Internet Access</em>, click <strong>Register Tunnel</strong>.</li>
-                    <li>SwiftMiner communicates with the SwiftBot relay server to provision a unique, secure subdomain on <code>*.swiftbot.dev</code>.</li>
-                    <li>Once registered, SwiftMiner will establish an encrypted connection. The status will report <code>Connected</code>, showing the public URL.</li>
+                    <li>In the Web settings tab under <em>Internet Access</em>, click <strong>Set Up Internet Access</strong>.</li>
+                    <li>Choose a dashboard subdomain under the custom domain configured in your paired SwiftBot (e.g. <code>swiftminer.example.com</code>), then click <strong>Register on SwiftBot's tunnel</strong>.</li>
+                    <li>SwiftMiner asks your SwiftBot to register the route and DNS on its existing Cloudflare tunnel. The dashboard is then available over HTTPS at the public URL shown in Web settings.</li>
                     <li>Share this URL with your friends. When they visit it, they will see a Twitch sign-in prompt. After signing in, they will only be able to view and manage their own Twitch miners.</li>
                 </ol>
 
                 <h2 id="reverse-proxy">Running behind a Reverse Proxy</h2>
-                <p>If you prefer not to use the automated SwiftBot tunnel and want to host the Web Dashboard using your own domain via a self-managed reverse proxy (like Nginx, Caddy, Apache, or Cloudflare Tunnels), you can easily do so. Since SwiftMiner runs a standard HTTP server on your local network port, it is fully compatible with standard proxy routing.</p>
+                <p>You can also host the Web Dashboard on your own domain using a self-managed reverse proxy or tunnel (like Nginx, Caddy, Apache, or Cloudflare Tunnel). Since SwiftMiner runs a standard HTTP server on your local network port, it is fully compatible with standard proxy routing.</p>
                 
                 <h3>Configuration Recommendations:</h3>
                 <ul>
