@@ -44,10 +44,10 @@
         {
           "fill" : "none",
           "glass" : true,
-          "image-name" : "miner.png",
-          "name" : "miner",
+          "image-name" : "pickaxe.svg",
+          "name" : "pickaxe",
           "position" : {
-            "scale" : 1.2,
+            "scale" : 1,
             "translation-in-points" : [
               0,
               0
@@ -61,7 +61,32 @@
       },
       "translucency" : {
         "enabled" : true,
-        "value" : 0.5
+        "value" : 0.2
+      }
+    },
+    {
+      "layers" : [
+        {
+          "fill" : "none",
+          "glass" : true,
+          "image-name" : "gem.svg",
+          "name" : "gem",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.4
       }
     }
   ],
