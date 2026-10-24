@@ -298,6 +298,9 @@ public actor TwitchAPIClient {
     /// is permanently unanswerable, and each attempt costs a doomed token refresh. Give up for
     /// the session rather than rediscovering it every five minutes for every account.
     private var followedChannelLookupUnavailable: Set<String> = []
+    /// The subset of `followedChannelLookupUnavailable` settled by the grant rather than by a
+    /// refusal from Twitch, so the diagnostic report can name the right cause.
+    private var followedChannelLookupMissingScope: Set<String> = []
     /// Follow-state availability changes waiting to be reported, keyed by user. Degrading
     /// quietly is right for channel ranking and wrong for the user: `prioritiseFollowedStreamers`
     /// stays switched on in Settings while doing nothing, and the only account of why went to
@@ -615,6 +618,7 @@ public actor TwitchAPIClient {
         followedChannelIdsByUser.removeAll(keepingCapacity: true)
         followedChannelLookupRetryAt.removeAll(keepingCapacity: true)
         followedChannelLookupUnavailable.removeAll(keepingCapacity: true)
+        followedChannelLookupMissingScope.removeAll(keepingCapacity: true)
     }
 
     /// Get current access token from auth service (also used by MinerEngine for PubSub auth)
@@ -853,6 +857,7 @@ public actor TwitchAPIClient {
         if let scopes = await authService.grantedScopes(forUserId: userId),
            !scopes.contains(TwitchAuthService.followedChannelsScope) {
             followedChannelLookupUnavailable.insert(userId)
+            followedChannelLookupMissingScope.insert(userId)
             pendingFollowLookupNotices[userId] = .unavailableForSession(
                 reason: "this account was signed in before the setting was turned on, so Twitch "
                     + "never granted the follow permission (\(TwitchAuthService.followedChannelsScope))"
@@ -944,6 +949,9 @@ public actor TwitchAPIClient {
     /// been inert the whole run. This reads the standing state instead, so the condition stays
     /// visible for as long as it lasts.
     public func followLookupDegradation(userId: String) -> FollowLookupDegradation? {
+        if followedChannelLookupMissingScope.contains(userId) {
+            return .missingFollowScope
+        }
         if followedChannelLookupUnavailable.contains(userId) {
             return .unavailableForSession
         }
@@ -955,6 +963,9 @@ public actor TwitchAPIClient {
 
     /// A standing reason follow state is not being applied to channel ranking.
     public enum FollowLookupDegradation: Sendable, Equatable {
+        /// The account was signed in without the follow permission, so no request is made.
+        /// Needs a re-sign-in to grant it.
+        case missingFollowScope
         /// Twitch refuses this session's token for the follow endpoint. Needs a re-sign-in.
         case unavailableForSession
         /// A transient failure; follow state resumes by itself once the backoff expires.
@@ -963,6 +974,8 @@ public actor TwitchAPIClient {
         /// Wording for the diagnostic report, phrased so the remedy is obvious.
         public var summary: String {
             switch self {
+            case .missingFollowScope:
+                return "off (account was never granted \(TwitchAuthService.followedChannelsScope) — sign the account in again to grant it)"
             case .unavailableForSession:
                 return "off (Twitch rejects this session's token — sign the account in again)"
             case .backingOff(let until):

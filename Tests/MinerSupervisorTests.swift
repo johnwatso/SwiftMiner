@@ -174,4 +174,45 @@ final class MinerSupervisorTests: XCTestCase {
         let action = await supervisor.nextRecoveryAction(for: [miner], now: now.addingTimeInterval(61))
         XCTAssertEqual(action?.stage, .refresh)
     }
+
+    /// An idle "Drops complete" miner rechecks every 5m but the activity window is 3m, so the
+    /// diagnostic report showed it unhealthy for the last two minutes of every wait.
+    func testIdleMinerStaysHealthyUntilItsScheduledRecheck() async {
+        let supervisor = MinerSupervisor(
+            configuration: .init(
+                stallTimeout: 15 * 60,
+                peerFreshnessWindow: 4 * 60,
+                startupGracePeriod: 0,
+                noRecentActivityWindow: 3 * 60,
+                recoveryBaseCooldown: 45,
+                recoveryMaxCooldown: 600,
+                localStallTimeout: 20 * 60
+            )
+        )
+        let now = Date(timeIntervalSince1970: 60_000)
+        let lastPoll = now.addingTimeInterval(-283)
+        var miner = MinerManager.ManagedMiner(
+            id: "idle",
+            accountId: "idle-account",
+            username: "idle",
+            status: .idleNoEligibleCampaigns,
+            isRunning: true
+        )
+        miner.nextCampaignCheckAt = lastPoll.addingTimeInterval(5 * 60)
+
+        await supervisor.registerMiner(miner.id)
+        await supervisor.recordWorkerStart(minerId: miner.id, taskID: "idle-task", at: now.addingTimeInterval(-3600))
+        await supervisor.recordSuccessfulPoll(minerId: miner.id, at: lastPoll)
+
+        var snapshots = await supervisor.refreshHealth(for: [miner], now: now)
+        XCTAssertEqual(snapshots[miner.id]?.isHealthy, true, "silence before the scheduled recheck is the schedule")
+
+        // The recheck came and went with no cycle: the activity window applies again.
+        snapshots = await supervisor.refreshHealth(for: [miner], now: now.addingTimeInterval(4 * 60))
+        XCTAssertEqual(snapshots[miner.id]?.isHealthy, false)
+
+        miner.nextCampaignCheckAt = nil
+        snapshots = await supervisor.refreshHealth(for: [miner], now: now)
+        XCTAssertEqual(snapshots[miner.id]?.isHealthy, false, "without a scheduled wait, 4m43s of silence is not healthy")
+    }
 }

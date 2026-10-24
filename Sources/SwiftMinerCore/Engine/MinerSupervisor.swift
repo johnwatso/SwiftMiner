@@ -322,7 +322,15 @@ public actor MinerSupervisor {
                 ? configuration.stallTimeout
                 : configuration.localStallTimeout
             let isStalled = eligibleForStallDetection && age >= stallThreshold
-            let isHealthy = !miner.isRunning || miner.needsAuth || (!isStalled && age < configuration.noRecentActivityWindow)
+            // An idle miner is silent by design until its scheduled recheck, and that wait (5m)
+            // outlasts the activity window (3m) — so it read as unhealthy for the tail of every
+            // wait. Silence before the deadline is the schedule, not a symptom; the window
+            // applies again once the deadline passes without a cycle starting.
+            let isWithinScheduledWait = miner.nextCampaignCheckAt.map {
+                now.timeIntervalSince($0) < configuration.noRecentActivityWindow
+            } ?? false
+            let hasRecentActivity = age < configuration.noRecentActivityWindow || isWithinScheduledWait
+            let isHealthy = !miner.isRunning || miner.needsAuth || (!isStalled && hasRecentActivity)
 
             entry.metadata.isStalled = isStalled
             entry.metadata.isHealthy = isHealthy

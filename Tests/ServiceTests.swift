@@ -640,8 +640,11 @@ final class ServiceTests: XCTestCase {
             return XCTFail("Expected the preference to be reported inert for this session, got \(String(describing: notice))")
         }
         XCTAssertTrue(reason.contains(TwitchAuthService.followedChannelsScope), "The reason should name the missing permission, got: \(reason)")
+        // No request went out, so the report must not claim Twitch rejected the token.
         let degradation = await apiClient.followLookupDegradation(userId: "viewer")
-        XCTAssertEqual(degradation, .unavailableForSession)
+        XCTAssertEqual(degradation, .missingFollowScope)
+        XCTAssertTrue(degradation?.summary.contains(TwitchAuthService.followedChannelsScope) == true)
+        XCTAssertFalse(degradation?.summary.contains("rejects") == true)
     }
 
     func testFollowLookupProceedsWhenTheAccountGrantedTheScope() async throws {
