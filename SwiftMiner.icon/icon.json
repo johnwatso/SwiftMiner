@@ -1,74 +1,154 @@
 {
-  "fill-specializations" : [
+  "fill-specializations": [
     {
-      "value" : {
-        "linear-gradient" : [
-          "display-p3:0.72559,0.58838,0.93701,1.00000",
-          "display-p3:0.49414,0.32153,0.83936,1.00000"
+      "value": {
+        "linear-gradient": [
+          "extended-srgb:0.66275,0.43922,1.00000,1.00000",
+          "extended-srgb:0.35686,0.27059,0.93333,1.00000"
         ],
-        "orientation" : {
-          "start" : {
-            "x" : 0.5,
-            "y" : 0
+        "orientation": {
+          "start": {
+            "x": 0.5,
+            "y": 0
           },
-          "stop" : {
-            "x" : 0.5,
-            "y" : 0.7
+          "stop": {
+            "x": 0.5,
+            "y": 0.9
           }
         }
       }
     },
     {
-      "appearance" : "dark",
-      "value" : {
-        "linear-gradient" : [
-          "display-p3:0.40942,0.25342,0.74072,1.00000",
-          "display-p3:0.12158,0.06274,0.30591,1.00000"
+      "appearance": "dark",
+      "value": {
+        "linear-gradient": [
+          "extended-srgb:0.24314,0.08235,0.56471,1.00000",
+          "extended-srgb:0.04706,0.05882,0.11765,1.00000"
         ],
-        "orientation" : {
-          "start" : {
-            "x" : 0.5,
-            "y" : 0
+        "orientation": {
+          "start": {
+            "x": 0.5,
+            "y": 0
           },
-          "stop" : {
-            "x" : 0.5,
-            "y" : 0.7
+          "stop": {
+            "x": 0.5,
+            "y": 0.9
           }
         }
       }
     }
   ],
-  "groups" : [
+  "groups": [
     {
-      "layers" : [
+      "name": "Sparkles",
+      "layers": [
         {
-          "fill" : "none",
-          "glass" : true,
-          "image-name" : "miner.png",
-          "name" : "miner",
-          "position" : {
-            "scale" : 1.2,
-            "translation-in-points" : [
-              0,
+          "name": "sparkles",
+          "glass": true,
+          "fill": "none",
+          "position": {
+            "scale": 0.92,
+            "translation-in-points": [
+              -20,
               0
             ]
-          }
+          },
+          "image-name-specializations": [
+            {
+              "value": "sparkles.png"
+            },
+            {
+              "appearance": "dark",
+              "value": "sparkles-dark.png"
+            }
+          ]
         }
       ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.5
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.3
       },
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.5
+      "specular": true,
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    },
+    {
+      "name": "Pickaxe",
+      "layers": [
+        {
+          "name": "pickaxe",
+          "glass": false,
+          "fill": "none",
+          "position": {
+            "scale": 0.92,
+            "translation-in-points": [
+              -20,
+              0
+            ]
+          },
+          "image-name-specializations": [
+            {
+              "value": "pickaxe.png"
+            },
+            {
+              "appearance": "dark",
+              "value": "pickaxe-dark.png"
+            }
+          ]
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": true,
+        "value": 0.3
+      }
+    },
+    {
+      "name": "Gem",
+      "layers": [
+        {
+          "name": "gem",
+          "glass": false,
+          "fill": "none",
+          "position": {
+            "scale": 0.92,
+            "translation-in-points": [
+              -20,
+              0
+            ]
+          },
+          "image-name-specializations": [
+            {
+              "value": "gem.png"
+            },
+            {
+              "appearance": "dark",
+              "value": "gem-dark.png"
+            }
+          ]
+        }
+      ],
+      "shadow": {
+        "kind": "layer-color",
+        "opacity": 0.5
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": true,
+        "value": 0.2
       }
     }
   ],
-  "supported-platforms" : {
-    "circles" : [
+  "supported-platforms": {
+    "circles": [
       "watchOS"
     ],
-    "squares" : "shared"
+    "squares": "shared"
   }
 }
