@@ -252,6 +252,58 @@ final class ControlledRuntimeSleeper: @unchecked Sendable {
 
 final class PubSubClientTests: XCTestCase {
 
+    func testProtocolPingBridgeIgnoresRepeatedSuccessAndLateFailure() async throws {
+        try await URLSessionPubSubSocket.waitForPing { complete in
+            complete(nil)
+            complete(nil)
+            complete(URLError(.networkConnectionLost))
+        }
+    }
+
+    func testProtocolPingBridgePreservesFirstError() async {
+        do {
+            try await URLSessionPubSubSocket.waitForPing { complete in
+                complete(URLError(.networkConnectionLost))
+                complete(URLError(.cancelled))
+                complete(nil)
+            }
+            XCTFail("The first ping failure must be propagated")
+        } catch {
+            XCTAssertEqual((error as? URLError)?.code, .networkConnectionLost)
+        }
+    }
+
+    func testProtocolPingBridgeIgnoresTeardownErrorAfterReturning() async throws {
+        let callbacks = AsyncStream<@Sendable (Error?) -> Void>.makeStream()
+        try await URLSessionPubSubSocket.waitForPing { complete in
+            callbacks.continuation.yield(complete)
+            callbacks.continuation.finish()
+            complete(nil)
+        }
+        // Simulate cancellation delivering another callback after the caller has
+        // already consumed the pong and moved on.
+        for await complete in callbacks.stream {
+            complete(URLError(.cancelled))
+        }
+    }
+
+    func testProtocolPingBridgeIgnoresConcurrentCallbacks() async {
+        // Exercise both success and error callbacks competing for the continuation.
+        // A second resume traps the test process, so completing this test also checks
+        // that duplicate results cannot escape the bridge.
+        for _ in 0..<100 {
+            do {
+                try await URLSessionPubSubSocket.waitForPing { complete in
+                    DispatchQueue.concurrentPerform(iterations: 16) { index in
+                        complete(index.isMultiple(of: 2) ? nil : URLError(.cancelled))
+                    }
+                }
+            } catch {
+                XCTAssertEqual((error as? URLError)?.code, .cancelled)
+            }
+        }
+    }
+
     private func makeClient(factory: MockSocketFactory,
                             pingInterval: TimeInterval = 600,
                             pongTimeout: TimeInterval = 600,

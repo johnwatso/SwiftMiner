@@ -157,13 +157,20 @@ final class URLSessionPubSubSocket: PubSubSocket, @unchecked Sendable {
     }
 
     func sendPing() async throws {
+        try await Self.waitForPing { completion in
+            task.sendPing(pongReceiveHandler: completion)
+        }
+    }
+
+    /// Keep the callback bridge testable: a late or repeated transport completion must
+    /// never resume the same checked continuation twice, even during socket teardown.
+    static func waitForPing(
+        _ sendPing: (@escaping @Sendable (Error?) -> Void) -> Void
+    ) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            task.sendPing { error in
-                if let error {
-                    continuation.resume(throwing: error)
-                } else {
-                    continuation.resume()
-                }
+            let completion = PingCompletion(continuation)
+            sendPing { error in
+                completion.resolve(error)
             }
         }
     }
@@ -171,6 +178,29 @@ final class URLSessionPubSubSocket: PubSubSocket, @unchecked Sendable {
     func cancel() {
         task.cancel(with: .goingAway, reason: nil)
         session.finishTasksAndInvalidate()
+    }
+}
+
+/// Only the first transport callback owns the continuation. Take it under the lock,
+/// then resume outside the lock so the resumed task cannot run while it is held.
+private final class PingCompletion: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Void, Error>?
+
+    init(_ continuation: CheckedContinuation<Void, Error>) {
+        self.continuation = continuation
+    }
+
+    func resolve(_ error: Error?) {
+        let pending = lock.withLock {
+            defer { continuation = nil }
+            return continuation
+        }
+        if let error {
+            pending?.resume(throwing: error)
+        } else {
+            pending?.resume()
+        }
     }
 }
 
