@@ -266,7 +266,8 @@ struct CampaignMinerInspectorPopover: View {
 
 /// Memory- and disk-backed cache shared by campaign artwork in Drops, Overview,
 /// and the miner detail UI. Hashing the full URL keeps different sources and image
-/// sizes isolated; Settings' Clear and Redownload action explicitly invalidates it.
+/// sizes isolated. Remote images are revalidated after an hour because Twitch can
+/// replace box art without changing its URL.
 actor CampaignArtworkCache {
     static let shared = CampaignArtworkCache()
 
@@ -274,13 +275,24 @@ actor CampaignArtworkCache {
     private static let defaultDiskFileLimit = 600
     private static let defaultBudgetCheckWriteInterval = 25
 
-    private let memory = NSCache<NSString, NSImage>()
+    private final class CachedImage {
+        let image: NSImage
+        let fetchedAt: Date
+
+        init(image: NSImage, fetchedAt: Date) {
+            self.image = image
+            self.fetchedAt = fetchedAt
+        }
+    }
+
+    private let memory = NSCache<NSString, CachedImage>()
     private var inFlight: [String: Task<NSImage?, Never>] = [:]
     private let cacheDirectory: URL?
     private let session: URLSession
     private let diskByteLimit: Int64
     private let diskFileLimit: Int
     private let budgetCheckWriteInterval: Int
+    private let maximumAge: TimeInterval
     private var hasAppliedDiskBudget = false
 
     /// Cached files written since the last budget sweep. Pruning enumerates the whole
@@ -293,7 +305,8 @@ actor CampaignArtworkCache {
         session: URLSession = .shared,
         diskByteLimit: Int64 = CampaignArtworkCache.defaultDiskByteLimit,
         diskFileLimit: Int = CampaignArtworkCache.defaultDiskFileLimit,
-        budgetCheckWriteInterval: Int = CampaignArtworkCache.defaultBudgetCheckWriteInterval
+        budgetCheckWriteInterval: Int = CampaignArtworkCache.defaultBudgetCheckWriteInterval,
+        maximumAge: TimeInterval = 60 * 60
     ) {
         self.cacheDirectory = cacheDirectory ?? FileManager.default
             .urls(for: .cachesDirectory, in: .userDomainMask)
@@ -303,6 +316,7 @@ actor CampaignArtworkCache {
         self.diskByteLimit = diskByteLimit
         self.diskFileLimit = diskFileLimit
         self.budgetCheckWriteInterval = max(1, budgetCheckWriteInterval)
+        self.maximumAge = maximumAge
         memory.countLimit = 96
         memory.totalCostLimit = Self.memoryCostLimit
     }
@@ -317,8 +331,9 @@ actor CampaignArtworkCache {
         applyDiskBudgetIfNeeded()
         let key = Self.key(for: url)
 
-        if let cached = memory.object(forKey: key as NSString) {
-            return cached
+        let cached = memory.object(forKey: key as NSString)
+        if let cached, url.isFileURL || Date().timeIntervalSince(cached.fetchedAt) < maximumAge {
+            return cached.image
         }
 
         if url.isFileURL {
@@ -327,22 +342,29 @@ actor CampaignArtworkCache {
             return image
         }
 
-        if let localURL = cacheDirectory?.appendingPathComponent(key),
+        var fallbackImage = cached?.image
+        if cached == nil, let localURL = cacheDirectory?.appendingPathComponent(key),
            FileManager.default.fileExists(atPath: localURL.path) {
             // Cache keys intentionally have no filename extension. Decode from
             // bytes so ImageIO sniffs the actual format instead of receiving a
             // misleading `public.data` type hint from the extensionless URL.
             if let data = try? Data(contentsOf: localURL),
                let image = NSImage(data: data) {
-                storeInMemory(image, key: key, cost: data.count)
-                return image
+                let fetchedAt = (try? localURL.resourceValues(forKeys: [.contentModificationDateKey]))?
+                    .contentModificationDate ?? .distantPast
+                if Date().timeIntervalSince(fetchedAt) < maximumAge {
+                    storeInMemory(image, key: key, cost: data.count, fetchedAt: fetchedAt)
+                    return image
+                }
+                fallbackImage = image
+            } else {
+                // A partial or invalid image should never become a permanent miss.
+                try? FileManager.default.removeItem(at: localURL)
             }
-            // A partial or invalid image should never become a permanent miss.
-            try? FileManager.default.removeItem(at: localURL)
         }
 
         if let existing = inFlight[key] {
-            return await existing.value
+            return await existing.value ?? fallbackImage
         }
 
         let task = Task<NSImage?, Never> { [weak self] in
@@ -351,7 +373,8 @@ actor CampaignArtworkCache {
         inFlight[key] = task
         let image = await task.value
         inFlight[key] = nil
-        return image
+        // Keep artwork visible offline, but do not renew its freshness on failure.
+        return image ?? fallbackImage
     }
 
     /// Drops decoded images but keeps the disk cache, so reopening the window re-reads from
@@ -369,7 +392,7 @@ actor CampaignArtworkCache {
 
     private func download(url: URL, key: String) async -> NSImage? {
         var request = URLRequest(url: url)
-        request.cachePolicy = .returnCacheDataElseLoad
+        request.cachePolicy = .reloadRevalidatingCacheData
 
         guard let (data, response) = try? await session.data(for: request),
               let response = response as? HTTPURLResponse,
@@ -419,12 +442,12 @@ actor CampaignArtworkCache {
         }
     }
 
-    private func storeInMemory(_ image: NSImage, key: String, cost: Int? = nil) {
+    private func storeInMemory(_ image: NSImage, key: String, cost: Int? = nil, fetchedAt: Date = Date()) {
         let estimatedCost = image.representations.first.map {
             max(1, $0.pixelsWide * $0.pixelsHigh * 4)
         } ?? 1
         memory.setObject(
-            image,
+            CachedImage(image: image, fetchedAt: fetchedAt),
             forKey: key as NSString,
             cost: max(cost ?? 0, estimatedCost)
         )

@@ -335,7 +335,12 @@ private struct GameRuleRow: View {
     let campaigns: [Campaign]
     @Binding var isExpanded: Bool
 
-    @State private var resolvedArtworkURL: URL?
+    private var resolvedArtworkURL: URL? {
+        OverviewArtworkResolver.resolvedArtworkURL(
+            for: preference,
+            liveArtworkURL: OverviewArtworkResolver.artworkURL(for: preference, campaigns: campaigns)
+        )
+    }
     @State private var fallbackLogin: String = ""
     @State private var isRemoveHovered = false
 
@@ -486,9 +491,6 @@ private struct GameRuleRow: View {
         }
         .frame(width: 24, height: 32)
         .clipShape(RoundedRectangle(cornerRadius: GlassRadius.subtle, style: .continuous))
-        .task(id: artworkRefreshID) {
-            resolvedArtworkURL = preference.customArtworkURL ?? preference.resolvedBoxArtURL
-        }
     }
 
     @ViewBuilder
@@ -582,10 +584,6 @@ private struct GameRuleRow: View {
     private var hasPendingEdit: Bool {
         guard let candidateLogin else { return false }
         return candidateLogin != storedFallbackLogin
-    }
-
-    private var artworkRefreshID: String {
-        preference.customArtworkURL?.absoluteString ?? ""
     }
 
     private func toggleExpansion() {

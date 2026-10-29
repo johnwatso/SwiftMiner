@@ -1990,7 +1990,7 @@ struct MinerActivityItem: Identifiable {
 /// reported symptom was exactly that: clicking a miner to find out whether it was alive,
 /// which forced an off-cadence refresh and made the click look like the cure.
 ///
-/// `Text(_:style:.relative)` counts down on its own, so an idle miner pays for no timer.
+/// A bounded clock refreshes only this label every 15 seconds while foregrounded.
 struct MinerNextCheckView: View {
     let deadline: Date
     let lastCheckedAt: Date?
@@ -2001,7 +2001,10 @@ struct MinerNextCheckView: View {
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.tertiary)
 
-            (Text("Next check in ") + Text(deadline, style: .relative))
+            HStack(spacing: 0) {
+                Text("Next check in ")
+                MinerRelativeTimeText(date: deadline, countsDown: true)
+            }
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .lineLimit(1)

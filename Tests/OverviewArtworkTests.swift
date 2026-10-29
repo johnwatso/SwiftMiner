@@ -110,9 +110,109 @@ final class OverviewArtworkTests: XCTestCase {
         )
     }
 
+    func testArtworkUsesNewestCampaignAcrossAccountsInsteadOfFirstMatch() {
+        let updated = URL(string: "https://static-cdn.jtvnw.net/ttv-boxart/1910103699_IGDB-600x800.jpg")!
+        let preference = GamePreference(gameId: "1910103699", gameName: "THE FINALS", state: .preferred)
+        let old = campaignViewData(id: "fall", gameId: preference.gameId,
+            name: preference.gameName, artworkURL: finalsArtwork)
+        let recent = Campaign(id: "prime-time", name: "PRIME TIME",
+            game: Game(id: preference.gameId, name: preference.gameName, boxArtURL: updated),
+            startDate: Date(), endDate: Date().addingTimeInterval(3600), drops: [])
+        let stale = Campaign(id: "old", name: "FALL IS HERE",
+            game: Game(id: preference.gameId, name: preference.gameName, boxArtURL: finalsArtwork),
+            startDate: Date().addingTimeInterval(-86400), endDate: Date(), drops: [])
+        for fallback in [[stale, recent], [recent, stale]] {
+            let index = OverviewArtworkResolver.ArtworkIndex(campaigns: [old], fallbackCampaigns: fallback)
+            XCTAssertEqual(index.artworkURL(for: preference), updated)
+            XCTAssertEqual(OverviewArtworkResolver.artworkURL(for: preference, campaigns: fallback), updated)
+        }
+    }
+
+    func testCurrentTwitchArtworkReplacesSavedPreferenceArtworkAfterCompletion() {
+        let saved = URL(string: "https://example.com/old-finals.jpg")!
+        let preference = GamePreference(
+            gameId: "1910103699", gameName: "THE FINALS", boxArtURL: saved, state: .preferred
+        )
+        // The fallback priority tile still uses the same campaign artwork as Drops,
+        // even when there are no eligible drops left to mine.
+        let index = OverviewArtworkResolver.ArtworkIndex(sources: [[
+            (preference.gameId, preference.gameName, finalsArtwork)
+        ]])
+        XCTAssertEqual(
+            OverviewArtworkResolver.resolvedArtworkURL(
+                for: preference, liveArtworkURL: index.artworkURL(for: preference)
+            ),
+            finalsArtwork
+        )
+        XCTAssertEqual(
+            OverviewArtworkResolver.resolvedArtworkURL(for: preference, liveArtworkURL: nil), saved
+        )
+    }
+
+    func testCustomArtworkWinsUntilRemovedThenReturnsToCurrentTwitchArtwork() {
+        let custom = URL(fileURLWithPath: "/tmp/custom-finals.png")
+        let saved = URL(string: "https://example.com/old-finals.jpg")!
+        let preference = GamePreference(
+            gameId: "1910103699", gameName: "THE FINALS", boxArtURL: saved,
+            customArtworkURL: custom, state: .preferred
+        )
+        XCTAssertEqual(
+            OverviewArtworkResolver.resolvedArtworkURL(for: preference, liveArtworkURL: finalsArtwork), custom
+        )
+        let restored = GamePreference(
+            gameId: preference.gameId, gameName: preference.gameName, boxArtURL: saved, state: .preferred
+        )
+        XCTAssertEqual(
+            OverviewArtworkResolver.resolvedArtworkURL(for: restored, liveArtworkURL: finalsArtwork), finalsArtwork
+        )
+    }
+
+    func testExpiredArtworkRevalidatesDiskAndMemoryEvenWhenURLIsUnchanged() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SwiftMinerArtworkRefreshTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let url = finalsArtwork
+        let original = try XCTUnwrap(Self.testPNGData())
+        let updated = try XCTUnwrap(Self.testPNGData(width: 3))
+        MockURLProtocol.requestHandler = { request in
+            (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, original)
+        }
+        let initialCache = CampaignArtworkCache(cacheDirectory: directory, session: session)
+        let initialImage = await initialCache.image(for: url)
+        XCTAssertEqual(initialImage?.representations.first?.pixelsWide, 2)
+
+        let counter = RequestCounter()
+        MockURLProtocol.requestHandler = { request in
+            counter.increment()
+            XCTAssertEqual(request.cachePolicy, .reloadRevalidatingCacheData)
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, updated)
+        }
+        let expiredCache = CampaignArtworkCache(cacheDirectory: directory, session: session, maximumAge: 0)
+        let diskRefresh = await expiredCache.image(for: url)
+        XCTAssertEqual(diskRefresh?.representations.first?.pixelsWide, 3)
+        let memoryRefresh = await expiredCache.image(for: url)
+        XCTAssertEqual(memoryRefresh?.representations.first?.pixelsWide, 3)
+        XCTAssertEqual(counter.value, 2)
+
+        // An offline refresh keeps the image visible without marking it fresh.
+        MockURLProtocol.requestHandler = { _ in
+            counter.increment()
+            throw URLError(.notConnectedToInternet)
+        }
+        let offlineImage = await expiredCache.image(for: url)
+        XCTAssertEqual(offlineImage?.representations.first?.pixelsWide, 3)
+        let retryImage = await expiredCache.image(for: url)
+        XCTAssertNotNil(retryImage)
+        XCTAssertEqual(counter.value, 4)
+    }
+
     func testCampaignArtworkSurvivesASecondCacheInstanceWithoutNetwork() async throws {
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SwiftMinerCampaignArtworkTests-(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("SwiftMinerCampaignArtworkTests-\(UUID().uuidString)", isDirectory: true)
         let sessionConfiguration = URLSessionConfiguration.ephemeral
         sessionConfiguration.protocolClasses = [MockURLProtocol.self]
         let session = URLSession(configuration: sessionConfiguration)
@@ -296,10 +396,10 @@ final class OverviewArtworkTests: XCTestCase {
         )
     }
 
-    private static func testPNGData() -> Data? {
+    private static func testPNGData(width: Int = 2) -> Data? {
         guard let bitmap = NSBitmapImageRep(
             bitmapDataPlanes: nil,
-            pixelsWide: 2,
+            pixelsWide: width,
             pixelsHigh: 2,
             bitsPerSample: 8,
             samplesPerPixel: 4,

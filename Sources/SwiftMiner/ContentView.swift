@@ -99,11 +99,16 @@ struct ContentView: View {
 // MARK: - Overview View
 
 enum OverviewArtworkResolver {
+    /// Saved category art is a fallback, never an override of current Twitch data.
+    static func resolvedArtworkURL(for preference: GamePreference, liveArtworkURL: URL?) -> URL? {
+        preference.customArtworkURL ?? usable(liveArtworkURL) ?? preference.resolvedBoxArtURL
+    }
+
     static func artworkURL(
         for preference: GamePreference,
         campaigns: [CampaignViewData]
     ) -> URL? {
-        campaigns.lazy.compactMap { campaign in
+        campaigns.sorted { $0.startDate > $1.startDate }.lazy.compactMap { campaign in
             guard matches(
                 gameId: campaign.gameId,
                 gameName: campaign.gameName,
@@ -117,7 +122,7 @@ enum OverviewArtworkResolver {
         for preference: GamePreference,
         campaigns: [Campaign]
     ) -> URL? {
-        campaigns.lazy.compactMap { campaign in
+        campaigns.sorted { $0.startDate > $1.startDate }.lazy.compactMap { campaign in
             guard matches(
                 gameId: campaign.game.id,
                 gameName: campaign.game.name,
@@ -149,6 +154,18 @@ enum OverviewArtworkResolver {
         /// matched a key. Keeping the position preserves the "first match wins, primary
         /// source before fallback" order the linear scan produced.
         private var byKey: [String: (position: Int, url: URL)] = [:]
+
+        /// Campaigns survive across seasons and accounts. Their input order is
+        /// not freshness order; older artwork must not win just by arriving first.
+        init(campaigns: [CampaignViewData], fallbackCampaigns: [Campaign] = []) {
+            let candidates = campaigns.map { ($0.gameId, $0.gameName, $0.artworkURL, $0.startDate) }
+                + fallbackCampaigns.map { (Optional($0.game.id), $0.game.name, $0.game.boxArtURL, $0.startDate) }
+            let ordered = candidates.enumerated().sorted {
+                if $0.element.3 != $1.element.3 { return $0.element.3 > $1.element.3 }
+                return $0.offset < $1.offset
+            }
+            self.init(sources: [ordered.map { ($0.element.0, $0.element.1, $0.element.2) }])
+        }
 
         init(sources: [[(gameId: String?, gameName: String, artworkURL: URL?)]]) {
             var position = 0

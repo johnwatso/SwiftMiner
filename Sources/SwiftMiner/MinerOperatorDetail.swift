@@ -357,7 +357,7 @@ struct MinerStatusCluster: View {
                 width: cellWidth
             ) {
                 if let lastPollAt {
-                    Text(lastPollAt, style: .relative)
+                    MinerRelativeTimeText(date: lastPollAt)
                 } else {
                     Text("Not yet")
                 }
@@ -610,6 +610,29 @@ private struct MinerStatusCell<Content: View>: View {
         .frame(width: showsLabel ? width : 96)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(label)
+    }
+}
+
+/// Explicit, low-frequency updates keep relative date text from scheduling
+/// continuous SwiftUI layout work inside the status bar's ViewThatFits.
+struct MinerRelativeTimeText: View {
+    let date: Date
+    var countsDown = false
+    @Environment(\.controlActiveState) private var controlActiveState
+
+    var body: some View {
+        if controlActiveState == .inactive {
+            text(at: Date())
+        } else {
+            TimelineView(.periodic(from: .now, by: 15)) { context in
+                text(at: context.date)
+            }
+        }
+    }
+
+    private func text(at now: Date) -> Text {
+        let interval = countsDown ? date.timeIntervalSince(now) : now.timeIntervalSince(date)
+        return Text(MinerLiveActivityTimerView.formatElapsed(max(0, interval)))
     }
 }
 

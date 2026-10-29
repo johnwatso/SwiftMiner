@@ -139,6 +139,7 @@ extension OverviewView {
     /// touches. Rebuilding them per campaign is what made this chain the most expensive
     /// thing Overview did on a body pass.
     private struct CampaignFeedContext {
+        let artwork: OverviewArtworkResolver.ArtworkIndex
         let preferences: GameMatchIndex
         let watched: WatchedCampaignIndex
         let dropStates: PriorityQueueDropIndex
@@ -197,17 +198,16 @@ extension OverviewView {
     }
 
     private func makeArtworkIndex() -> OverviewArtworkResolver.ArtworkIndex {
-        OverviewArtworkResolver.ArtworkIndex(sources: [
-            campaigns.map { ($0.gameId, $0.gameName, $0.artworkURL) },
-            navigation.minerManager.miners.flatMap(\.allCampaigns).map {
-                ($0.game.id, $0.game.name, $0.game.boxArtURL)
-            }
-        ])
+        OverviewArtworkResolver.ArtworkIndex(
+            campaigns: campaigns,
+            fallbackCampaigns: navigation.minerManager.miners.flatMap(\.allCampaigns)
+        )
     }
 
     private func makeFeedContext() -> CampaignFeedContext {
         let watched = WatchedCampaignIndex(miners: navigation.minerManager.miners)
         return CampaignFeedContext(
+            artwork: makeArtworkIndex(),
             preferences: GameMatchIndex(
                 gamePreferences: settings.gamePreferences,
                 priorityGames: settings.priorityGames,
@@ -268,8 +268,6 @@ extension OverviewView {
         }
         var usedCampaignIds = Set<String>()
         var items: [CampaignRailItem] = []
-        // Only built if some preferred game turns out to have no eligible campaign.
-        var artworkIndex: OverviewArtworkResolver.ArtworkIndex?
 
         // Keep the persisted order, including family wildcards. `GameMatchIndex`
         // intentionally leaves broad rules out of its exact-key lookup, but they
@@ -295,8 +293,7 @@ extension OverviewView {
                         )
                     )
                 } else {
-                    let artwork = artworkIndex ?? makeArtworkIndex()
-                    artworkIndex = artwork
+                    let artwork = context.artwork
                     items.append(makePreferredGameItem(preference, artwork: artwork, context: context))
                 }
                 continue
@@ -320,8 +317,7 @@ extension OverviewView {
                     )
                 )
             } else {
-                let artwork = artworkIndex ?? makeArtworkIndex()
-                artworkIndex = artwork
+                let artwork = context.artwork
                 items.append(makePreferredGameItem(preference, artwork: artwork, context: context))
             }
         }
@@ -358,7 +354,10 @@ extension OverviewView {
         }
         let game = Game(id: campaign.gameId ?? campaign.id, name: campaign.gameName, boxArtURL: campaign.artworkURL)
         let preference = context.preferences.bestPreference(gameId: game.id, gameName: campaign.gameName)
-        let artworkURL = preference?.customArtworkURL ?? campaign.artworkURL
+        let artPreference = preference ?? GamePreference(gameId: game.id, gameName: game.name, state: .preferred)
+        let artworkURL = preference?.customArtworkURL
+            ?? context.artwork.artworkURL(for: artPreference)
+            ?? campaign.artworkURL
         return CampaignRailItem(
             id: "\(section.rawValue)-\(campaign.id)",
             section: section,
@@ -450,15 +449,12 @@ extension OverviewView {
         artwork: OverviewArtworkResolver.ArtworkIndex,
         context: CampaignFeedContext
     ) -> CampaignRailItem {
-        // This item is built precisely because the game has no *eligible* campaign,
-        // but an ineligible one (completed, unlinked) usually still exists and
-        // carries live Twitch art. Preferences hold no remote URL of their own once
-        // a dead cache path is discarded, so without this the tile drops to initials.
-        let campaignArtwork = artwork.artworkURL(for: preference)
-
-        let artworkURL = preference.customArtworkURL
-            ?? preference.resolvedBoxArtURL
-            ?? campaignArtwork
+        // Completed and unlinked campaigns still carry current Twitch artwork.
+        // Prefer that to the URL captured when this game was first prioritised.
+        let artworkURL = OverviewArtworkResolver.resolvedArtworkURL(
+            for: preference,
+            liveArtworkURL: artwork.artworkURL(for: preference)
+        )
         return CampaignRailItem(
             id: "preferred-\(preference.wildcard?.priorityToken ?? (preference.gameId.isEmpty ? preference.gameName : preference.gameId))",
             section: .prioritised,
@@ -559,7 +555,10 @@ extension OverviewView {
                     : "Your preferred games are ready for the next campaign.",
                 progressPercent: 0,
                 artworkURL: preferredGames.first.flatMap { pref in
-                    pref.customArtworkURL ?? pref.resolvedBoxArtURL
+                    OverviewArtworkResolver.resolvedArtworkURL(
+                        for: pref,
+                        liveArtworkURL: makeArtworkIndex().artworkURL(for: pref)
+                    )
                 },
                 tint: .orange,
                 hasOnlyBadgesOrEmotes: false,

@@ -1032,52 +1032,91 @@ struct PriorityQueueDropLabel: View {
     }
 }
 
-/// Identifies a franchise-wide priority rule while letting the adjacent drop label
-/// remain the primary operational signal. Its box matches `PriorityQueueDropLabel`;
-/// the border carries a slow rotating multicolour glow (the old SwiftBot
-/// "Intelligence" treatment) while the text stays plain.
+/// Give the wildcard a minute of motion on appearance or window activation,
+/// then remove its animation timeline until the next activation.
 private struct WildcardQueueLabel: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.controlActiveState) private var controlActiveState
 
+    @State private var animationStartedAt: Date?
+    @State private var restingAngle: Double = 0
+
+    private var allowsAnimation: Bool { !reduceMotion && controlActiveState != .inactive }
+
     private static let glowColors: [Color] = [.purple, .pink, .blue, .cyan, .orange, .purple]
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: reduceMotion || controlActiveState == .inactive)) { context in
-            let degrees = reduceMotion
-                ? 0.0
-                : context.date.timeIntervalSinceReferenceDate
-                    .truncatingRemainder(dividingBy: 4.0) / 4.0 * 360.0
-            let gradient = AngularGradient(
-                colors: Self.glowColors,
-                center: .center,
-                angle: .degrees(degrees)
-            )
-            let shape = RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
-
-            HStack(spacing: 5) {
-                Image(systemName: "sparkles")
-                Text("Wildcard")
-            }
-            .font(.caption2.weight(.medium))
-            .foregroundStyle(.white.opacity(0.92))
-            .lineLimit(1)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 4)
-            .background { shape.fill(Color.black.opacity(0.48)) }
-            .overlay {
-                ZStack {
-                    shape.stroke(gradient, lineWidth: 1.5)
-                    shape.stroke(gradient, lineWidth: 4)
-                        .blur(radius: 4)
-                        .opacity(0.5)
+        Group {
+            if allowsAnimation, let animationStartedAt {
+                TimelineView(.animation(minimumInterval: 1.0 / 24.0)) { context in
+                    label(angle: angle(at: context.date, since: animationStartedAt))
                 }
-                .blendMode(.plusLighter)
-                .allowsHitTesting(false)
+            } else {
+                label(angle: reduceMotion ? 0 : restingAngle)
             }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Wildcard game family")
+        .task(id: allowsAnimation) {
+            guard allowsAnimation else {
+                if let start = animationStartedAt {
+                    restingAngle = angle(at: Date(), since: start)
+                }
+                animationStartedAt = nil
+                return
+            }
+            let start = Date()
+            animationStartedAt = start
+            do {
+                try await Task.sleep(for: .seconds(60))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            restingAngle = angle(at: Date(), since: start)
+            animationStartedAt = nil
+        }
+        .onDisappear {
+            if let start = animationStartedAt {
+                restingAngle = angle(at: Date(), since: start)
+            }
+            animationStartedAt = nil
+        }
+    }
+
+    private func angle(at date: Date, since start: Date) -> Double {
+        (restingAngle + date.timeIntervalSince(start) / 4.0 * 360.0)
+            .truncatingRemainder(dividingBy: 360.0)
+    }
+
+    private func label(angle: Double) -> some View {
+        let gradient = AngularGradient(
+            colors: Self.glowColors,
+            center: .center,
+            angle: .degrees(angle)
+        )
+        let shape = RoundedRectangle(cornerRadius: GlassRadius.small, style: .continuous)
+
+        return HStack(spacing: 5) {
+            Image(systemName: "sparkles")
+            Text("Wildcard")
+        }
+        .font(.caption2.weight(.medium))
+        .foregroundStyle(.white.opacity(0.92))
+        .lineLimit(1)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background { shape.fill(Color.black.opacity(0.48)) }
+        .overlay {
+            ZStack {
+                shape.stroke(gradient, lineWidth: 1.5)
+                shape.stroke(gradient, lineWidth: 4)
+                    .blur(radius: 4)
+                    .opacity(0.5)
+            }
+            .blendMode(.plusLighter)
+            .allowsHitTesting(false)
+        }
     }
 }
 

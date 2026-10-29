@@ -232,8 +232,17 @@ final class NavigationProjectionStateProvider: ProjectionStateProvider, @uncheck
             artworkByGame[key] = url.absoluteString
         }
 
+        let artworkIndex = OverviewArtworkResolver.ArtworkIndex(
+            campaigns: knownCampaigns,
+            fallbackCampaigns: miner.allCampaigns
+        )
         for preference in Settings.shared.gamePreferences where preference.state == .preferred {
-            addArtwork(preference.resolvedBoxArtURL, for: preference.gameName)
+            addArtwork(
+                artworkIndex.artworkURL(for: preference) ?? preference.resolvedBoxArtURL,
+                for: preference.gameName
+            )
+            // Only remote custom URLs can be served to the dashboard.
+            addArtwork(preference.customArtworkURL, for: preference.gameName)
             // The dashboard looks a wildcard up by its token, not its display
             // name. Give it the franchise's newest known title, as the app's
             // queue does, so the page never falls back to guessing art from
