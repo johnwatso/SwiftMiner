@@ -146,6 +146,19 @@ struct MinerDiscordPresentation: Equatable {
     }
 }
 
+/// One reminder per unlinked priority game, even when it has several campaigns.
+enum MinerDiscordReminderGames {
+    static func campaigns(_ campaigns: [Campaign], priorityGames: [String]) -> [Campaign] {
+        let matcher = PriorityGameMatcher(priorityGames)
+        var seen = Set<String>()
+        return campaigns.filter {
+            !$0.isAccountConnected && matcher.matches(gameId: $0.game.id, gameName: $0.game.name)
+        }.sorted {
+            ($0.game.name, $0.name, $0.id) < ($1.game.name, $1.name, $1.id)
+        }.filter { seen.insert(PriorityGameMatcher.normalized($0.game.id)).inserted }
+    }
+}
+
 // MARK: - Section
 
 /// Compact Discord summary for the selected miner, sitting between the campaign
@@ -170,6 +183,7 @@ struct MinerDiscordSection: View {
     @State private var showUnlinkConfirmation = false
     @State private var recentSendFailed = false
     @State private var isSending = false
+    @State private var reminderResult: String?
 
     private var displayedDiscordUser: SwiftBotDiscordUser? {
 #if DEBUG
@@ -336,6 +350,12 @@ struct MinerDiscordSection: View {
 
             messageActions
                 .padding(.top, 3)
+
+            if let reminderResult {
+                Text(reminderResult)
+                    .font(.caption)
+                    .foregroundStyle(recentSendFailed ? Color.red : Color.secondary)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
@@ -358,6 +378,25 @@ struct MinerDiscordSection: View {
                 Label("Send Welcome Message", systemImage: "checkmark.message")
             }
             .disabled(isSending)
+
+            Menu {
+                if reminderCampaigns.isEmpty {
+                    Text("No unlinked priority games")
+                } else {
+                    ForEach(reminderCampaigns) { campaign in
+                        Button(campaign.game.name) {
+                            Task { await sendLinkReminder(for: campaign) }
+                        }
+                        .disabled(miner.campaignsAreProvisional)
+                    }
+                }
+            } label: {
+                Label("Remind About…", systemImage: "bell")
+            }
+            .disabled(isSending)
+            .help(miner.campaignsAreProvisional
+                  ? "Campaigns are cached; refresh the miner before sending a reminder."
+                  : "Send an account-linking reminder for an unlinked campaign.")
 
             // Only reachable while Twitch auth is actually broken; it asks the
             // owner over Discord to reconnect the account.
@@ -522,6 +561,39 @@ struct MinerDiscordSection: View {
             helpURL: SwiftMinerHelpLink.webDashboard
         )
         await send(request, to: discordId)
+    }
+
+    private var reminderCampaigns: [Campaign] {
+        MinerDiscordReminderGames.campaigns(miner.allCampaigns, priorityGames: navigation.priorityGames(for: miner))
+    }
+
+    private func sendLinkReminder(for campaign: Campaign) async {
+        guard let discordId = miner.ownerDiscordId, !miner.campaignsAreProvisional,
+              reminderCampaigns.contains(where: { $0.id == campaign.id }) else { return }
+        let portal = SwiftMinerPortalLink(base: NavigationModel.portalBase())
+        let related = miner.allCampaigns.filter {
+            !$0.isAccountConnected && $0.game.id == campaign.game.id
+        }
+        let issueKind: SwiftBotIssueKind = related.allSatisfy { !$0.drops.isEmpty && $0.isFullyComplete }
+            ? .accountLinkDeliveryPending : .accountLinkRequired
+        let request = SwiftBotDMRequest(
+            messageType: .prioritisedGameNeedsLinking,
+            debug: false,
+            priorityGames: navigation.priorityGames(for: miner),
+            affectedGame: campaign.game.name,
+            accountId: miner.accountId,
+            minerDisplayName: miner.displayName,
+            affectedGameId: campaign.game.id,
+            eventId: "manualLinkReminder:\(UUID().uuidString)",
+            portalURL: portal?.campaigns,
+            portalDestination: portal.map { _ in SwiftBotPortalDestination.campaigns.rawValue },
+            issueKind: issueKind.rawValue,
+            helpURL: SwiftMinerHelpLink.url(for: issueKind)
+        )
+        await send(request, to: discordId)
+        reminderResult = recentSendFailed
+            ? "Couldn't send the reminder. Check the Discord connection and try again."
+            : "Reminder sent for \(campaign.game.name)."
     }
 
     private func resendLast() async {

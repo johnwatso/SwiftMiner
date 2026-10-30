@@ -118,6 +118,23 @@ final class MinerDiscordSectionTests: XCTestCase {
         XCTAssertEqual(presentation.messageCount, 0)
     }
 
+    func testReminderGamesIncludeOnlyUnlinkedPrioritiesAndDeduplicateCampaigns() {
+        func campaign(_ id: String, game: String, linked: Bool = false) -> Campaign {
+            Campaign(id: id, name: id, game: Game(id: game, name: game),
+                     startDate: .distantPast, endDate: .distantFuture, isAccountConnected: linked)
+        }
+        let campaigns = [campaign("one", game: "Rust"), campaign("two", game: "Rust"),
+                         campaign("three", game: "Halo", linked: true), campaign("four", game: "Other")]
+        XCTAssertEqual(MinerDiscordReminderGames.campaigns(campaigns, priorityGames: ["Rust", "Halo"]).map(\.game.name), ["Rust"])
+    }
+
+    func testReminderGamesMatchPriorityWildcards() {
+        let campaign = Campaign(id: "cod", name: "Launch",
+                                game: Game(id: "123", name: "Call of Duty: Modern Warfare 4"),
+                                startDate: .distantPast, endDate: .distantFuture)
+        XCTAssertEqual(MinerDiscordReminderGames.campaigns([campaign], priorityGames: ["swiftminer:family:callOfDuty"]).map(\.id), ["cod"])
+    }
+
     // MARK: - Pending item ↔ reminder matching
 
     func testLinkReminderMatchesTheLoggedDMForItsOwnGame() {

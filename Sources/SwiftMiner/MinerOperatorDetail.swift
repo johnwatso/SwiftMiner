@@ -613,26 +613,16 @@ private struct MinerStatusCell<Content: View>: View {
     }
 }
 
-/// Explicit, low-frequency updates keep relative date text from scheduling
-/// continuous SwiftUI layout work inside the status bar's ViewThatFits.
+/// Relative status times share the Overview's foreground clock policy.
 struct MinerRelativeTimeText: View {
     let date: Date
     var countsDown = false
-    @Environment(\.controlActiveState) private var controlActiveState
 
     var body: some View {
-        if controlActiveState == .inactive {
-            text(at: Date())
-        } else {
-            TimelineView(.periodic(from: .now, by: 15)) { context in
-                text(at: context.date)
-            }
+        OverviewTimerClock { now, showsSeconds in
+            let interval = countsDown ? date.timeIntervalSince(now) : now.timeIntervalSince(date)
+            return Text(MinerLiveActivityTimerView.formatElapsed(max(0, interval), showsSeconds: showsSeconds))
         }
-    }
-
-    private func text(at now: Date) -> Text {
-        let interval = countsDown ? date.timeIntervalSince(now) : now.timeIntervalSince(date)
-        return Text(MinerLiveActivityTimerView.formatElapsed(max(0, interval)))
     }
 }
 
@@ -661,16 +651,12 @@ struct MinerMiningSequenceView: View {
     let presentation: MinerOperatorPresentation
     let channelName: String?
 
-    /// Width of the "Currently mining" and "Up next" artwork. They're peer
-    /// columns, so both use it; height is driven by the row instead. "Then" is
-    /// a compact secondary list and stays small and square.
+    /// Width of the lead artwork; all campaign covers use the same portrait ratio.
     private static let leadArtworkWidth: CGFloat = 76
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
-            // Every column is stretched to the tallest one's height, which then
-            // flows down to the artwork — so the two lead thumbnails end up the
-            // same height as each other and as tall as the text beside them.
+            // Keep the peer columns aligned while the covers retain their portrait ratio.
             HStack(alignment: .top, spacing: 0) {
                 nowColumn.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 separator
@@ -704,7 +690,6 @@ struct MinerMiningSequenceView: View {
                     url: presentation.currentCampaign?.game.boxArtURL,
                     symbol: presentation.snapshot.now.symbol,
                     size: Self.leadArtworkWidth,
-                    fillsHeight: true,
                     tint: presentation.snapshot.now.accent
                 )
                 VStack(alignment: .leading, spacing: 5) {
@@ -755,7 +740,6 @@ struct MinerMiningSequenceView: View {
                         url: presentation.nextCampaign?.game.boxArtURL,
                         symbol: item.symbol,
                         size: Self.leadArtworkWidth,
-                        fillsHeight: true,
                         tint: item.accent
                     )
                     VStack(alignment: .leading, spacing: 4) {
@@ -818,8 +802,7 @@ private struct SequenceColumn<Content: View>: View {
             Text(title)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
-            // Absorbs any height the column was stretched to, passing it down
-            // to artwork that asked to fill.
+            // Align the content at the top when another column is taller.
             content
                 .frame(maxHeight: .infinity, alignment: .top)
         }
@@ -830,10 +813,6 @@ struct CampaignArtworkThumbnail: View {
     let url: URL?
     let symbol: String
     let size: CGFloat
-    /// When true the artwork stretches to the height of its row rather than
-    /// staying square, so the text beside it doesn't overhang the image.
-    /// `size` then means width only, and `size` is the floor on height.
-    var fillsHeight: Bool = false
     /// Uses the same resolved state tint as the Overview presentation whenever
     /// no campaign artwork is available.
     var tint: Color = .secondary
@@ -844,8 +823,7 @@ struct CampaignArtworkThumbnail: View {
 
     var body: some View {
         CampaignCardArtwork(url: url)
-            .frame(width: size)
-            .frame(minHeight: size, maxHeight: fillsHeight ? .infinity : size)
+            .frame(width: size, height: size * 4 / 3)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay {
                 if url == nil {

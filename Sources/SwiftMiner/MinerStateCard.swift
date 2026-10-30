@@ -2031,21 +2031,13 @@ struct MinerLiveActivityTimerView: View {
     let accent: Color
     var label: String? = nil
 
-    @Environment(\.controlActiveState) private var controlActiveState
-
     var body: some View {
-        if controlActiveState == .inactive {
-            // No second-by-second layout work is needed in the background. The
-            // foreground timeline recomputes elapsed time from the original anchor.
-            timerContent(at: Date())
-        } else {
-            TimelineView(.periodic(from: anchor, by: 1)) { context in
-                timerContent(at: context.date)
-            }
+        OverviewTimerClock { now, showsSeconds in
+            timerContent(at: now, showsSeconds: showsSeconds)
         }
     }
 
-    private func timerContent(at date: Date) -> some View {
+    private func timerContent(at date: Date, showsSeconds: Bool) -> some View {
         let elapsed = max(0, date.timeIntervalSince(anchor))
         return HStack(spacing: 5) {
             PulsingActivityDot(color: accent)
@@ -2060,23 +2052,59 @@ struct MinerLiveActivityTimerView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Text(Self.formatElapsed(elapsed))
+            Text(Self.formatElapsed(elapsed, showsSeconds: showsSeconds))
                 .font(.caption.weight(.medium).monospacedDigit())
                 .foregroundStyle(.secondary)
         }
         .padding(.top, 2)
-        .accessibilityLabel("\(label ?? "Active") for \(Self.formatElapsed(elapsed))")
+        .accessibilityLabel("\(label ?? "Active") for \(Self.formatElapsed(elapsed, showsSeconds: showsSeconds))")
     }
 
-    static func formatElapsed(_ interval: TimeInterval) -> String {
+    static func formatElapsed(_ interval: TimeInterval, showsSeconds: Bool = true) -> String {
         let total = Int(interval)
         let hours = total / 3600
         let minutes = (total % 3600) / 60
         let seconds = total % 60
+        if !showsSeconds {
+            return hours > 0 ? String(format: "%d:%02d", hours, minutes) : "\(minutes) min"
+        }
         if hours > 0 {
             return String(format: "%d:%02d:%02d", hours, minutes, seconds)
         }
         return String(format: "%02d:%02d", minutes, seconds)
+    }
+}
+
+/// Refresh seconds briefly after the window becomes active, then conserve UI work.
+struct OverviewTimerClock<Content: View>: View {
+    @Environment(\.controlActiveState) private var controlActiveState
+    @State private var activeSince = Date()
+    let content: (Date, Bool) -> Content
+
+    var body: some View {
+        Group {
+            if controlActiveState == .inactive {
+                content(Date(), false)
+            } else {
+                TimelineView(OverviewTimerSchedule(activeSince: activeSince)) { context in
+                    content(context.date, context.date.timeIntervalSince(activeSince) < 600)
+                }
+            }
+        }
+        .onChange(of: controlActiveState) { _, state in
+            if state != .inactive { activeSince = Date() }
+        }
+    }
+}
+
+struct OverviewTimerSchedule: TimelineSchedule {
+    let activeSince: Date
+
+    func entries(from startDate: Date, mode: TimelineScheduleMode) -> some Sequence<Date> {
+        let cutoff = activeSince.addingTimeInterval(600)
+        return sequence(first: startDate) { date in
+            date < cutoff ? min(date.addingTimeInterval(1), cutoff) : date.addingTimeInterval(60)
+        }
     }
 }
 

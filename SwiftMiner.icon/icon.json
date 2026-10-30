@@ -43,8 +43,8 @@
       "layers" : [
         {
           "fill" : "none",
-          "glass" : true,
-          "hidden" : true,
+          "glass" : false,
+          "hidden" : false,
           "image-name-specializations" : [
             {
               "value" : "sparkles.png"
