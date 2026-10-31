@@ -1059,7 +1059,6 @@ struct MinerActivitySnapshot {
             statusSymbol: statusSymbol(for: miner, now: now),
             showsLimitedChannelsBadge: miner.status == .waitingForStream
                 && (now.id.hasPrefix("stream-") || now.id.hasPrefix("blocked-stream-"))
-                && currentCampaign?.id == now.campaignId
                 && currentCampaign?.hasChannelRestrictions == true
         )
     }
@@ -2075,35 +2074,23 @@ struct MinerLiveActivityTimerView: View {
     }
 }
 
-/// Refresh seconds briefly after the window becomes active, then conserve UI work.
+/// Update seconds while the view is open, then switch to minute precision.
 struct OverviewTimerClock<Content: View>: View {
-    @Environment(\.controlActiveState) private var controlActiveState
-    @State private var activeSince = Date()
+    @State private var showsSeconds = true
     let content: (Date, Bool) -> Content
 
     var body: some View {
-        Group {
-            if controlActiveState == .inactive {
-                content(Date(), false)
-            } else {
-                TimelineView(OverviewTimerSchedule(activeSince: activeSince)) { context in
-                    content(context.date, context.date.timeIntervalSince(activeSince) < 600)
-                }
+        TimelineView(.periodic(from: .now, by: showsSeconds ? 1 : 60)) { context in
+            content(context.date, showsSeconds)
+        }
+        .task {
+            showsSeconds = true
+            do {
+                try await Task.sleep(for: .seconds(600))
+                showsSeconds = false
+            } catch {
+                // SwiftUI cancels the task when the view disappears.
             }
-        }
-        .onChange(of: controlActiveState) { _, state in
-            if state != .inactive { activeSince = Date() }
-        }
-    }
-}
-
-struct OverviewTimerSchedule: TimelineSchedule {
-    let activeSince: Date
-
-    func entries(from startDate: Date, mode: TimelineScheduleMode) -> some Sequence<Date> {
-        let cutoff = activeSince.addingTimeInterval(600)
-        return sequence(first: startDate) { date in
-            date < cutoff ? min(date.addingTimeInterval(1), cutoff) : date.addingTimeInterval(60)
         }
     }
 }

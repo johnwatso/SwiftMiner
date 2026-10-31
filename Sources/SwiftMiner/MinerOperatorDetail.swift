@@ -630,19 +630,11 @@ private struct RelativeDurationText: View {
     let startDate: Date
 
     var body: some View {
-        // The format only resolves to hours and minutes, so a 1s tick bought
-        // nothing but a header rebuild every second.
-        TimelineView(.periodic(from: .now, by: 30)) { context in
-            Text(Self.format(context.date.timeIntervalSince(startDate)))
+        OverviewTimerClock { now, showsSeconds in
+            Text(MinerLiveActivityTimerView.formatElapsed(
+                max(0, now.timeIntervalSince(startDate)), showsSeconds: showsSeconds
+            ))
         }
-    }
-
-    static func format(_ interval: TimeInterval) -> String {
-        let seconds = max(0, Int(interval))
-        let hours = seconds / 3600
-        let minutes = (seconds % 3600) / 60
-        if hours > 0 { return "\(hours)h \(minutes)m" }
-        return "\(minutes)m"
     }
 }
 
