@@ -310,18 +310,8 @@ final class TwitchAuthServiceTests: XCTestCase {
 
     // MARK: - Device authorisation scopes
 
-    func testDeviceAuthorisationRequestsNoScopesByDefault() {
-        XCTAssertEqual(
-            TwitchAuthService.deviceAuthorizationScopes(includeFollowedChannels: false),
-            []
-        )
-    }
-
-    func testDeviceAuthorisationRequestsOnlyFollowScopeWhenOptedIn() {
-        XCTAssertEqual(
-            TwitchAuthService.deviceAuthorizationScopes(includeFollowedChannels: true),
-            ["user:read:follows"]
-        )
+    func testDeviceAuthorisationRequestsFollowScope() {
+        XCTAssertEqual(TwitchAuthService.deviceAuthorizationScopes(), ["user:read:follows"])
     }
 
     // MARK: - Client ID
@@ -343,7 +333,7 @@ final class TwitchAuthServiceTests: XCTestCase {
             return (response, data)
         }
 
-        let response = try await service.initiateDeviceFlow(includeFollowedChannels: true)
+        let response = try await service.initiateDeviceFlow()
         let request = try XCTUnwrap(MockURLProtocol.lastRequest)
         let body = String(data: try XCTUnwrap(request.httpBody), encoding: .utf8) ?? ""
 

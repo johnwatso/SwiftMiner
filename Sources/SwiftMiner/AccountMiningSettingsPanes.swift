@@ -537,7 +537,7 @@ struct MiningSettingsView: View {
                     .onChange(of: settings.prioritiseFollowedStreamers) { _, newValue in
                         Task { await navigation.minerManager.updateFollowedStreamerPriority(enabled: newValue) }
                     }
-                SettingsSecondaryText("When a followed streamer is live and verified for a matching campaign, SwiftMiner chooses it before falling back to normal stream ranking.")
+                SettingsSecondaryText("When a followed streamer is live and verified for a matching campaign, SwiftMiner chooses it before falling back to normal stream ranking. Accounts connected before follow access was requested may need to reconnect.")
             } header: {
                 Text("Strategy")
             }

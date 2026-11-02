@@ -27,6 +27,8 @@ lifecycle API; the watch loop, channel selection, drop progress, claiming,
 campaign warnings, events, callbacks, and UI projections each live in their own
 `MinerEngine+*` file.
 
+- **4.46** · 2026-11-02 · `pending` — Stop selecting fully earned campaigns as same-game fallbacks, preventing miners from watching streams with no remaining drop progress.
+
 - **4.45** · 2026-10-25 · `c5775b8` — An idle miner waiting for its scheduled campaign recheck no longer reads as unhealthy. The recheck wait (5 min) was longer than the 3-minute activity window, so a "Drops complete" miner was flagged unhealthy, and its open health incidents left unresolved, for the last two minutes of every wait. The window applies again if the recheck time passes and no cycle starts.
 
 - **4.44** · 2026-10-22 · `afcf116` — Accepted claims now survive restarts without repeating the same unconfirmed reward indefinitely. Polling and real-time claims share the same per-account instance history; counters and notifications fire once after inventory confirms the reward. Linking a previously unlinked game account enables a fresh bounded retry.

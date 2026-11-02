@@ -67,12 +67,10 @@ public actor TwitchAuthService {
 
     // MARK: - Device Code Flow
 
-    /// The only optional device-authorisation scope SwiftMiner currently uses.
-    ///
-    /// Followed-channel prioritisation is disabled by default, so a normal login
-    /// must not grant access to a user's followed channels.
-    public static func deviceAuthorizationScopes(includeFollowedChannels: Bool) -> [String] {
-        includeFollowedChannels ? [followedChannelsScope] : []
+    /// Device sign-in requests follow access so the preference can be enabled later
+    /// without requiring a new authorization.
+    public static func deviceAuthorizationScopes() -> [String] {
+        [followedChannelsScope]
     }
 
     /// The Helix scope `channels/followed` requires. Named once so the scope this asks for and
@@ -91,18 +89,14 @@ public actor TwitchAuthService {
 
     /// Initiates device code flow and returns the device code info for user to authorize.
     ///
-    /// Device login intentionally requests no scopes by default. The optional
-    /// followed-channel preference is the sole feature with a documented scope
-    /// requirement, and it is requested only when that preference is enabled.
-    public func initiateDeviceFlow(includeFollowedChannels: Bool = false) async throws -> DeviceCodeResponse {
+    /// Requests follow access for every sign-in, independently of the ranking preference.
+    public func initiateDeviceFlow() async throws -> DeviceCodeResponse {
         var request = URLRequest(url: deviceCodeURL)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         applyIssuingClientHeaders(to: &request)
 
-        let scopes = Self.deviceAuthorizationScopes(
-            includeFollowedChannels: includeFollowedChannels
-        ).joined(separator: " ")
+        let scopes = Self.deviceAuthorizationScopes().joined(separator: " ")
 
         let bodyParams = [
             "client_id": clientId,

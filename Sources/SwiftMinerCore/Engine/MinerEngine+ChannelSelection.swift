@@ -385,7 +385,7 @@ extension MinerEngine {
             guard candidateGameKey == gameKey || candidateGameId == gameId else { continue }
             guard campaign.isTimeActive && campaign.status != .disabled else { continue }
             guard !campaign.isLikelyInternalTestCampaign else { continue }
-            guard campaign.canAttemptMining else { continue }
+            guard campaign.canAttemptMining, !campaign.earnableDrops.isEmpty else { continue }
             // A campaign benched for repeated no-progress stalls stays benched here too;
             // re-adding it as a fallback restarted the same dead watch every couple of minutes.
             guard !isOnStallCooldown(campaign.id, cooldowns: stallCooldowns, now: now) else { continue }

@@ -84,9 +84,7 @@ public final class MinerLoginService {
             defer { authorizationTask = nil }
             do {
                 let authService = TwitchAuthService(clientId: clientId, tokenStore: TokenStoreFactory.makeDefault())
-                let response = try await authService.initiateDeviceFlow(
-                    includeFollowedChannels: Settings.shared.prioritiseFollowedStreamers
-                )
+                let response = try await authService.initiateDeviceFlow()
                 guard !Task.isCancelled else { return }
 
                 deviceAuthorization = DeviceAuthorization(

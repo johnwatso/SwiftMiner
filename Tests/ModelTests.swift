@@ -774,6 +774,32 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(candidates.map(\.id), ["creators", "launch"])
     }
 
+    func testSameGameVerificationExcludesFullyEarnedFallback() {
+        let game = Game(id: "overwatch", name: "Overwatch")
+        let now = Date()
+        func campaign(_ id: String, current: Int) -> Campaign {
+            let progress = Progress(dropId: id, campaignId: id, currentMinutes: current, requiredMinutes: 60, isClaimed: false)
+            return Campaign(
+                id: id, name: id, game: game, status: .active,
+                startDate: now.addingTimeInterval(-3600), endDate: now.addingTimeInterval(3600),
+                drops: [Drop(id: id, name: id, requiredMinutes: 60, progress: progress)],
+                isAccountConnected: false
+            )
+        }
+        let primary = campaign("playoffs", current: 0)
+        let complete = campaign("launch", current: 60)
+        let earnable = campaign("other", current: 30)
+
+        let candidates = MinerEngine.sameGameVerificationCandidates(
+            primaryCandidates: [primary], allCampaigns: [primary, complete, earnable],
+            priorityGames: ["Overwatch"], excludedGames: [], strategy: .prioritiseSelected,
+            includesBadgeAndEmoteCampaigns: false
+        )
+
+        XCTAssertTrue(complete.canAttemptMining)
+        XCTAssertEqual(candidates.map(\.id), ["playoffs", "other"])
+    }
+
     /// A campaign benched after repeated no-progress stalls must not come straight back
     /// as a same-game fallback, or the miner rewatches it every couple of minutes.
     func testSameGameVerificationExcludesCampaignOnStallCooldown() {
