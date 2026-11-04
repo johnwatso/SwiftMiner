@@ -332,8 +332,13 @@ actor CampaignArtworkCache {
         let key = Self.key(for: url)
 
         let cached = memory.object(forKey: key as NSString)
-        if let cached, url.isFileURL || Date().timeIntervalSince(cached.fetchedAt) < maximumAge {
-            return cached.image
+        if let cached {
+            // Read the age out here: `||` takes its right side as a closure, and Xcode 26's
+            // compiler rejects a closure capturing this non-Sendable value as a data race.
+            let age = Date().timeIntervalSince(cached.fetchedAt)
+            if url.isFileURL || age < maximumAge {
+                return cached.image
+            }
         }
 
         if url.isFileURL {
