@@ -53,6 +53,53 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertEqual(progress?.fraction ?? -1, 0.6, accuracy: 0.0001)
     }
 
+    /// A waiting miner names the campaign from its last channel probe, while the resolver
+    /// picks the top priority game. The card showed one's title with the other's art.
+    func testWaitingCardArtworkAndProgressMatchTheCampaignItNames() throws {
+        let probedArt = try XCTUnwrap(URL(string: "https://example.com/overwatch.jpg"))
+        let priority = makeCampaign(
+            id: "mw4",
+            gameId: "mw4-game",
+            gameName: "Modern Warfare 4",
+            isAccountConnected: false,
+            boxArtURL: URL(string: "https://example.com/mw4.jpg")
+        )
+        let probed = makeCampaign(
+            id: "owcs",
+            gameId: "overwatch-game",
+            gameName: "Overwatch",
+            isAccountConnected: true,
+            boxArtURL: probedArt
+        )
+        let miner = makeMiner(
+            status: .waitingForStream,
+            campaigns: [priority, probed],
+            priorityGames: ["Modern Warfare 4", "Overwatch"],
+            gameChannelAvailability: [
+                "overwatch": GameChannelAvailability(
+                    gameKey: "overwatch",
+                    hasEligibleChannel: false,
+                    campaignId: probed.id,
+                    checkedAt: Date()
+                ),
+            ]
+        )
+        XCTAssertEqual(miner.resolvedPrimaryState?.resolved?.campaignId, priority.id)
+
+        let presentation = MinerOperatorPresentation.resolve(
+            for: miner,
+            priorityGames: miner.priorityGames,
+            excludedGames: [],
+            strategy: .onlyPriority,
+            includesBadgeAndEmoteCampaigns: false
+        )
+
+        XCTAssertEqual(presentation.snapshot.now.title, "Overwatch")
+        XCTAssertEqual(presentation.snapshot.now.campaignId, probed.id)
+        XCTAssertEqual(presentation.currentCampaign?.id, probed.id)
+        XCTAssertEqual(presentation.currentCampaign?.game.name, "Overwatch")
+    }
+
     func testWatchingCardShowsConcurrentCampaignDropThatTwitchIsCrediting() {
         let selected = makeCampaign(
             id: "selected",

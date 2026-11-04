@@ -102,6 +102,33 @@ final class OperatorSessionRenewalCoordinatorTests: XCTestCase {
         XCTAssertEqual(stored?.accessToken, account.accessToken)
     }
 
+    /// Twitch can leave the cookie's expiry fixed, so it lapses hours before the integrity
+    /// token. The Operator stayed offline for 14 hours retrying with that cookie.
+    func testRenewalIssuesWithoutSeedOnceTheCookieHasLapsed() async throws {
+        let now = Date()
+        let account = makeAccount(
+            browser: makeBrowser(
+                now: now,
+                integrityExpiry: now.addingTimeInterval(300),
+                cookieExpiry: now.addingTimeInterval(-3_600)
+            )
+        )
+        let store = InMemoryTokenStore(accounts: [account])
+        let manager = MinerManager(clientId: "test", tokenStore: store)
+        let issuer = StubBrowserIntegrityIssuer(issuance: makeIssuance(now: now))
+        let coordinator = OperatorSessionRenewalCoordinator(
+            minerManager: manager,
+            issuer: issuer,
+            validator: StubBrowserIntegrityValidator()
+        )
+
+        let outcome = try await coordinator.renewNowIfNeeded(now: now)
+
+        XCTAssertEqual(outcome, .renewed(generation: 2))
+        XCTAssertEqual(issuer.callCount, 1)
+        XCTAssertNil(issuer.lastPreviousCookie)
+    }
+
     func testIntegrityRejectionRenewsImmediatelyOncePerWindow() async throws {
         let now = Date()
         // Not due for another hour on schedule; the rejection is what forces it.

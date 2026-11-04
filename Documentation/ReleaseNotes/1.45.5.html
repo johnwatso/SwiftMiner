@@ -26,8 +26,16 @@
 <body>
   <main>
     <h1>SwiftMiner 1.45.5</h1>
-    <p class="meta">Version 1.45.5 &middot; Build 2026110309 &middot; Prepared 3 November 2026</p>
-    <p class="intro">SwiftMiner 1.45.5 keeps game artwork consistent with Twitch, adds manual Discord reminders for account linking, and makes the Overview clearer and quieter while idle.</p>
+    <p class="meta">Version 1.45.5 &middot; Build 2026110509 &middot; Prepared 5 November 2026</p>
+    <p class="intro">SwiftMiner 1.45.5 keeps the Operator connected without a manual reconnect, keeps game artwork consistent with Twitch, adds manual Discord reminders for account linking, and makes the Overview clearer and quieter while idle.</p>
+
+    <section>
+      <h2>🐝 Fixes</h2>
+      <ul>
+        <li>The Operator now renews its Twitch security check on its own after the browser cookie behind it expires. Previously, mining stopped about every 64 hours until Reconnect Twitch was chosen.</li>
+        <li>A miner waiting for a stream now shows the artwork and progress of the campaign it names, rather than those of a different priority game.</li>
+      </ul>
+    </section>
 
     <section>
       <h2>More accurate mining</h2>

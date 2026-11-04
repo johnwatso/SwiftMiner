@@ -1447,7 +1447,10 @@ struct MinerActivitySnapshot {
                 detail: "Waiting for an eligible live stream.",
                 symbol: "antenna.radiowaves.left.and.right",
                 accent: .cyan,
-                campaignId: resolved.campaignId,
+                // While waiting, the resolver reports every priority game as blocked, so its
+                // campaign can differ from the one this item names. Artwork and progress are
+                // looked up from this ID and must describe the same campaign as the title.
+                campaignId: campaign?.id ?? resolved.campaignId,
                 artworkURL: campaign?.game.boxArtURL
             )
         default:

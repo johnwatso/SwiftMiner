@@ -158,10 +158,15 @@ final class OperatorSessionRenewalCoordinator {
             oauthToken: account.accessToken,
             clientID: browser.clientID,
             deviceID: browser.xDeviceID ?? browser.deviceID ?? "",
-            previousCookie: TwitchBrowserSDKCookie(
-                value: browser.sdkCookieValue,
-                expiresAt: browser.cookieExpiresAt
-            )
+            // Twitch can leave the cookie's expiry fixed, so it may lapse while the integrity
+            // token is still good. A lapsed cookie cannot seed the store, and insisting on it
+            // failed every retry until a manual reconnect. Issue without it, as sign-in does.
+            previousCookie: browser.cookieExpiresAt > now
+                ? TwitchBrowserSDKCookie(
+                    value: browser.sdkCookieValue,
+                    expiresAt: browser.cookieExpiresAt
+                )
+                : nil
         )
         try Task.checkCancellation()
 
