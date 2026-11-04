@@ -29,6 +29,14 @@ struct ContentView: View {
                 reconnectingIsOperator: nav.reconnectingMinerId.flatMap {
                     navigation.minerManager.getMiner(id: $0)?.isOperator
                 } ?? false,
+                reconnectingUsesBrowser: nav.reconnectingMinerId.flatMap {
+                    navigation.minerManager.getMiner(id: $0)
+                }.map {
+                    AdditionalAccountSetup.reconnectUsesBrowser(
+                        isOperator: $0.isOperator,
+                        issuingClientId: AccountClientRegistry.shared.clientId(for: $0.accountId)
+                    )
+                } ?? false,
                 existingAccountCount: navigation.minerManager.miners.count
             )
                 .id(nav.reconnectingMinerId)

@@ -6,22 +6,28 @@ enum AdditionalAccountSetup {
     static func requiresOperatorBrowser(
         existingAccountCount: Int,
         isReconnecting: Bool,
-        isReconnectingOperator: Bool
+        isReconnectingInBrowser: Bool
     ) -> Bool {
-        isReconnecting ? isReconnectingOperator : existingAccountCount == 0
+        isReconnecting ? isReconnectingInBrowser : existingAccountCount == 0
+    }
+
+    /// Reconnecting keeps the sign-in an account already has: a browser session replaced by a
+    /// device code would come back as a more limited Android TV token.
+    static func reconnectUsesBrowser(isOperator: Bool, issuingClientId: String?) -> Bool {
+        isOperator || issuingClientId == TwitchClientIDs.web
     }
 
     static func initialStage(
         existingAccountCount: Int,
         isReconnecting: Bool,
-        isReconnectingOperator: Bool,
+        isReconnectingInBrowser: Bool,
         isLocalAddition: Bool = false
     ) -> AccountAddSheetStage {
         if isLocalAddition && !isReconnecting { return .browserAuthentication }
         if requiresOperatorBrowser(
             existingAccountCount: existingAccountCount,
             isReconnecting: isReconnecting,
-            isReconnectingOperator: isReconnectingOperator
+            isReconnectingInBrowser: isReconnectingInBrowser
         ) {
             return isReconnecting ? .browserAuthentication : .operatorOverview
         }
@@ -91,7 +97,7 @@ private enum InvitationDeliveryRoute: Equatable {
 struct AuthRequiredSheet: View {
     @Binding var isPresented: Bool
     let reconnectingMinerId: String?
-    let reconnectingIsOperator: Bool
+    let reconnectingUsesBrowser: Bool
     @Environment(NavigationModel.self) private var navigation
     @Environment(\.openURL) private var openURL
 
@@ -121,15 +127,20 @@ struct AuthRequiredSheet: View {
         isPresented: Binding<Bool>,
         reconnectingMinerId: String?,
         reconnectingIsOperator: Bool,
+        reconnectingUsesBrowser: Bool,
         existingAccountCount: Int
     ) {
         _isPresented = isPresented
         self.reconnectingMinerId = reconnectingMinerId
-        self.reconnectingIsOperator = reconnectingIsOperator
+        self.reconnectingUsesBrowser = reconnectingUsesBrowser
+        if reconnectingUsesBrowser && !reconnectingIsOperator {
+            // Keep the Operator’s saved browser session separate from additional logins.
+            _browserLoginService = State(initialValue: OperatorBrowserLoginService(dataStore: .nonPersistent()))
+        }
         let initialStage = AdditionalAccountSetup.initialStage(
             existingAccountCount: existingAccountCount,
             isReconnecting: reconnectingMinerId != nil,
-            isReconnectingOperator: reconnectingIsOperator
+            isReconnectingInBrowser: reconnectingUsesBrowser
         )
         _stage = State(initialValue: initialStage)
     }
@@ -159,7 +170,7 @@ struct AuthRequiredSheet: View {
                 stage = AdditionalAccountSetup.initialStage(
                     existingAccountCount: navigation.minerManager.miners.count,
                     isReconnecting: true,
-                    isReconnectingOperator: reconnectingIsOperator
+                    isReconnectingInBrowser: reconnectingUsesBrowser
                 )
             }
             startDeviceAuthIfNeeded()
@@ -926,7 +937,7 @@ struct AuthRequiredSheet: View {
                 stage = AdditionalAccountSetup.initialStage(
                     existingAccountCount: navigation.minerManager.miners.count,
                     isReconnecting: false,
-                    isReconnectingOperator: false,
+                    isReconnectingInBrowser: false,
                     isLocalAddition: true
                 )
                 browserLoginService.start()
@@ -1213,6 +1224,7 @@ struct AuthRequiredSheet: View {
         isPresented: .constant(true),
         reconnectingMinerId: nil,
         reconnectingIsOperator: false,
+        reconnectingUsesBrowser: false,
         existingAccountCount: 1
     )
         .environment(NavigationModel(clientId: "preview"))

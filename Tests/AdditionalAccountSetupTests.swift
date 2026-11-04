@@ -10,7 +10,7 @@ final class AdditionalAccountSetupTests: XCTestCase {
         XCTAssertTrue(AdditionalAccountSetup.requiresOperatorBrowser(
             existingAccountCount: 0,
             isReconnecting: false,
-            isReconnectingOperator: false
+            isReconnectingInBrowser: false
         ))
         XCTAssertFalse(AdditionalAccountSetup.shouldPresentChoice(
             existingAccountCount: 0,
@@ -23,7 +23,7 @@ final class AdditionalAccountSetupTests: XCTestCase {
             XCTAssertEqual(AdditionalAccountSetup.initialStage(
                 existingAccountCount: count,
                 isReconnecting: false,
-                isReconnectingOperator: false,
+                isReconnectingInBrowser: false,
                 isLocalAddition: true
             ), .browserAuthentication)
         }
@@ -60,8 +60,22 @@ final class AdditionalAccountSetupTests: XCTestCase {
         XCTAssertTrue(AdditionalAccountSetup.requiresOperatorBrowser(
             existingAccountCount: 2,
             isReconnecting: true,
-            isReconnectingOperator: true
+            isReconnectingInBrowser: true
         ))
+    }
+
+    func testReconnectKeepsTheAccountsExistingSignInKind() {
+        // A browser-signed local account must not be downgraded to an Android TV token.
+        XCTAssertTrue(AdditionalAccountSetup.reconnectUsesBrowser(
+            isOperator: false,
+            issuingClientId: TwitchClientIDs.web
+        ))
+        XCTAssertTrue(AdditionalAccountSetup.reconnectUsesBrowser(isOperator: true, issuingClientId: nil))
+        XCTAssertFalse(AdditionalAccountSetup.reconnectUsesBrowser(
+            isOperator: false,
+            issuingClientId: TwitchClientIDs.tv
+        ))
+        XCTAssertFalse(AdditionalAccountSetup.reconnectUsesBrowser(isOperator: false, issuingClientId: nil))
     }
 
     func testOperatorReconnectStartsInBrowserStage() {
@@ -69,7 +83,7 @@ final class AdditionalAccountSetupTests: XCTestCase {
             XCTAssertEqual(AdditionalAccountSetup.initialStage(
                 existingAccountCount: count,
                 isReconnecting: true,
-                isReconnectingOperator: true
+                isReconnectingInBrowser: true
             ), .browserAuthentication)
         }
     }
@@ -79,7 +93,7 @@ final class AdditionalAccountSetupTests: XCTestCase {
             XCTAssertEqual(AdditionalAccountSetup.initialStage(
                 existingAccountCount: count,
                 isReconnecting: true,
-                isReconnectingOperator: false
+                isReconnectingInBrowser: false
             ), .authentication)
         }
     }
@@ -88,7 +102,7 @@ final class AdditionalAccountSetupTests: XCTestCase {
         XCTAssertFalse(AdditionalAccountSetup.requiresOperatorBrowser(
             existingAccountCount: 2,
             isReconnecting: true,
-            isReconnectingOperator: false
+            isReconnectingInBrowser: false
         ))
     }
 
@@ -96,7 +110,7 @@ final class AdditionalAccountSetupTests: XCTestCase {
         XCTAssertFalse(AdditionalAccountSetup.requiresOperatorBrowser(
             existingAccountCount: 0,
             isReconnecting: true,
-            isReconnectingOperator: false
+            isReconnectingInBrowser: false
         ))
     }
 
