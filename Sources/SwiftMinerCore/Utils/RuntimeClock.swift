@@ -127,6 +127,11 @@ public struct RuntimeTimeoutError: LocalizedError, Sendable, Equatable {
     public let operation: String
     public let seconds: TimeInterval
 
+    public init(operation: String, seconds: TimeInterval) {
+        self.operation = operation
+        self.seconds = seconds
+    }
+
     public var errorDescription: String? {
         "\(operation) timed out after \(Int(seconds)) seconds"
     }

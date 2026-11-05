@@ -168,11 +168,45 @@ final class TwitchBrowserIntegrityIssuer: TwitchBrowserIntegrityIssuing {
         self.dataStore = dataStore ?? WKWebsiteDataStore(forIdentifier: Self.dataStoreID)
     }
 
+    /// Page load (20s) plus the SDK's own 90s deadline, with headroom.
+    static let issuanceTimeout: TimeInterval = 150
+
+    /// The view issuing now, so a timeout can navigate it away and release its WebKit process.
+    private var activeWebView: WKWebView?
+
+    /// Always returns within ``issuanceTimeout``. A hidden web view's JavaScript can stall
+    /// without ever settling, and the renewal coordinator renews one at a time, so a single
+    /// stalled issuance used to switch renewal off silently until the app was relaunched.
     func issue(
         oauthToken: String,
         clientID: String,
         deviceID: String,
         previousCookie: TwitchBrowserSDKCookie? = nil
+    ) async throws -> TwitchBrowserIntegrityIssuance {
+        try await withAbandoningDeadline(
+            operationName: "Browser security check issuance",
+            seconds: Self.issuanceTimeout,
+            onTimeout: { [weak self] in
+                // Navigating away fails the pending callAsyncJavaScript call.
+                self?.activeWebView?.loadHTMLString("", baseURL: nil)
+                self?.activeWebView = nil
+            },
+            operation: { [self] in
+                try await issueInWebView(
+                    oauthToken: oauthToken,
+                    clientID: clientID,
+                    deviceID: deviceID,
+                    previousCookie: previousCookie
+                )
+            }
+        )
+    }
+
+    private func issueInWebView(
+        oauthToken: String,
+        clientID: String,
+        deviceID: String,
+        previousCookie: TwitchBrowserSDKCookie?
     ) async throws -> TwitchBrowserIntegrityIssuance {
         if let previousCookie {
             guard previousCookie.expiresAt > Date(),
@@ -193,6 +227,8 @@ final class TwitchBrowserIntegrityIssuer: TwitchBrowserIntegrityIssuing {
         configuration.websiteDataStore = dataStore
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         let integrityWebView = WKWebView(frame: .zero, configuration: configuration)
+        activeWebView = integrityWebView
+        defer { if activeWebView === integrityWebView { activeWebView = nil } }
         integrityWebView.load(URLRequest(url: Self.sdkOrigin))
         try await waitForPageLoad(integrityWebView)
 
@@ -343,5 +379,43 @@ final class TwitchBrowserIntegrityIssuer: TwitchBrowserIntegrityIssuing {
             throw IssuanceError.pageUnavailable
         }
         try? await Task.sleep(for: .seconds(1))
+    }
+}
+
+@MainActor
+private final class AbandoningDeadlineState {
+    var settled = false
+    var timer: Task<Void, Never>?
+}
+
+/// Like `withRuntimeTimeout`, but returns at the deadline even when `operation` ignores
+/// cancellation (WebKit's JavaScript bridge does), leaving it to finish on its own.
+@MainActor
+func withAbandoningDeadline<T: Sendable>(
+    operationName: String,
+    seconds: TimeInterval,
+    onTimeout: @escaping @MainActor () -> Void = {},
+    operation: @escaping @MainActor () async throws -> T
+) async throws -> T {
+    let state = AbandoningDeadlineState()
+    return try await withCheckedThrowingContinuation { continuation in
+        let work = Task { @MainActor in
+            let result: Result<T, Error>
+            do { result = .success(try await operation()) } catch { result = .failure(error) }
+            guard !state.settled else { return }
+            state.settled = true
+            state.timer?.cancel()
+            continuation.resume(with: result)
+        }
+        state.timer = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled, !state.settled else { return }
+            state.settled = true
+            work.cancel()
+            onTimeout()
+            continuation.resume(
+                throwing: RuntimeTimeoutError(operation: operationName, seconds: seconds)
+            )
+        }
     }
 }

@@ -4,6 +4,32 @@ import XCTest
 
 @MainActor
 final class OperatorSessionRenewalCoordinatorTests: XCTestCase {
+    /// A stalled WebKit issuance ignores cancellation; the deadline must still return so the
+    /// coordinator's one-at-a-time renewal is not switched off for the rest of the run.
+    func testAbandoningDeadlineReturnsWhenOperationIgnoresCancellation() async {
+        var timedOut = false
+        do {
+            _ = try await withAbandoningDeadline(
+                operationName: "stall",
+                seconds: 0.1,
+                onTimeout: { timedOut = true },
+                operation: { () async throws -> Int in
+                    await withCheckedContinuation { (_: CheckedContinuation<Void, Never>) in }
+                    return 0
+                }
+            )
+            XCTFail("Expected a timeout")
+        } catch {
+            XCTAssertTrue(error is RuntimeTimeoutError)
+        }
+        XCTAssertTrue(timedOut)
+
+        let value = try? await withAbandoningDeadline(
+            operationName: "quick", seconds: 5, operation: { 7 }
+        )
+        XCTAssertEqual(value, 7)
+    }
+
     func testScheduleRenewsFiveMinutesBeforeIntegrityExpiry() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let browser = makeBrowser(
