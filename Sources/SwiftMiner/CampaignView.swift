@@ -26,17 +26,6 @@ struct DropsListView: View {
 
     private var miners: [MinerManager.ManagedMiner] { navigation.minerManager.miners }
 
-    /// The fleet the summary tiles describe. Deliberately separate from `miners`:
-    /// filtering and campaign lookup are keyed by real account ids, so only the
-    /// figures and the leader's name are substituted, never the data behind them.
-    private var summaryMiners: [MinerManager.ManagedMiner] {
-#if DEBUG
-        if MarketingScreenshotFixture.isEnabled {
-            return MarketingScreenshotFixture.miners(from: miners)
-        }
-#endif
-        return miners
-    }
     private var hasAccounts: Bool { !miners.isEmpty }
     private var selectedMinerAccountId: String? {
         selectedMinerFilterId == Self.allMinersFilterId ? nil : selectedMinerFilterId
@@ -76,7 +65,6 @@ struct DropsListView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 18) {
-                        dashboardHeader(context)
                         searchAndMinerControls
                         filterChipsRow
 
@@ -385,10 +373,6 @@ struct DropsListView: View {
 
         let groupedCampaigns = groupedCampaigns(from: renderedCampaigns, now: now)
         let visibleGroupedCampaigns = Array(groupedCampaigns.prefix(visibleGroupLimit))
-        let rewardsClaimedCount = feedCampaigns.reduce(0) { total, campaign in
-            total + (activityByCampaignId[campaign.id]?.claimedRewardCount ?? 0)
-        }
-
         let renderSignature = feedCampaigns.map { campaign in
             let snapshot = activityByCampaignId[campaign.id]
             return "\(campaign.id)-\(snapshot?.state.rawValue ?? "unknown")-\(snapshot?.claimableDropCount ?? 0)-\(snapshot?.claimedRewardCount ?? 0)"
@@ -400,19 +384,7 @@ struct DropsListView: View {
             groupedCampaigns: groupedCampaigns,
             visibleGroupedCampaigns: visibleGroupedCampaigns,
             activityByCampaignId: activityByCampaignId,
-            renderSignature: renderSignature,
-            // "In motion" means a miner is watching it right now, which is not
-            // the same as the card state being `.active` — the state ladder
-            // resolves `.claimed`/`.blocked` first, so a campaign one account
-            // has finished reads as claimed even while another account mines
-            // it. Counting active miners directly keeps this honest.
-            activeMiningCampaignCount: activeMiningCampaignCount(
-                in: feedCampaigns,
-                activityByCampaignId: activityByCampaignId
-            ),
-            rewardsClaimedCount: rewardsClaimedCount,
-            topClaimedGame: topClaimedGame(in: feedCampaigns, activityByCampaignId: activityByCampaignId),
-            mostActiveMiner: mostActiveMiner(in: feedCampaigns)
+            renderSignature: renderSignature
         )
     }
 
@@ -699,112 +671,6 @@ struct DropsListView: View {
         return "No campaigns match the selected filters."
     }
 
-    private func dashboardHeader(_ context: DropsListRenderContext) -> some View {
-        HStack(spacing: 12) {
-            DashboardMetricCard(
-                title: "Active miners",
-                value: "\(summaryMiners.filter { $0.status == .watching || $0.status == .claiming }.count)",
-                detail: "\(context.activeMiningCampaignCount) \(context.activeMiningCampaignCount == 1 ? "campaign" : "campaigns") in motion",
-                tint: .green,
-                systemImage: "person.2.fill"
-            )
-
-            DashboardMetricCard(
-                title: "Top game",
-                value: context.topClaimedGame?.name ?? "None yet",
-                detail: context.topClaimedGame.map { top in
-                    "\(top.count) \(top.count == 1 ? "reward" : "rewards") claimed"
-                } ?? "Claim a reward to crown a winner",
-                tint: .orange,
-                systemImage: "trophy.fill",
-                isMuted: context.topClaimedGame == nil
-            )
-
-            DashboardMetricCard(
-                title: "Rewards claimed",
-                value: "\(context.rewardsClaimedCount)",
-                detail: "\(context.feedCampaigns.count) \(context.feedCampaigns.count == 1 ? "campaign" : "campaigns") tracked",
-                tint: .blue,
-                systemImage: "checkmark.circle.fill"
-            )
-
-            if summaryMiners.count > 1, let leader = context.mostActiveMiner {
-                DashboardMetricCard(
-                    title: "Most active miner",
-                    value: leader.name,
-                    detail: "\(leader.count) \(leader.count == 1 ? "reward" : "rewards") claimed",
-                    tint: .purple,
-                    systemImage: "star.fill",
-                    isMuted: leader.count == 0
-                )
-            }
-        }
-    }
-
-    private func activeMiningCampaignCount(
-        in feedCampaigns: [CampaignViewData],
-        activityByCampaignId: [String: CampaignActivitySnapshot]
-    ) -> Int {
-#if DEBUG
-        if MarketingScreenshotFixture.isEnabled {
-            // The tile beside this one counts the fixture fleet, so this has to
-            // come from the same place or the pair contradicts itself — five
-            // miners actively watching, nothing in motion.
-            let mining = summaryMiners.compactMap { miner in
-                miner.status == .watching || miner.status == .claiming
-                    ? miner.currentCampaignId
-                    : nil
-            }
-            return Set(mining).count
-        }
-#endif
-        return feedCampaigns.filter {
-            !(activityByCampaignId[$0.id]?.activeMiners.isEmpty ?? true)
-        }.count
-    }
-
-    private func mostActiveMiner(in feedCampaigns: [CampaignViewData]) -> (name: String, count: Int)? {
-        let ranked = summaryMiners
-        guard ranked.count > 1 else { return nil }
-        let claimedCountsByAccount = claimedRewardCountsByAccount(in: feedCampaigns)
-        guard let leader = ranked.max(by: { lhs, rhs in
-            let lhsCount = claimedCountsByAccount[lhs.accountId] ?? lhs.dropsClaimed
-            let rhsCount = claimedCountsByAccount[rhs.accountId] ?? rhs.dropsClaimed
-            if lhsCount != rhsCount { return lhsCount < rhsCount }
-            return lhs.displayName > rhs.displayName
-        }) else { return nil }
-
-        let leaderCount = claimedCountsByAccount[leader.accountId] ?? leader.dropsClaimed
-        return (name: leader.displayName, count: leaderCount)
-    }
-
-    private func claimedRewardCountsByAccount(in feedCampaigns: [CampaignViewData]) -> [String: Int] {
-        var counts: [String: Int] = [:]
-        for campaign in feedCampaigns {
-            for account in campaign.accountStates {
-                counts[account.accountId, default: 0] += account.claimedDropCount
-            }
-        }
-        return counts
-    }
-
-    private func topClaimedGame(
-        in feedCampaigns: [CampaignViewData],
-        activityByCampaignId: [String: CampaignActivitySnapshot]
-    ) -> (name: String, count: Int)? {
-        var counts: [String: Int] = [:]
-        for campaign in feedCampaigns {
-            let claimed = activityByCampaignId[campaign.id]?.claimedRewardCount ?? 0
-            guard claimed > 0 else { continue }
-            counts[campaign.gameName, default: 0] += claimed
-        }
-        guard let top = counts.max(by: { lhs, rhs in
-            if lhs.value != rhs.value { return lhs.value < rhs.value }
-            return lhs.key > rhs.key
-        }) else { return nil }
-        return (name: top.key, count: top.value)
-    }
-
     @MainActor
     private func loadCampaignFeed(recomposeCachedFeed: Bool = false) async {
         guard hasAccounts else {
@@ -1020,10 +886,6 @@ struct DropsListRenderContext {
     let visibleGroupedCampaigns: [GameAggregate]
     let activityByCampaignId: [String: CampaignActivitySnapshot]
     let renderSignature: [String]
-    let activeMiningCampaignCount: Int
-    let rewardsClaimedCount: Int
-    let topClaimedGame: (name: String, count: Int)?
-    let mostActiveMiner: (name: String, count: Int)?
 }
 
 struct DropsLoadingSplash: View {

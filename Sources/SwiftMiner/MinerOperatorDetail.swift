@@ -39,8 +39,10 @@ struct MinerOperatorPresentation {
         return queue.first(where: { $0.campaign.id == campaignId })?.campaign
     }
 
+    /// Only a real watch session gets the green bar; a waiting item names the same
+    /// campaign but must read as waiting, so it shows its detail line instead.
     var currentProgress: MinerCampaignProgress? {
-        guard let campaignId = snapshot.now.campaignId else { return nil }
+        guard snapshot.isActivelyWatching, let campaignId = snapshot.now.campaignId else { return nil }
         return queue.first(where: { $0.campaign.id == campaignId })?.progress
     }
 
@@ -742,7 +744,7 @@ struct MinerMiningSequenceView: View {
                             Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                         }
                         if let detail = item.detail {
-                            Label(detail, systemImage: item.symbol)
+                            Label { Text(detail) } icon: { StatusSymbolImage(item.symbol) }
                                 .font(.caption)
                                 .foregroundStyle(item.accent)
                                 .lineLimit(2)
@@ -850,7 +852,7 @@ struct MinerCampaignQueueRow: View {
                         weight: .semibold
                     )
                 } else {
-                    Image(systemName: statusSymbol)
+                    StatusSymbolImage(statusSymbol)
                         .font(.system(size: 12, weight: .semibold))
                         .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(statusTint)
@@ -983,7 +985,7 @@ struct MinerCampaignQueueRow: View {
     }
 
     private var statusSymbol: String {
-        entry.status == .watching ? "bolt.fill" : "antenna.radiowaves.left.and.right"
+        entry.status == .watching ? "bolt.fill" : WaitingForStreamIcon.symbolName
     }
 
     private var statusTint: Color {

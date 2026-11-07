@@ -98,6 +98,8 @@ final class MinerActivitySnapshotTests: XCTestCase {
         XCTAssertEqual(presentation.snapshot.now.campaignId, probed.id)
         XCTAssertEqual(presentation.currentCampaign?.id, probed.id)
         XCTAssertEqual(presentation.currentCampaign?.game.name, "Overwatch")
+        // Waiting must not draw the green watch bar that reads as mining.
+        XCTAssertNil(presentation.currentProgress)
     }
 
     func testWatchingCardShowsConcurrentCampaignDropThatTwitchIsCrediting() {

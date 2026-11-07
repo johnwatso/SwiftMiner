@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SwiftMiner 1.45.7 - Release Notes</title>
+  <meta name="description" content="Release notes for SwiftMiner 1.45.7: Operator renewal recovers from stalls, waiting miners look like waiting, and campaign artwork loads from cache.">
+  <link rel="canonical" href="https://swiftminer.app/release-notes/1.45.7.html">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; padding: 32px 20px 48px; font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f4f6f8; color: #0f1720; }
+    main { max-width: 760px; margin: 0 auto; padding: 28px; border-radius: 22px; background: rgba(255, 255, 255, .86); box-shadow: 0 20px 60px rgba(15, 23, 32, .10); border: 1px solid rgba(82, 96, 109, .12); }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { color: #52606d; font-size: 14px; }
+    .intro { margin: 0 0 24px; color: #384454; }
+    section { margin: 18px 0 0; padding: 18px 18px 14px; border: 1px solid rgba(82, 96, 109, .18); border-radius: 16px; border-left: 5px solid #7b4bd9; background: rgba(255, 255, 255, .42); }
+    h2 { margin: 0 0 4px; color: #7b4bd9; font-size: 18px; }
+    ul { margin: 12px 0 0; padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    @media (prefers-color-scheme: dark) { body { background: #0b1015; color: #edf2f7; } main { background: rgba(15, 23, 32, .88); border-color: rgba(159, 176, 194, .14); } .meta { color: #9fb0c2; } .intro { color: #c8d3df; } section { border-color: rgba(159, 176, 194, .18); background: rgba(255, 255, 255, .04); } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SwiftMiner 1.45.7</h1>
+    <p class="meta">Version 1.45.7 &middot; Build 2026110713 &middot; Prepared 7 November 2026</p>
+    <p class="intro">SwiftMiner 1.45.7 keeps Operator renewal from stalling silently, makes a miner that is waiting for a stream look like it, and shows campaign artwork straight from the cache.</p>
+
+    <section>
+      <h2>🐝 Fixes</h2>
+      <ul>
+        <li>Operator renewal no longer stops for good when the hidden Twitch security check stalls. The check now gives up after two and a half minutes, logs the timeout and tries again, instead of quietly skipping every later renewal while the app said it was renewing.</li>
+        <li>A miner waiting for a live stream no longer shows a green watch-progress bar under Current status, which made it look as if it were mining. It now says it is waiting for an eligible live stream; progress is still shown in the campaign queue.</li>
+        <li>Campaign artwork older than an hour now appears immediately from the cache and refreshes in the background, rather than leaving blank tiles while every image downloads again.</li>
+        <li>The Prioritised filter on Drops now includes games matched by a wildcard priority such as Call of Duty, the same way mining already did.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>✨ Interface</h2>
+      <ul>
+        <li>Waiting for a stream has a new icon: a TV with a magnifying glass that drifts in a small circle while the miner looks for a channel.</li>
+        <li>The summary cards at the top of Drops have been removed, so the page opens straight onto search, filters and campaigns.</li>
+      </ul>
+    </section>
+
+    <p class="meta"><a href="./index.html">All release notes</a></p>
+  </main>
+</body>
+</html>

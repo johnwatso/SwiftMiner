@@ -98,6 +98,21 @@ final class DropsMinerCampaignFilterTests: XCTestCase {
         )
     }
 
+    func testPrioritisedFilterMatchesWildcardPriority() {
+        let campaign = makeCampaign(
+            id: "campaign-prioritised-wildcard",
+            gameName: "Call of Duty: Modern Warfare 4",
+            accountStates: []
+        )
+
+        XCTAssertTrue(
+            DropsCampaignFilterRules.matchesPrioritised(
+                campaign,
+                priorityGameNames: [GameWildcard(family: .callOfDuty).priorityToken]
+            )
+        )
+    }
+
     func testPrioritisedFilterRejectsUnrelatedGame() {
         let campaign = makeCampaign(
             id: "campaign-not-prioritised",

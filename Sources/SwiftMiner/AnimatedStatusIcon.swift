@@ -126,19 +126,10 @@ struct AnimatedStatusIcon: View {
                 } else {
                     base
                 }
-            } else if symbol == "antenna.radiowaves.left.and.right" {
-                let base = Image(systemName: symbol)
+            } else if symbol == WaitingForStreamIcon.symbolName {
+                WaitingForStreamIcon(isAnimated: allowsContinuousMotion)
                     .font(.system(size: size, weight: weight))
                     .foregroundStyle(color)
-                
-                if allowsContinuousMotion {
-                    // Mirror the macOS "searching for Wi-Fi" feel: the radio bands fill
-                    // outward and reset (cumulative, not a bouncing single highlight), at a
-                    // slow, deliberate pace rather than the default fast cycle.
-                    base.symbolEffect(.variableColor.cumulative, options: .repeating.speed(0.4))
-                } else {
-                    base
-                }
             } else if symbol == "dot.radiowaves.left.and.right" {
                 let base = Image(systemName: symbol)
                     .font(.system(size: size, weight: weight))
@@ -195,6 +186,88 @@ struct AnimatedStatusIcon: View {
                     .font(.system(size: size, weight: weight))
                     .foregroundStyle(color)
             }
+        }
+    }
+}
+
+// MARK: - WaitingForStreamIcon
+
+/// A TV with a magnifying glass over its corner: the miner is looking for a stream to
+/// watch. No SF Symbol combines the two, so it is composed, and `symbolName` is a key
+/// that only this view and `StatusSymbolImage` understand — never pass it to
+/// `Image(systemName:)` directly.
+///
+/// Takes its point size, weight and colour from the environment like a plain symbol.
+/// When animated, the glass drifts round a very small circle while staying upright.
+struct WaitingForStreamIcon: View {
+    static let symbolName = "swiftminer.tv.magnifyingglass"
+
+    var isAnimated = false
+
+    var body: some View {
+        Image(systemName: "tv")
+            .overlay {
+                glassLayer { size in
+                    if isAnimated {
+                        OrbitingGlass(size: size, radius: size * 0.1)
+                    } else {
+                        Self.glass(size: size)
+                    }
+                }
+            }
+            .accessibilityLabel("Looking for streams")
+    }
+
+    /// Places the glass over the TV's bottom-right corner.
+    private func glassLayer<Content: View>(@ViewBuilder _ content: @escaping (CGFloat) -> Content) -> some View {
+        GeometryReader { geo in
+            let glass = geo.size.height * 0.62
+            content(glass)
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .bottomTrailing)
+                .offset(x: glass * 0.3, y: glass * 0.25)
+        }
+    }
+
+    fileprivate static func glass(size: CGFloat) -> some View {
+        // Drawn straight over the TV, so it takes the label colour rather than the TV's
+        // tint to stay distinct; the screen showing through the lens reads as magnified.
+        Image(systemName: "magnifyingglass")
+            .font(.system(size: size, weight: .bold))
+            .foregroundStyle(Color.primary)
+    }
+
+    private struct OrbitingGlass: View {
+        let size: CGFloat
+        let radius: CGFloat
+        @State private var angle: Double = 0
+
+        var body: some View {
+            // Offset then rotate orbits the glass about its resting point; the inner
+            // counter-rotation keeps the handle pointing the same way throughout.
+            WaitingForStreamIcon.glass(size: size)
+                .rotationEffect(.degrees(-angle))
+                .offset(x: radius)
+                .rotationEffect(.degrees(angle))
+                .onAppear {
+                    withAnimation(.linear(duration: 2.4).repeatForever(autoreverses: false)) {
+                        angle = 360
+                    }
+                }
+        }
+    }
+}
+
+/// `Image(systemName:)` for status symbols that may carry a composed icon's key.
+struct StatusSymbolImage: View {
+    let name: String
+
+    init(_ name: String) { self.name = name }
+
+    var body: some View {
+        if name == WaitingForStreamIcon.symbolName {
+            WaitingForStreamIcon()
+        } else {
+            Image(systemName: name)
         }
     }
 }

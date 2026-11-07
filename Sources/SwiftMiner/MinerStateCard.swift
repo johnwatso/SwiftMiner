@@ -235,7 +235,7 @@ struct MinerStateCard: View {
                 return StateConfig(
                     headline: gameName.map { "Looking for \($0) streams" } ?? "Looking for Streams",
                     subtitle: "No participating channels are live right now.",
-                    icon: "antenna.radiowaves.left.and.right",
+                    icon: WaitingForStreamIcon.symbolName,
                     color: .cyan
                 )
             }
@@ -245,7 +245,7 @@ struct MinerStateCard: View {
                 return StateConfig(
                     headline: "Looking for \(campaign.game.name) streams",
                     subtitle: "Waiting for an eligible live stream.",
-                    icon: "antenna.radiowaves.left.and.right",
+                    icon: WaitingForStreamIcon.symbolName,
                     color: .cyan
                 )
             }
@@ -796,7 +796,7 @@ struct MinerActivityCard: View {
 
             ForEach(snap.blockedPriority) { item in
                 HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: item.symbol)
+                    StatusSymbolImage(item.symbol)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(effectiveAccent(item.accent))
                         .frame(width: 18, height: 18)
@@ -1309,7 +1309,7 @@ struct MinerActivitySnapshot {
                     title: campaign.game.name,
                     subtitle: campaign.name,
                     detail: "Waiting for an eligible live stream.",
-                    symbol: "antenna.radiowaves.left.and.right",
+                    symbol: WaitingForStreamIcon.symbolName,
                     accent: .cyan,
                     campaignId: campaign.id,
                     artworkURL: campaign.game.boxArtURL
@@ -1320,7 +1320,7 @@ struct MinerActivitySnapshot {
                 id: "stream-\(miner.id)",
                 title: "Looking for Streams",
                 subtitle: "Waiting for an eligible live stream.",
-                symbol: "antenna.radiowaves.left.and.right",
+                symbol: WaitingForStreamIcon.symbolName,
                 accent: .cyan
             )
         case .blockedAccountNotLinked:
@@ -1445,7 +1445,7 @@ struct MinerActivitySnapshot {
                 title: campaign?.game.name ?? resolved.gameName,
                 subtitle: campaign?.name,
                 detail: "Waiting for an eligible live stream.",
-                symbol: "antenna.radiowaves.left.and.right",
+                symbol: WaitingForStreamIcon.symbolName,
                 accent: .cyan,
                 // While waiting, the resolver reports every priority game as blocked, so its
                 // campaign can differ from the one this item names. Artwork and progress are
@@ -1896,7 +1896,7 @@ struct MinerActivitySnapshot {
         case .claiming:
             return "gift.fill"
         case .waitingForStream:
-            return "antenna.radiowaves.left.and.right"
+            return WaitingForStreamIcon.symbolName
         case .fetchingCampaigns:
             return "arrow.clockwise"
         case .authenticating:

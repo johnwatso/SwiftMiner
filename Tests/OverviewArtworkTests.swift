@@ -192,10 +192,13 @@ final class OverviewArtworkTests: XCTestCase {
             return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, updated)
         }
         let expiredCache = CampaignArtworkCache(cacheDirectory: directory, session: session, maximumAge: 0)
-        let diskRefresh = await expiredCache.image(for: url)
-        XCTAssertEqual(diskRefresh?.representations.first?.pixelsWide, 3)
+        // A stale disk copy shows immediately; the refresh lands in the background.
+        let staleDisk = await expiredCache.image(for: url)
+        XCTAssertEqual(staleDisk?.representations.first?.pixelsWide, 2)
+        await expiredCache.waitForPendingDownloads()
         let memoryRefresh = await expiredCache.image(for: url)
         XCTAssertEqual(memoryRefresh?.representations.first?.pixelsWide, 3)
+        await expiredCache.waitForPendingDownloads()
         XCTAssertEqual(counter.value, 2)
 
         // An offline refresh keeps the image visible without marking it fresh.
@@ -205,8 +208,10 @@ final class OverviewArtworkTests: XCTestCase {
         }
         let offlineImage = await expiredCache.image(for: url)
         XCTAssertEqual(offlineImage?.representations.first?.pixelsWide, 3)
+        await expiredCache.waitForPendingDownloads()
         let retryImage = await expiredCache.image(for: url)
         XCTAssertNotNil(retryImage)
+        await expiredCache.waitForPendingDownloads()
         XCTAssertEqual(counter.value, 4)
     }
 

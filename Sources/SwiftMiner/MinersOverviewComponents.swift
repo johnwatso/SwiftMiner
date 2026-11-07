@@ -1011,7 +1011,7 @@ struct MinerSourceListRow: View {
 
         return HStack(spacing: 9) {
             CachedAvatarImage(url: avatarURL) {
-                Image(systemName: statusSymbol(for: snapshot))
+                StatusSymbolImage(statusSymbol(for: snapshot))
                     .font(.system(size: 12, weight: .semibold))
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(snapshot.statusColor)

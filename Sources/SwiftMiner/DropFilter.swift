@@ -77,7 +77,10 @@ enum DropsCampaignFilterRules {
 
         let campaignName = comparableGameName(campaign.gameName)
         guard !campaignName.isEmpty else { return false }
+        // Same matcher the engine's campaign selection uses, so wildcard
+        // priorities (e.g. "Call of Duty*") count here as they do for mining.
         return priorityGameNames.contains { comparableGameName($0) == campaignName }
+            || PriorityGameMatcher(priorityGameNames).matches(gameId: campaign.gameId ?? "", gameName: campaign.gameName)
     }
 
     static func matchesNeedsSetup(_ campaign: CampaignViewData, now: Date) -> Bool {

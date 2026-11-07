@@ -225,7 +225,7 @@ struct GameCampaignDeckCard: View {
         if group.aggregateState == .unavailable {
             return CardStatusSummary(title: "Campaign Ended", icon: "clock.badge.exclamationmark")
         }
-        return CardStatusSummary(title: "Looking for Streams", icon: "antenna.radiowaves.left.and.right")
+        return CardStatusSummary(title: "Looking for Streams", icon: WaitingForStreamIcon.symbolName)
     }
 
     private func isClaimedButNotLinked(_ account: AccountState) -> Bool {

@@ -378,7 +378,7 @@ struct MinerStatusLegendPopover: View {
                         description: "Refreshing campaigns and verified drop progress from Twitch."
                     ),
                     StatusEntry(
-                        symbol: "antenna.radiowaves.left.and.right",
+                        symbol: WaitingForStreamIcon.symbolName,
                         paletteColors: nil,
                         monoColor: .cyan,
                         title: "Looking for Streams",
@@ -460,7 +460,7 @@ struct MinerStatusLegendPopover: View {
                                         .symbolRenderingMode(.palette)
                                         .foregroundStyle(primary, secondary)
                                 } else {
-                                    Image(systemName: entry.symbol)
+                                    StatusSymbolImage(entry.symbol)
                                         .foregroundStyle(entry.monoColor)
                                 }
                             }

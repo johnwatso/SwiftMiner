@@ -52,7 +52,7 @@ enum CampaignCardState: String {
         case .inProgress: return "bolt.fill"
         case .claimable: return "gift.fill"
         case .ready: return "checkmark.circle.fill"
-        case .waiting: return "antenna.radiowaves.left.and.right"
+        case .waiting: return WaitingForStreamIcon.symbolName
         case .claimed: return "checkmark.circle.fill"
         case .expired: return "clock.badge.exclamationmark"
         case .idle: return "checkmark.circle.fill"
@@ -93,40 +93,6 @@ enum CampaignCardState: String {
             return .white.opacity(0.12)
         }
         
-    }
-}
-
-struct DashboardMetricCard: View {
-    let title: String
-    let value: String
-    let detail: String
-    let tint: Color
-    let systemImage: String
-    var isMuted = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(title, systemImage: systemImage)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(isMuted ? .tertiary : .secondary)
-
-            Text(value)
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(isMuted ? .secondary : .primary)
-
-            Text(detail)
-                .font(.caption)
-                .foregroundStyle(isMuted ? .tertiary : .secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(.thinMaterial.opacity(isMuted ? 0.78 : 0.88), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(tint.opacity(isMuted ? 0.08 : 0.14), lineWidth: 1)
-        }
-        .opacity(isMuted ? 0.82 : 1)
     }
 }
 
@@ -267,7 +233,8 @@ struct CampaignMinerInspectorPopover: View {
 /// Memory- and disk-backed cache shared by campaign artwork in Drops, Overview,
 /// and the miner detail UI. Hashing the full URL keeps different sources and image
 /// sizes isolated. Remote images are revalidated after an hour because Twitch can
-/// replace box art without changing its URL.
+/// replace box art without changing its URL; a stale copy is shown at once while that
+/// refresh runs in the background, so cards never sit blank waiting on the network.
 actor CampaignArtworkCache {
     static let shared = CampaignArtworkCache()
 
@@ -339,6 +306,8 @@ actor CampaignArtworkCache {
             if url.isFileURL || age < maximumAge {
                 return cached.image
             }
+            refreshInBackground(url: url, key: key)
+            return cached.image
         }
 
         if url.isFileURL {
@@ -347,8 +316,7 @@ actor CampaignArtworkCache {
             return image
         }
 
-        var fallbackImage = cached?.image
-        if cached == nil, let localURL = cacheDirectory?.appendingPathComponent(key),
+        if let localURL = cacheDirectory?.appendingPathComponent(key),
            FileManager.default.fileExists(atPath: localURL.path) {
             // Cache keys intentionally have no filename extension. Decode from
             // bytes so ImageIO sniffs the actual format instead of receiving a
@@ -357,11 +325,13 @@ actor CampaignArtworkCache {
                let image = NSImage(data: data) {
                 let fetchedAt = (try? localURL.resourceValues(forKeys: [.contentModificationDateKey]))?
                     .contentModificationDate ?? .distantPast
-                if Date().timeIntervalSince(fetchedAt) < maximumAge {
-                    storeInMemory(image, key: key, cost: data.count, fetchedAt: fetchedAt)
-                    return image
+                // Keep the file's age so a stale copy still triggers one refresh, but
+                // show it now: blocking on the download blanks every card after an hour.
+                storeInMemory(image, key: key, cost: data.count, fetchedAt: fetchedAt)
+                if Date().timeIntervalSince(fetchedAt) >= maximumAge {
+                    refreshInBackground(url: url, key: key)
                 }
-                fallbackImage = image
+                return image
             } else {
                 // A partial or invalid image should never become a permanent miss.
                 try? FileManager.default.removeItem(at: localURL)
@@ -369,17 +339,36 @@ actor CampaignArtworkCache {
         }
 
         if let existing = inFlight[key] {
-            return await existing.value ?? fallbackImage
+            return await existing.value
         }
+        return await startDownload(url: url, key: key).value
+    }
 
+    /// Waits for background refreshes started by stale hits. Tests only.
+    func waitForPendingDownloads() async {
+        for task in inFlight.values { _ = await task.value }
+    }
+
+    /// Failure leaves the stale copy in place without renewing its freshness, so the
+    /// next view retries.
+    private func refreshInBackground(url: URL, key: String) {
+        guard inFlight[key] == nil else { return }
+        _ = startDownload(url: url, key: key)
+    }
+
+    private func startDownload(url: URL, key: String) -> Task<NSImage?, Never> {
         let task = Task<NSImage?, Never> { [weak self] in
-            await self?.download(url: url, key: key)
+            guard let self else { return nil }
+            let image = await self.download(url: url, key: key)
+            await self.finishDownload(key: key)
+            return image
         }
         inFlight[key] = task
-        let image = await task.value
+        return task
+    }
+
+    private func finishDownload(key: String) {
         inFlight[key] = nil
-        // Keep artwork visible offline, but do not renew its freshness on failure.
-        return image ?? fallbackImage
     }
 
     /// Drops decoded images but keeps the disk cache, so reopening the window re-reads from
