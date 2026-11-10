@@ -27,9 +27,6 @@
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License">
 </p>
 
-> [!NOTE]
-> **Adding Twitch accounts works again in SwiftMiner 1.43.** A Twitch sign-in change in September 2026 stopped earlier versions from adding or re-adding accounts. Update to 1.43 or later to connect accounts again. Accounts that were already signed in keep working as before.
-
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="Website/public/assets/landing/overview-dark.webp">

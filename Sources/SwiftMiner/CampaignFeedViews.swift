@@ -1043,7 +1043,7 @@ private struct WildcardQueueLabel: View {
 
     private var allowsAnimation: Bool { !reduceMotion && controlActiveState != .inactive }
 
-    private static let glowColors: [Color] = [.purple, .pink, .blue, .cyan, .orange, .purple]
+    private static let glowColors: [Color] = [.pink, .purple, .blue, .cyan, .mint, .pink]
 
     var body: some View {
         Group {
@@ -1085,7 +1085,7 @@ private struct WildcardQueueLabel: View {
     }
 
     private func angle(at date: Date, since start: Date) -> Double {
-        (restingAngle + date.timeIntervalSince(start) / 4.0 * 360.0)
+        (restingAngle + date.timeIntervalSince(start) / 3.0 * 360.0)
             .truncatingRemainder(dividingBy: 360.0)
     }
 
@@ -1108,13 +1108,13 @@ private struct WildcardQueueLabel: View {
         .padding(.vertical, 4)
         .background { shape.fill(Color.black.opacity(0.48)) }
         .overlay {
+            // Glow Border, after SwiftUI-Motion-Library (MIT): blurred halo under a crisp ring.
             ZStack {
-                shape.stroke(gradient, lineWidth: 1.5)
                 shape.stroke(gradient, lineWidth: 4)
-                    .blur(radius: 4)
-                    .opacity(0.5)
+                    .blur(radius: 8)
+                    .opacity(0.8)
+                shape.stroke(gradient, lineWidth: 2)
             }
-            .blendMode(.plusLighter)
             .allowsHitTesting(false)
         }
     }
