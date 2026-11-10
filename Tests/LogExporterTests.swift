@@ -160,7 +160,7 @@ final class LogExporterTests: XCTestCase {
         XCTAssertTrue(report.contains("lastCampaignRefreshAt=2024-10-27T03:35:40Z (age=6m0s)"))
         // An idle miner's next check is the difference between "waiting" and "wedged"
         // when reading an export after the fact.
-        XCTAssertTrue(report.contains("nextCampaignCheckAt=2024-10-27T03:44:40Z"))
+        XCTAssertTrue(report.contains("nextCampaignCheckAt=2024-10-27T03:44:40Z (in=3m0s)"))
         XCTAssertTrue(report.contains("stallConfidence=50% signals=[No successful poll in 15m]"))
         XCTAssertTrue(report.contains("LoH Launch Drops Week 2"))
     }
@@ -579,5 +579,20 @@ final class LogExporterTests: XCTestCase {
         let report = LogExporter.buildReport(snapshot(miners: [miner]), now: now)
         XCTAssertTrue(report.contains("showsNotEarningAttention=true"))
         XCTAssertTrue(report.contains("lastDropProgressAt="))
+    }
+
+    func testScheduledCampaignCheckReportsDueAndOverdueTimes() {
+        let now = Date(timeIntervalSince1970: 1_730_000_500)
+        for (offset, expected) in [(0.0, "due=now"), (-75.0, "overdue=1m15s")] {
+            let miner = LogExporter.Snapshot.Miner(
+                id: "miner", username: "miner", nickname: nil,
+                status: "idle", needsAuth: false, isRunning: true, dropsClaimed: 0,
+                currentCampaign: nil, currentCampaignId: nil, priorityGames: [],
+                statusChangedAt: now, nextCampaignCheckAt: now.addingTimeInterval(offset)
+            )
+            let report = LogExporter.buildReport(snapshot(miners: [miner]), now: now)
+            XCTAssertTrue(report.contains("nextCampaignCheckAt="))
+            XCTAssertTrue(report.contains("(\(expected))"))
+        }
     }
 }

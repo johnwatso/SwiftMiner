@@ -210,7 +210,7 @@ enum LogExporter {
                     formatTimestampField("lastSuccessfulPollAt", miner.lastSuccessfulPollAt, reference: reference, formatter: iso),
                     formatTimestampField("lastCampaignRefreshAt", miner.lastCampaignRefreshAt, reference: reference, formatter: iso),
                     formatTimestampField("lastDropProgressAt", miner.lastDropProgressAt, reference: reference, formatter: iso),
-                    formatTimestampField("nextCampaignCheckAt", miner.nextCampaignCheckAt, reference: reference, formatter: iso)
+                    formatScheduledCheck(miner.nextCampaignCheckAt, reference: reference, formatter: iso)
                 ].compactMap { $0 }
                 if !livenessParts.isEmpty {
                     out += "  \(livenessParts.joined(separator: " "))\n"
@@ -585,6 +585,24 @@ enum LogExporter {
     ) -> String? {
         guard let date else { return nil }
         return "\(name)=\(formatter.string(from: date)) (age=\(formatDuration(reference.timeIntervalSince(date))))"
+    }
+
+    private static func formatScheduledCheck(
+        _ date: Date?,
+        reference: Date,
+        formatter: ISO8601DateFormatter
+    ) -> String? {
+        guard let date else { return nil }
+        let remaining = date.timeIntervalSince(reference)
+        let timing: String
+        if remaining > 0 {
+            timing = "in=\(formatDuration(remaining))"
+        } else if remaining < 0 {
+            timing = "overdue=\(formatDuration(-remaining))"
+        } else {
+            timing = "due=now"
+        }
+        return "nextCampaignCheckAt=\(formatter.string(from: date)) (\(timing))"
     }
 
     private static func formatDuration(_ seconds: TimeInterval) -> String {

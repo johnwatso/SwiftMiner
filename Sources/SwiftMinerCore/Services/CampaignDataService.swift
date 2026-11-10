@@ -35,6 +35,7 @@ public actor CampaignDataService {
     private var cachedCampaigns: [Campaign]?
     private var viewDataCache = CampaignViewDataCache()
     private var refreshTask: Task<Void, Never>?
+    private var cacheGeneration = UUID()
     private var lastCampaignPersistenceAt: Date?
     /// Cleanup runs at most once per day to avoid unnecessary disk writes.
     private static let cleanupInterval: TimeInterval = 86400
@@ -133,13 +134,17 @@ public actor CampaignDataService {
             return
         }
 
-        let task = Task { await self.performRefresh() }
+        let generation = cacheGeneration
+        let task = Task { await self.performRefresh(generation: generation) }
         refreshTask = task
         await task.value
-        refreshTask = nil
+        if generation == cacheGeneration {
+            refreshTask = nil
+        }
     }
 
-    private func performRefresh() async {
+    private func performRefresh(generation: UUID) async {
+        guard generation == cacheGeneration else { return }
         do {
             // Parallelize fetching inventory and campaigns
             async let inventoryTask = try? inventoryService.fetchInventory(forceRefresh: true)
@@ -147,8 +152,7 @@ public actor CampaignDataService {
 
             let inventory = await inventoryTask
             let dashboardCampaigns = try await campaignsTask
-
-            if inventory != nil { lastInventoryLoad = Date() }
+            guard generation == cacheGeneration else { return }
 
             // Merge discovered campaigns from inventory (some campaigns like CDL are missing from dashboard)
             // Also trust inventory for isAccountConnected status
@@ -177,7 +181,9 @@ public actor CampaignDataService {
             
             // Fix: handle async outside of potential autoclosure/if-expression
             let current = await inventoryService.currentSnapshot()
+            guard generation == cacheGeneration else { return }
             let snapshot: InventorySnapshot? = inventory ?? current
+            if inventory != nil { lastInventoryLoad = Date() }
 
             // Merge: API wins for shared IDs; preserved campaigns follow merge rules.
             let merged = CampaignMergeEngine.merge(fresh: fresh, cached: cached, inventory: snapshot)
@@ -204,6 +210,7 @@ public actor CampaignDataService {
             }
 
         } catch {
+            guard generation == cacheGeneration else { return }
             Logger.campaigns.error("Refresh failed: \(error) — cached data preserved.")
             // Don't throw — callers continue to see cached data.
         }
@@ -211,13 +218,18 @@ public actor CampaignDataService {
     
     /// Clear all cached data for this account.
     public func clearCache() async {
+        // Let old requests finish without allowing them to restore cleared history or
+        // release a newer refresh's task slot when they return.
+        cacheGeneration = UUID()
+        refreshTask = nil
         CampaignDiskCache.clear(accountId: accountId)
-        await inventoryService.clearCache()
         cachedCampaigns = nil
         viewDataCache = CampaignViewDataCache()
         lastCampaignPersistenceAt = nil
         lastCampaignLoad = nil
         lastInventoryLoad = nil
+        lastCleanupDate = nil
+        await inventoryService.clearCache()
     }
 
     /// Clear all cached campaign and inventory snapshots across accounts.

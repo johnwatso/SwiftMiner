@@ -450,6 +450,154 @@ final class ServiceTests: XCTestCase {
         }
     }
 
+    func testRepeatedBenefitAwardIsPersistedBeforePeriodicSave() async throws {
+        let accountId = "inventory-repeat-award-\(UUID().uuidString)"
+        let oldAward = Date(timeIntervalSince1970: 1_700_000_000)
+        let newAward = oldAward.addingTimeInterval(86_400)
+        InventoryDiskCache.save(InventorySnapshot(
+            accountId: accountId,
+            benefitIDs: ["daily-reward"],
+            benefitAwardedAt: ["daily-reward": oldAward],
+            progress: []
+        ))
+        defer { InventoryDiskCache.clear(accountId: accountId) }
+
+        let service = InventoryService(apiClient: apiClient)
+        await service.setAccountId(accountId)
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            if request.url?.path == "/integrity" {
+                return (response, Data(#"{"token":"integrity","expiration":4102444800000}"#.utf8))
+            }
+            return (response, Data(#"{"data":{"currentUser":{"inventory":{"gameEventDrops":[{"id":"daily-reward","name":"Daily reward","lastAwardedAt":"2023-11-15T22:13:20Z"}],"dropCampaignsInProgress":[]}}}}"#.utf8))
+        }
+
+        let fetched = try await service.fetchInventory(forceRefresh: true)
+        XCTAssertEqual(fetched.benefitAwardedAt["daily-reward"], newAward)
+
+        // A new service models relaunch before the thirty-minute periodic save.
+        let relaunched = InventoryService(apiClient: apiClient)
+        await relaunched.setAccountId(accountId)
+        let restored = await relaunched.currentSnapshot()
+        XCTAssertEqual(restored?.benefitIDs, fetched.benefitIDs)
+        XCTAssertEqual(restored?.benefitAwardedAt["daily-reward"], newAward)
+    }
+
+    func testClearingInventoryDiscardsResponseAlreadyInFlight() async throws {
+        let accountId = "inventory-clear-\(UUID().uuidString)"
+        defer { InventoryDiskCache.clear(accountId: accountId) }
+        let service = InventoryService(apiClient: apiClient)
+        await service.setAccountId(accountId)
+        let started = expectation(description: "Inventory request started")
+        let release = DispatchSemaphore(value: 0)
+        defer { release.signal() }
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            if request.url?.path == "/integrity" {
+                return (response, Data(#"{"token":"integrity","expiration":4102444800000}"#.utf8))
+            }
+            started.fulfill()
+            guard release.wait(timeout: .now() + 5) == .success else { throw URLError(.timedOut) }
+            return (response, Data(#"{"data":{"currentUser":{"inventory":{"gameEventDrops":[{"id":"old-reward"}],"dropCampaignsInProgress":[]}}}}"#.utf8))
+        }
+
+        let refresh = Task { try await service.fetchInventory(forceRefresh: true) }
+        await fulfillment(of: [started], timeout: 3)
+        await service.clearCache()
+        release.signal()
+        do {
+            _ = try await refresh.value
+            XCTFail("A cleared inventory must reject the old response")
+        } catch is CancellationError {
+            // The response belongs to the cache generation that was cleared.
+        }
+        let current = await service.currentSnapshot()
+        XCTAssertNil(current)
+        XCTAssertNil(InventoryDiskCache.load(accountId: accountId))
+    }
+
+    func testChangingInventoryAccountDiscardsPreviousAccountsResponse() async throws {
+        let oldAccountId = "inventory-old-\(UUID().uuidString)"
+        let newAccountId = "inventory-new-\(UUID().uuidString)"
+        defer {
+            InventoryDiskCache.clear(accountId: oldAccountId)
+            InventoryDiskCache.clear(accountId: newAccountId)
+        }
+        InventoryDiskCache.save(InventorySnapshot(accountId: newAccountId, benefitIDs: ["new-reward"], progress: []))
+        let service = InventoryService(apiClient: apiClient)
+        await service.setAccountId(oldAccountId)
+        let started = expectation(description: "Old account's inventory request started")
+        let release = DispatchSemaphore(value: 0)
+        defer { release.signal() }
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            if request.url?.path == "/integrity" {
+                return (response, Data(#"{"token":"integrity","expiration":4102444800000}"#.utf8))
+            }
+            started.fulfill()
+            guard release.wait(timeout: .now() + 5) == .success else { throw URLError(.timedOut) }
+            return (response, Data(#"{"data":{"currentUser":{"inventory":{"gameEventDrops":[{"id":"old-reward"}],"dropCampaignsInProgress":[]}}}}"#.utf8))
+        }
+
+        let refresh = Task { try await service.fetchInventoryResult() }
+        await fulfillment(of: [started], timeout: 3)
+        await service.setAccountId(newAccountId)
+        release.signal()
+        do {
+            _ = try await refresh.value
+            XCTFail("The old request must not return either account's inventory after switching")
+        } catch is CancellationError {}
+        let current = await service.currentSnapshot()
+        XCTAssertEqual(current?.accountId, newAccountId)
+        XCTAssertEqual(current?.benefitIDs, ["new-reward"])
+        XCTAssertNil(InventoryDiskCache.load(accountId: oldAccountId))
+    }
+
+    func testClearingCampaignHistoryDiscardsRefreshAlreadyInFlight() async throws {
+        let accountId = "campaign-clear-\(UUID().uuidString)"
+        defer {
+            InventoryDiskCache.clear(accountId: accountId)
+            CampaignDiskCache.clear(accountId: accountId)
+        }
+        let inventory = InventoryService(apiClient: apiClient)
+        await inventory.setAccountId(accountId)
+        let service = CampaignDataService(apiClient: apiClient, inventoryService: inventory, accountId: accountId)
+        let started = expectation(description: "Dashboard request started")
+        let release = DispatchSemaphore(value: 0)
+        defer { release.signal() }
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            if request.url?.path == "/integrity" {
+                return (response, Data(#"{"token":"integrity","expiration":4102444800000}"#.utf8))
+            }
+            let body = try JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any]
+            if body?["operationName"] as? String == "Inventory" {
+                return (response, Data(#"{"data":{"currentUser":{"inventory":{"gameEventDrops":[],"dropCampaignsInProgress":[]}}}}"#.utf8))
+            }
+            started.fulfill()
+            guard release.wait(timeout: .now() + 5) == .success else { throw URLError(.timedOut) }
+            return (response, Data(#"{"data":{"currentUser":{"dropCampaigns":[{"id":"old-campaign","name":"Old campaign","status":"UPCOMING","startAt":"2099-11-14T00:00:00Z","endAt":"2099-11-15T00:00:00Z"}]}}}"#.utf8))
+        }
+
+        let refresh = Task { await service.refresh() }
+        await fulfillment(of: [started], timeout: 3)
+        await service.clearCache()
+        release.signal()
+        await refresh.value
+        let current = await service.allCampaigns()
+        XCTAssertTrue(current.isEmpty)
+        XCTAssertNil(CampaignDiskCache.loadWithMetadata(accountId: accountId).savedAt)
+
+        // A deliberate refresh after clearing is still allowed to populate new history.
+        release.signal()
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, Data(#"{"data":{"currentUser":{"inventory":{"gameEventDrops":[],"dropCampaignsInProgress":[]},"dropCampaigns":[]}}}"#.utf8))
+        }
+        await service.refresh()
+        XCTAssertNotNil(CampaignDiskCache.loadWithMetadata(accountId: accountId).savedAt)
+    }
+
     func testInventoryNormalReadLabelsExpiredOfflineFallbackAsStale() async throws {
         let accountId = "inventory-stale-\(UUID().uuidString)"
         let snapshot = InventorySnapshot(

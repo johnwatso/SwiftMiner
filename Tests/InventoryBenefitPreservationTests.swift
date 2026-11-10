@@ -53,4 +53,24 @@ final class InventoryBenefitPreservationTests: XCTestCase {
             ).benefitIDs.isEmpty
         )
     }
+
+    func testPersistenceTracksAwardChangesButIgnoresObservationTime() {
+        let firstAward = Date(timeIntervalSince1970: 2_000)
+        let previous = snapshot(benefitIDs: ["daily-reward"], awardedAt: ["daily-reward": firstAward])
+        let observedAgain = InventorySnapshot(
+            accountId: previous.accountId,
+            benefitIDs: previous.benefitIDs,
+            benefitAwardedAt: previous.benefitAwardedAt,
+            progress: [],
+            lastUpdated: previous.lastUpdated.addingTimeInterval(60)
+        )
+        XCTAssertTrue(previous.isPersistenceEquivalent(to: observedAgain))
+
+        let awardedAgain = snapshot(
+            benefitIDs: previous.benefitIDs,
+            awardedAt: ["daily-reward": firstAward.addingTimeInterval(86_400)]
+        )
+        XCTAssertFalse(previous.isPersistenceEquivalent(to: awardedAgain))
+        XCTAssertFalse(previous.isPersistenceEquivalent(to: snapshot(benefitIDs: previous.benefitIDs)))
+    }
 }

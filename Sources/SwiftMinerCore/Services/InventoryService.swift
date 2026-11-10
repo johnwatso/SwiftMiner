@@ -37,6 +37,8 @@ public struct InventorySnapshot: Codable, Sendable, Equatable {
     func isPersistenceEquivalent(to other: InventorySnapshot) -> Bool {
         accountId == other.accountId
             && benefitIDs == other.benefitIDs
+            // A reused reward ID can belong to a different campaign after a new award.
+            && benefitAwardedAt == other.benefitAwardedAt
             && progress.persistenceElementsEqual(other.progress)
             && discoveredCampaigns.persistenceElementsEqual(other.discoveredCampaigns)
     }
@@ -68,6 +70,8 @@ public actor InventoryService {
     private var accountId: String?
     private var snapshotCache: InventorySnapshot?
     private var lastPersistenceAt: Date?
+    /// Invalidates responses started before history was cleared or the account changed.
+    private var cacheGeneration = UUID()
     private let cacheDuration: TimeInterval = 60
     private let persistenceRefreshInterval: TimeInterval = 30 * 60
 
@@ -76,6 +80,9 @@ public actor InventoryService {
     }
 
     public func setAccountId(_ accountId: String) {
+        if self.accountId != accountId {
+            cacheGeneration = UUID()
+        }
         self.accountId = accountId
 
         if snapshotCache?.accountId != accountId {
@@ -104,10 +111,12 @@ public actor InventoryService {
            Date().timeIntervalSince(snapshotCache.lastUpdated) < cacheDuration {
             return InventoryFetchResult(snapshot: snapshotCache, source: .cache)
         }
+        let generation = cacheGeneration
 
         do {
             let result = try await apiClient.fetchInventory()
             let claimedBenefits = await apiClient.getClaimedBenefits()
+            guard generation == cacheGeneration else { throw CancellationError() }
             let claimed = Self.preservingKnownBenefits(
                 fresh: claimedBenefits,
                 previous: snapshotCache
@@ -130,6 +139,9 @@ public actor InventoryService {
             }
             return InventoryFetchResult(snapshot: snapshot, source: .network)
         } catch {
+            // A response for an old generation must neither repopulate history nor fall
+            // back to another account's cache after an account switch.
+            guard generation == cacheGeneration else { throw CancellationError() }
             if forceRefresh {
                 throw error
             }
@@ -189,13 +201,13 @@ public actor InventoryService {
     }
 
     public func clearCache() {
+        cacheGeneration = UUID()
+        snapshotCache = nil
+        lastPersistenceAt = nil
         guard let accountId else {
-            snapshotCache = nil
             return
         }
 
-        snapshotCache = nil
-        lastPersistenceAt = nil
         InventoryDiskCache.clear(accountId: accountId)
     }
 }
