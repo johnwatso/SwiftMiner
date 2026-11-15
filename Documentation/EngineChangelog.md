@@ -27,6 +27,8 @@ lifecycle API; the watch loop, channel selection, drop progress, claiming,
 campaign warnings, events, callbacks, and UI projections each live in their own
 `MinerEngine+*` file.
 
+- **4.47** · 2026-11-16 · `a2e5fa4` — A campaign that stops being mineable after a claim is now cleared as the current campaign, so the next refresh no longer logs the "left the candidate set" warning a second time. When a stalled one-channel campaign has no alternative stream, channel selection now says it is staying on that stream as a last resort, instead of the log implying a channel switch.
+
 - **4.46** · 2026-11-02 · `3944afb` — Stop selecting fully earned campaigns as same-game fallbacks, preventing miners from watching streams with no remaining drop progress.
 
 - **4.45** · 2026-10-25 · `c5775b8` — An idle miner waiting for its scheduled campaign recheck no longer reads as unhealthy. The recheck wait (5 min) was longer than the 3-minute activity window, so a "Drops complete" miner was flagged unhealthy, and its open health incidents left unresolved, for the last two minutes of every wait. The window applies again if the recheck time passes and no cycle starts.
