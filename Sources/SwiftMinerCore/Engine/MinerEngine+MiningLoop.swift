@@ -764,6 +764,9 @@ extension MinerEngine {
                                 } else {
                                     log("Current campaign is no longer mineable after claim sync. Switching target.")
                                 }
+                                // Clear it like the other exits do, or the next refresh still sees
+                                // it as the worked campaign and repeats the warning above.
+                                session?.currentCampaignId = nil
                                 shouldSwitchChannel = true
                             }
                         }

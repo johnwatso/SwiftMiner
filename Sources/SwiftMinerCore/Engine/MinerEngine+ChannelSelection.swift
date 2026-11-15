@@ -724,6 +724,11 @@ extension MinerEngine {
 
         if let best = await bestVerifiedCampaignMatch(candidates: candidates, matches: verifiedMatches, relationshipRanks: relationshipRanks) {
             log("[ChannelSelect]   Selected \(best.campaign.name) on \(best.channel.displayName)")
+            // Without this, a one-channel campaign reads as "switching channel" after every
+            // stall while the miner lands straight back on the stream it just deprioritised.
+            if isChannelOnStallCooldown(campaignId: best.campaign.id, channel: best.channel) {
+                log("[ChannelSelect]   No other eligible stream for \(best.campaign.name); staying on recently stalled \(best.channel.displayName) as a last resort.")
+            }
             currentChannelName = best.channel.displayName
             currentChannelId = best.channel.id
             return MiningChannelSelection(campaign: best.campaign, channel: best.channel, wasVerified: true)
