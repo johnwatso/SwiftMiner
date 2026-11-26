@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reduce retained network sessions; prepare SwiftMiner 1.45.10 - Release Notes</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      padding: 32px 20px 48px;
+      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f6f8;
+      color: #0f1720;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 28px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 20px 60px rgba(15, 23, 32, 0.10);
+    }
+    h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+    .meta { margin: 0 0 24px; color: #52606d; font-size: 14px; }
+    p { margin: 0 0 16px; }
+    a { color: #0a67a3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0b1015; color: #edf2f7; }
+      main {
+        background: rgba(15, 23, 32, 0.88);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+      }
+      .meta { color: #9fb0c2; }
+      a { color: #73c3ff; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Reduce retained network sessions; prepare SwiftMiner 1.45.10</h1>
+    <p class="meta">Version 1.45.10</p>
+    <p>Reduce retained network sessions; prepare SwiftMiner 1.45.10</p>
+<p>Reuse one WebSocket URLSession across PubSub connections so reconnects no<br>longer create a separate session for every socket. Cancel each socket<br>independently, and keep caller-provided sessions usable after cancellation.</p>
+<p>Release app-owned Twitch API sessions when their clients are destroyed and<br>remove expired HLS playback credentials when caching replacement tokens.<br>Add coverage for both session ownership boundaries.</p>
+<p>Prepare curated 1.45.10 release notes and timestamp build 2026112707.<br>A multi-day diagnostic report identified thousands of retained WebSocket<br>sessions and rising memory use. A reconnect stress test showed that sharing<br>a session reduces session count, but completed CFNetwork WebSocket tasks can<br>still remain retained. Further long-running monitoring is needed; this change<br>does not claim to eliminate the entire memory-growth issue.</p>
+<p>Validation: Debug xcodebuild build and full SwiftMiner test suite; verified<br>built app version, Sparkle feed and public key, and generated release notes.</p>
+    <p><strong>Commit:</strong> <a href="https://github.com/johnwatso/SwiftMiner/commit/3fd0d9f7d64eed1eb899b477f8d07f4deb60f446">3fd0d9f</a></p>
+  </main>
+</body>
+</html>
