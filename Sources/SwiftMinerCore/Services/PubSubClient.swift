@@ -122,19 +122,26 @@ protocol PubSubSocket: Sendable {
 typealias PubSubSocketFactory = @Sendable (URL) -> any PubSubSocket
 
 final class URLSessionPubSubSocket: PubSubSocket, @unchecked Sendable {
-    /// Each socket owns its session and must invalidate it: a URLSession is retained by the
-    /// system until invalidated, so dropping only the task leaked the session together with
-    /// its connection, TLS certificates and metrics on every reconnect.
+    // One session serves all sockets. Reconnects can be frequent, and CFNetwork may
+    // retain invalidated WebSocket sessions and their TLS state long after teardown.
+    // This bounds sessions, but CFNetwork can still retain completed tasks; it does not
+    // by itself establish that reconnect-related memory growth has been eliminated.
+    private static let sharedSession: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.httpShouldSetCookies = false
+        return URLSession(configuration: configuration)
+    }()
     private let session: URLSession
     private let task: URLSessionWebSocketTask
 
-    init(url: URL) {
-        session = URLSession(configuration: .default)
-        task = session.webSocketTask(with: url)
+    init(url: URL, session: URLSession? = nil) {
+        self.session = session ?? Self.sharedSession
+        task = self.session.webSocketTask(with: url)
     }
 
     deinit {
-        session.invalidateAndCancel()
+        task.cancel(with: .goingAway, reason: nil)
     }
 
     func resume() {
@@ -177,7 +184,6 @@ final class URLSessionPubSubSocket: PubSubSocket, @unchecked Sendable {
 
     func cancel() {
         task.cancel(with: .goingAway, reason: nil)
-        session.finishTasksAndInvalidate()
     }
 }
 

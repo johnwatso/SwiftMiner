@@ -252,6 +252,24 @@ final class ControlledRuntimeSleeper: @unchecked Sendable {
 
 final class PubSubClientTests: XCTestCase {
 
+    func testCancellingSocketKeepsSharedSessionAvailable() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: config)
+        defer {
+            session.invalidateAndCancel()
+            MockURLProtocol.requestHandler = nil
+        }
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, Data("ok".utf8))
+        }
+        let socket = URLSessionPubSubSocket(url: URL(string: "wss://example.com/socket")!, session: session)
+        socket.cancel()
+        let (data, _) = try await session.data(from: URL(string: "https://example.com/")!)
+        XCTAssertEqual(String(data: data, encoding: .utf8), "ok")
+    }
+
     func testProtocolPingBridgeIgnoresRepeatedSuccessAndLateFailure() async throws {
         try await URLSessionPubSubSocket.waitForPing { complete in
             complete(nil)

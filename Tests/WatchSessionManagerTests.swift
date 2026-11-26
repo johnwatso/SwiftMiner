@@ -34,6 +34,23 @@ final class WatchSessionManagerTests: XCTestCase {
 
     // MARK: - Session Management Tests
 
+    func testReleasingClientDoesNotInvalidateInjectedSession() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, Data("ok".utf8))
+        }
+        var client: TwitchAPIClient? = TwitchAPIClient(
+            authService: authService, clientId: "test_client", session: mockSession,
+            persistsCampaignCaches: false
+        )
+        weak var releasedClient = client
+        client = nil
+        XCTAssertNil(releasedClient)
+
+        let (data, _) = try await mockSession.data(from: URL(string: "https://example.com/")!)
+        XCTAssertEqual(String(data: data, encoding: .utf8), "ok")
+    }
+
     func testHLSWatchHeartbeatHeadsCurrentPlaylistSegments() async throws {
         let playbackTokenJson = #"{"data":{"streamPlaybackAccessToken":{"value":"test token","signature":"test-signature"}}}"#
         let headRequests = Counter()

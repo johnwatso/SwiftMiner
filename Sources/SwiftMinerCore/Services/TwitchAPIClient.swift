@@ -606,6 +606,13 @@ public actor TwitchAPIClient {
         }
     }
 
+    deinit {
+        // Injected sessions are owned by the caller; only tear down our own session.
+        if transportMetricsCollector != nil {
+            session.invalidateAndCancel()
+        }
+    }
+
     /// Update the access token
     public func updateAccessToken(_ token: String) {
         guard token != accessToken else { return }
@@ -689,7 +696,7 @@ public actor TwitchAPIClient {
             playback = (cachedPlayback.value, cachedPlayback.signature)
         } else {
             playback = try await fetchPlaybackAccessToken(channelLogin: channelLogin)
-            hlsPlaybackTokens[channelLogin] = (playback.value, playback.signature, Date().addingTimeInterval(180))
+            cacheHLSPlaybackToken(channelLogin: channelLogin, value: playback.value, signature: playback.signature)
         }
         guard var components = URLComponents(string: "https://usher.ttvnw.net/api/channel/hls/\(channelLogin).m3u8") else {
             throw TwitchMinerError.networkError("Could not prepare the HLS playlist request")
@@ -779,7 +786,9 @@ public actor TwitchAPIClient {
     }
 
     func cacheHLSPlaybackToken(channelLogin: String, value: String, signature: String) {
-        hlsPlaybackTokens[channelLogin] = (value, signature, Date().addingTimeInterval(180))
+        let now = Date()
+        hlsPlaybackTokens = hlsPlaybackTokens.filter { $0.value.expiresAt > now }
+        hlsPlaybackTokens[channelLogin] = (value, signature, now.addingTimeInterval(180))
     }
 
     /// Get channel information
