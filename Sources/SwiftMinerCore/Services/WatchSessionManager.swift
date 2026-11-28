@@ -139,11 +139,12 @@ public func setHeartbeatSentHandler(_ handler: (@Sendable (WatchSession) -> Void
 public init(
     apiClient: TwitchAPIClient,
     urlSession: URLSession = .shared,
-    heartbeatInterval: TimeInterval = WatchSessionManager.watchInterval
+    heartbeatInterval: TimeInterval = WatchSessionManager.watchInterval,
+    autoClaimPointsEnabled: @escaping @Sendable () async -> Bool = { true }
 ) {
     self.spadeBeacon = SpadeBeaconService(urlSession: urlSession)
     self.apiClient = apiClient
-    self.communityPointsService = CommunityPointsService(apiClient: apiClient)
+    self.communityPointsService = CommunityPointsService(apiClient: apiClient, isEnabled: autoClaimPointsEnabled)
     self.heartbeatInterval = heartbeatInterval
     self.heartbeatFailureThreshold = 3
     self.runtimeClock = .continuous

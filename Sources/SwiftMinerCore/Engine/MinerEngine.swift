@@ -595,7 +595,8 @@ public actor MinerEngine {
     public init(
         clientId: String,
         tokenStore: any TokenStore = TokenStoreFactory.makeDefault(),
-        runtimeClock: RuntimeClock = .continuous
+        runtimeClock: RuntimeClock = .continuous,
+        autoClaimPointsEnabled: @escaping @Sendable () async -> Bool = { true }
     ) {
         self.clientId = clientId
         self.runtimeClock = runtimeClock
@@ -603,7 +604,9 @@ public actor MinerEngine {
         self.authService = TwitchAuthService(clientId: clientId, tokenStore: tokenStore)
         self.apiClient = TwitchAPIClient(authService: authService, clientId: clientId)
         self.dropsService = DropsService(apiClient: apiClient)
-        self.watchSessionManager = WatchSessionManager(apiClient: apiClient)
+        self.watchSessionManager = WatchSessionManager(
+            apiClient: apiClient, autoClaimPointsEnabled: autoClaimPointsEnabled
+        )
         self.claimService = ClaimService(apiClient: apiClient)
         self.pubSubClient = PubSubClient()
         self.dropEventsService = DropEventsService(pubSubClient: pubSubClient)

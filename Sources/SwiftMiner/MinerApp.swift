@@ -38,7 +38,8 @@ struct MinerApp: App {
         let manager = MinerManager(
             clientId: clientId,
             unattendedHealthStore: healthStore,
-            earningLedgerStore: ledgerStore
+            earningLedgerStore: ledgerStore,
+            autoClaimPointsEnabled: { await MainActor.run { Settings.shared.autoClaimPointsEnabled } }
         )
         self._minerManager = State(initialValue: manager)
         self._unattendedHealth = StateObject(wrappedValue: UnattendedHealthModel(store: healthStore))

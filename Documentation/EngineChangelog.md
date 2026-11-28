@@ -27,6 +27,8 @@ lifecycle API; the watch loop, channel selection, drop progress, claiming,
 campaign warnings, events, callbacks, and UI projections each live in their own
 `MinerEngine+*` file.
 
+- **4.48** · 2026-11-28 · `pending` — Respect the live community-points auto-claim preference across all miners, avoiding points polling and bonus claims while disabled, including when disabled during an in-flight poll.
+
 - **4.47** · 2026-11-16 · `a2e5fa4` — A campaign that stops being mineable after a claim is now cleared as the current campaign, so the next refresh no longer logs the "left the candidate set" warning a second time. When a stalled one-channel campaign has no alternative stream, channel selection now says it is staying on that stream as a last resort, instead of the log implying a channel switch.
 
 - **4.46** · 2026-11-02 · `3944afb` — Stop selecting fully earned campaigns as same-game fallbacks, preventing miners from watching streams with no remaining drop progress.

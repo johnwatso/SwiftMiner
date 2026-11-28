@@ -506,6 +506,7 @@ public final class MinerManager {
     
     /// Client ID for Twitch API (mutable so it can be updated before first account is added)
     private var clientId: String
+    private let autoClaimPointsEnabled: @Sendable () async -> Bool
 
     /// Persistent store for account tokens (Phase: Managed Platform)
     public let tokenStore: any TokenStore
@@ -551,8 +552,10 @@ public final class MinerManager {
         campaignStore: CampaignStore = CampaignStore(),
         tokenStore: any TokenStore = TokenStoreFactory.makeDefault(),
         unattendedHealthStore: UnattendedHealthStore? = nil,
-        earningLedgerStore: EarningLedgerStore? = nil
+        earningLedgerStore: EarningLedgerStore? = nil,
+        autoClaimPointsEnabled: @escaping @Sendable () async -> Bool = { true }
     ) {
+        self.autoClaimPointsEnabled = autoClaimPointsEnabled
         self.clientId = clientId
         self.campaignStore = campaignStore
         self.tokenStore = tokenStore
@@ -787,7 +790,7 @@ public final class MinerManager {
         let minerId = UUID().uuidString
         
         // Create engine for this account
-        let engine = MinerEngine(clientId: clientId)
+        let engine = MinerEngine(clientId: clientId, autoClaimPointsEnabled: autoClaimPointsEnabled)
         engines[minerId] = engine
         
         let miner = ManagedMiner(

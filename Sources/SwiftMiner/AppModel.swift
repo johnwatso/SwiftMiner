@@ -82,7 +82,10 @@ public final class AppModel {
 
     public init(clientId: String, minerManager: MinerManager? = nil) {
         self.clientId = clientId
-        self.engine = MinerEngine(clientId: clientId)
+        self.engine = MinerEngine(
+            clientId: clientId,
+            autoClaimPointsEnabled: { await MainActor.run { Settings.shared.autoClaimPointsEnabled } }
+        )
         self.minerManager = minerManager
         self.operatorSessionRenewalCoordinator = minerManager.map {
             OperatorSessionRenewalCoordinator(minerManager: $0)

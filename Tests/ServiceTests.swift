@@ -27,6 +27,81 @@ final class ServiceTests: XCTestCase {
         try await super.tearDown()
     }
     
+    func testCommunityPointsPreferenceCanDisableAndResumePolling() async throws {
+        let preference = CommunityPointsPreference()
+        let contexts = Counter()
+        let claims = Counter()
+        installCommunityPointsResponses(contexts: contexts, claims: claims)
+        let service = CommunityPointsService(apiClient: apiClient, isEnabled: { await preference.isEnabled() })
+
+        try await service.claimAvailablePoints(channelLogin: "testchannel", channelId: "channel")
+        XCTAssertEqual(contexts.value, 0)
+        XCTAssertEqual(claims.value, 0)
+
+        await preference.setEnabled(true)
+        try await service.claimAvailablePoints(channelLogin: "testchannel", channelId: "channel")
+        XCTAssertEqual(contexts.value, 1)
+        XCTAssertEqual(claims.value, 1)
+
+        await preference.setEnabled(false)
+        try await service.claimAvailablePoints(channelLogin: "testchannel", channelId: "channel")
+        XCTAssertEqual(contexts.value, 1)
+        XCTAssertEqual(claims.value, 1)
+
+        await preference.setEnabled(true)
+        try await service.claimAvailablePoints(channelLogin: "testchannel", channelId: "channel")
+        XCTAssertEqual(contexts.value, 2)
+        XCTAssertEqual(claims.value, 2)
+    }
+
+    func testCommunityPointsDisabledDuringPollDoesNotClaim() async throws {
+        let reads = Counter()
+        let contexts = Counter()
+        let claims = Counter()
+        installCommunityPointsResponses(contexts: contexts, claims: claims)
+        let service = CommunityPointsService(apiClient: apiClient, isEnabled: { reads.next() == 1 })
+
+        try await service.claimAvailablePoints(channelLogin: "testchannel", channelId: "channel")
+
+        XCTAssertEqual(contexts.value, 1)
+        XCTAssertEqual(reads.value, 2)
+        XCTAssertEqual(claims.value, 0, "Disabling points while the context request is in flight must suppress its bonus claim")
+    }
+
+    func testCancelledCommunityPointsPollDoesNotRequestOrClaim() async throws {
+        let contexts = Counter()
+        let claims = Counter()
+        installCommunityPointsResponses(contexts: contexts, claims: claims)
+        let service = CommunityPointsService(apiClient: apiClient, isEnabled: {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return true
+        })
+        let poll = Task {
+            try await service.claimAvailablePoints(channelLogin: "testchannel", channelId: "channel")
+        }
+        try await poll.value
+        XCTAssertEqual(contexts.value, 0)
+        XCTAssertEqual(claims.value, 0)
+    }
+
+    private func installCommunityPointsResponses(contexts: Counter, claims: Counter) {
+        MockURLProtocol.requestHandler = { request in
+            let body = String(data: request.httpBody ?? Data(), encoding: .utf8) ?? ""
+            let payload: String
+            if request.url?.path == "/integrity" {
+                payload = #"{"token":"integrity-token","expiration":4102444800000}"#
+            } else if body.contains("ChannelPointsContext") {
+                _ = contexts.next()
+                payload = #"{"data":{"community":{"channel":{"communityPoints":{"balance":100,"user":{"self":{"communityPointsAvailableClaim":{"id":"bonus"}}}}}}}}"#
+            } else {
+                XCTAssertTrue(body.contains("ClaimCommunityPoints"))
+                _ = claims.next()
+                payload = #"{"data":{"claimCommunityPoints":{"status":"SUCCESS"}}}"#
+            }
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(payload.utf8))
+        }
+    }
+
     // MARK: - TwitchAPIClient Tests
 
     func testBrowserAccountUsesItsCapturedFingerprintAndIntegrityToken() async throws {
@@ -2391,4 +2466,10 @@ final class LiveChannelCampaignMergeTests: XCTestCase {
 
         XCTAssertEqual(merged.drops.map(\.id), ["warlord", "wardog"])
     }
+}
+
+private actor CommunityPointsPreference {
+    private var enabled = false
+    func isEnabled() -> Bool { enabled }
+    func setEnabled(_ value: Bool) { enabled = value }
 }

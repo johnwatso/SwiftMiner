@@ -53,10 +53,37 @@ extension OverviewView {
             } else {
                 let orderedIds = miners.map(\.accountId)
 
-                LazyVGrid(columns: minerActivityColumns, spacing: 14) {
-                    ForEach(miners) { miner in
-                        minerCard(for: miner, orderedIds: orderedIds)
+                // Fit the whole fleet across the available width when readable.
+                // Larger fleets scroll sideways instead of adding another row.
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 14) {
+                        ForEach(miners) { miner in
+                            minerCard(for: miner, orderedIds: orderedIds)
+                                .frame(minWidth: 268, idealWidth: 268, maxWidth: .infinity)
+                        }
                     }
+                    .padding(6)
+
+                    MinerActivityScrollRow {
+                        HStack(alignment: .top, spacing: 14) {
+                            ForEach(miners) { miner in
+                                minerCard(for: miner, orderedIds: orderedIds)
+                                    .frame(width: 300)
+                            }
+                        }
+                        .padding(6)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.top, 9)
+                .padding(.bottom, 12)
+                .background {
+                    RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous)
+                        .fill(Color.primary.opacity(0.03))
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: GlassRadius.large, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
                 }
             }
         }
@@ -84,7 +111,7 @@ extension OverviewView {
             }
         }
         // The card being carried is dimmed rather than removed: its slot has to
-        // stay in the grid, or every other card shuffles as the drag starts.
+        // stay in the row, or every other card shuffles as the drag starts.
         .opacity(draggingMinerId == miner.accountId ? 0.4 : 1)
         .minerReorderable(
             id: miner.accountId,
@@ -147,18 +174,44 @@ extension OverviewView {
             settings.minerOrder = ids
         }
     }
+}
 
-    /// Wide enough that the drop line — reward name, watched and required minutes —
-    /// stays on one line rather than wrapping mid-phrase, narrow enough that four
-    /// miners still sit on one row at a typical Overview width. The grid wraps
-    /// beyond that rather than scrolling, in the order the user arranged.
-    ///
-    /// 268 was low enough that a 1920pt window laid out *six* columns of 269pt —
-    /// the floor of the range. A five-miner fleet then filled five and left the
-    /// sixth as trailing whitespace, so the row stopped short of the right edge
-    /// while the Priority Queue below it did not. 300 gives that window five
-    /// columns of ~325pt: wider cards, and the two sections line up.
-    private var minerActivityColumns: [GridItem] {
-        [GridItem(.adaptive(minimum: 300), spacing: 14, alignment: .top)]
+/// Fade only the edges with more miners offscreen, leaving the first and last
+/// cards fully visible when the row reaches either end.
+private struct MinerActivityScrollRow<Content: View>: View {
+    @ViewBuilder var content: Content
+    @State private var contentFrame: CGRect = .zero
+    @State private var viewportWidth: CGFloat = 0
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            content
+                .onGeometryChange(for: CGRect.self) { proxy in
+                    proxy.frame(in: .named("minerActivityScroll"))
+                } action: { contentFrame = $0 }
+        }
+        .coordinateSpace(name: "minerActivityScroll")
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { viewportWidth = $0 }
+        .mask {
+            HStack(spacing: 0) {
+                if contentFrame.minX < -1 {
+                    LinearGradient(
+                        colors: [.clear, .black],
+                        startPoint: .leading, endPoint: .trailing
+                    )
+                    .frame(width: 32)
+                }
+                Rectangle()
+                if contentFrame.maxX > viewportWidth + 1 {
+                    LinearGradient(
+                        colors: [.black, .clear],
+                        startPoint: .leading, endPoint: .trailing
+                    )
+                    .frame(width: 32)
+                }
+            }
+        }
     }
 }
